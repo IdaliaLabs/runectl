@@ -71,6 +71,8 @@ class Runner:
         approval_policy: str = "gated",
         max_tokens: int = DEFAULT_MAX_TOKENS,
         triage_override: TriageResult | None = None,
+        ledger: CostLedger | None = None,
+        context: ContextBuilder | None = None,
     ) -> None:
         self._provider = provider
         self._sandbox = sandbox
@@ -78,8 +80,12 @@ class Runner:
         self._max_tokens = max_tokens
         self._triage_override = triage_override
         self._dispatcher = ToolDispatcher(sandbox)
-        self._ledger = CostLedger()
-        self._context = ContextBuilder()
+        # A caller that wants utility/summarization calls costed alongside the
+        # main loop's (D5, D12) passes a ledger/context pre-wired to a
+        # utility-model summarizer (providers.base.make_utility_summarizer);
+        # otherwise each run gets its own plain ones.
+        self._ledger = ledger if ledger is not None else CostLedger()
+        self._context = context if context is not None else ContextBuilder()
         self.state = RunState(
             challenge=challenge,
             category=category,

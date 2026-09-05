@@ -18,14 +18,16 @@ from runectl.categories.loader import CategoryLoadError, CategoryNotFoundError
 from runectl.categories.loader import load as load_category
 from runectl.cli.render import render_human, render_ndjson
 from runectl.errors import ProviderError, SandboxError, UsageError
+from runectl.loop.context import ContextBuilder
 from runectl.loop.runner import Runner
 from runectl.loop.state import Challenge
 from runectl.providers.anthropic import AnthropicProvider
-from runectl.providers.base import Provider
+from runectl.providers.base import Provider, make_utility_summarizer
+from runectl.providers.cost import CostLedger
 from runectl.providers.google import GoogleProvider
 from runectl.providers.keys import resolve_key
 from runectl.providers.openai import OpenAIProvider
-from runectl.providers.registry import ModelInfo, UnknownModelError
+from runectl.providers.registry import ModelInfo, UnknownModelError, cheapest_model_for
 from runectl.providers.registry import resolve as resolve_model
 from runectl.providers.replay import RecordingProvider
 from runectl.sandbox.base import sandbox_session
@@ -62,6 +64,7 @@ def run_command(
     file: list[str] = typer.Option([], "--file"),
     flag_format: str | None = typer.Option(None, "--flag-format"),
     model: str = typer.Option(..., "--model"),
+    utility_model: str | None = typer.Option(None, "--utility-model"),
     api_key: str | None = typer.Option(None, "--api-key"),
     approval: str = typer.Option("gated", "--approval"),
     network: str | None = typer.Option(None, "--network"),
@@ -86,6 +89,17 @@ def run_command(
         key = resolve_key(model_info.provider, cli_flag=api_key)
         provider: Provider = _build_provider(model_info, key)
 
+        # D5: utility calls (context/history summarization) default to the
+        # cheapest model of the same provider and share the main loop's cost
+        # ledger — never a hardcoded model, never untracked tokens.
+        utility_model_info = (
+            resolve_model(utility_model) if utility_model else cheapest_model_for(model_info.provider)
+        )
+        utility_key = key if utility_model_info.provider == model_info.provider else resolve_key(
+            utility_model_info.provider
+        )
+        utility_provider: Provider = _build_provider(utility_model_info, utility_key)
+
         store = Store()
         run_id, writer = store.new_run(
             challenge_name=chal.name,
@@ -97,6 +111,7 @@ def run_command(
 
         if record:
             provider = RecordingProvider(provider, store.cassette_path(run_id))
+            utility_provider = RecordingProvider(utility_provider, store.cassette_path(run_id))
 
         resolved_output = output or ("human" if sys.stdout.isatty() else "jsonl")
         writer.set_on_emit(render_ndjson if resolved_output == "jsonl" else render_human)
@@ -106,6 +121,10 @@ def run_command(
         )
         sandbox = DockerSandbox(network=network or effective_category.network)
 
+        ledger = CostLedger()
+        summarizer = make_utility_summarizer(utility_provider, utility_model_info, ledger)
+        context = ContextBuilder(llm_summarize=summarizer)
+
         runner = Runner(
             challenge=chal,
             category=effective_category,
@@ -114,6 +133,8 @@ def run_command(
             sandbox=sandbox,
             writer=writer,
             approval_policy=approval,
+            ledger=ledger,
+            context=context,
         )
         try:
             with sandbox_session(sandbox):

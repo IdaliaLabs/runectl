@@ -106,3 +106,35 @@ def complete_with_retry(
         )
         return completion
     raise ProviderError(f"{model.id}: exhausted {attempts} attempts, last error: {last_error}")
+
+
+_SUMMARIZE_SYSTEM_PROMPT = (
+    "Summarize the following tool output in under 500 words. Preserve anything "
+    "that looks like a flag, credential, error message, or file path verbatim."
+)
+
+
+def make_utility_summarizer(
+    provider: Provider, model: ModelInfo, ledger: CostLedger
+) -> Callable[[str], str]:
+    """Wrap a provider+model+ledger as a plain ``(str) -> str`` summarizer.
+
+    Every utility call (context.py's oversized-output / history-compaction
+    summarization) goes through the same :func:`complete_with_retry` path as
+    the main loop, into the same ledger — D5's "every LLM call, including
+    utility calls, is provider-agnostic, retried, and costed."
+    """
+
+    def summarize(text: str) -> str:
+        completion = complete_with_retry(
+            provider,
+            model,
+            ledger,
+            system=_SUMMARIZE_SYSTEM_PROMPT,
+            messages=[Message(role="user", content=text)],
+            tools=(),
+            max_tokens=800,
+        )
+        return completion.text
+
+    return summarize
