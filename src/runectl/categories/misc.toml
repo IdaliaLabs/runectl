@@ -1,0 +1,40 @@
+brief = "Classify encoding/challenge type quickly, run layered decode or environment escape with evidence."
+
+playbook = """
+MISC: identify the encoding or challenge shape before touching a decode tool.
+
+Triage the artifact first: `file`, a hex dump, and a strings pass usually reveal
+whether this is base64/hex/base32/base58/binary/octal, a compressed blob, a
+restricted shell, an esoteric-language program, or a QR/barcode image.
+
+Multi-layer encodings are common — decode one layer, then re-triage the result
+for the next one, rather than assuming a single pass is enough. A short decode
+loop (try base64 / hex / rot13 / zlib / gzip each iteration until the output
+stops changing) is more reliable than guessing the exact stack up front.
+
+If the challenge drops you into a restricted Python/shell environment, enumerate
+what's reachable (dir(), __builtins__, subclasses of object) before assuming a
+sandbox is airtight — most restricted-shell challenges have one specific escape
+the description is hinting at.
+
+Don't ignore metadata-adjacent oddities: zero-width characters, trailing
+whitespace, unicode homoglyphs, and file comments (e.g. a ZIP comment) are all
+places a misc challenge hides content that a plain decode pass would miss.
+"""
+
+required_tools = ["file", "xxd", "strings", "python3", "zbarimg"]
+
+signal_low = ["not found", "no such file", "^$", "command not found"]
+signal_high = ["flag\\{", "FLAG\\{", "picoCTF\\{", "[A-Za-z0-9+/]{20,}={0,2}"]
+
+step_limit = 60
+network = "none"
+
+[tactic_families]
+decode = "base64|b64decode|xxd|hex|rot13|zlib|gzip|base32|base58"
+escape = "__builtins__|__subclasses__|__import__|pyjail|rbash"
+identify = "^file |^xxd |^strings "
+
+[budgets]
+per_hypothesis = 2
+per_family = 4

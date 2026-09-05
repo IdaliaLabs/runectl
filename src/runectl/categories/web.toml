@@ -1,0 +1,44 @@
+brief = "Prioritize endpoint discovery, auth/session flaws, injection primitives, then focused exploitation."
+
+playbook = """
+WEB: work the decision tree in order rather than jumping straight to fuzzing.
+
+1. Recon the target's headers, redirects, robots.txt/sitemap.xml, and any
+   exposed .git/admin/api paths before anything else.
+2. Read the page source and any linked JS for hardcoded keys, tokens, or
+   comments hinting at hidden functionality.
+3. Test the highest-probability injection primitives on endpoints you've
+   actually found — SQLi, SSTI, command injection, LFI/path traversal — before
+   broad parameter spraying.
+4. Only after those come up empty, run one bounded directory/endpoint fuzz
+   pass (ffuf/gobuster) and pivot on whatever it turns up.
+
+Repeated default 404/403 pages and identical response bodies are not progress
+— that is the single most common way this category burns steps for nothing.
+Pivot to a different hypothesis rather than re-running a wider version of the
+same fuzz.
+
+If you find a JWT, check alg:none, a weak/guessable HMAC secret, and
+RS256-to-HS256 key confusion before anything more exotic.
+"""
+
+required_tools = ["curl", "ffuf", "gobuster", "sqlmap"]
+
+signal_low = ["HTTP/1\\.[01] 404", "HTTP/1\\.[01] 403", "Not Found", "Forbidden"]
+signal_high = ["flag\\{", "FLAG\\{", "token", "admin=true"]
+
+step_limit = 80
+network = "bridge"
+
+[tactic_families]
+dirfuzz = "ffuf|gobuster|wfuzz|dirb"
+sqli = "sqlmap|UNION SELECT|OR 1=1|SLEEP\\("
+ssti = "\\{\\{.*\\}\\}|__globals__|__subclasses__"
+lfi = "\\.\\./|php://filter|/etc/passwd"
+jwt = "jwt|eyJ[A-Za-z0-9_-]+\\."
+ssrf = "169\\.254\\.169\\.254|metadata\\.google"
+cmdinj = ";\\s*id|\\$\\(.*\\)|`.*`"
+
+[budgets]
+per_hypothesis = 2
+per_family = 4
