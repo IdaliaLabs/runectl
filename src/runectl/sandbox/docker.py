@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import cast
 
 import docker
-from docker.errors import APIError, ImageNotFound
+from docker.errors import APIError, DockerException, ImageNotFound
 from docker.models.containers import Container
 
 from runectl.config import SANDBOX_CPUS, SANDBOX_LIVE_LOG_PATH, SANDBOX_MEM_LIMIT, SANDBOX_WORKDIR
@@ -39,16 +39,24 @@ class DockerSandbox:
     ) -> None:
         self._image = image
         self._network = network
-        self._client = client or docker.from_env()
+        self._client_override = client
+        self._client: docker.DockerClient | None = None
         self._container: Container | None = None
 
     def start(self) -> None:
+        # Deferred to start() rather than __init__: constructing a Sandbox must
+        # never itself touch the daemon, so daemon-unreachable is always a
+        # SandboxError a caller's try/except around start()/run() can catch —
+        # never a raw SDK exception from plain object construction.
         try:
+            self._client = self._client_override or docker.from_env()
             self._client.images.get(self._image)
         except ImageNotFound as exc:
             raise SandboxError(
                 f"arena image {self._image!r} not found — run `runectl arena build` first"
             ) from exc
+        except (APIError, DockerException) as exc:
+            raise SandboxError(f"could not reach the Docker daemon: {exc}") from exc
         try:
             self._container = self._client.containers.run(
                 self._image,

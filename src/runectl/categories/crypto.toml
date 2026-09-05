@@ -1,0 +1,46 @@
+brief = "Identify the primitive first, test known break conditions, implement the shortest solver script."
+
+playbook = """
+CRYPTO: read the description and any source carefully before trying anything —
+identify the cipher/primitive, key size, mode of operation, and any reused
+values (nonce, modulus, exponent) before reaching for a tool.
+
+RSA is the most common primitive. Work down this rough decision order:
+  - small modulus (< 512 bits): factor it directly
+  - small public exponent (e=3) with no padding: cube-root the ciphertext
+  - the same message broadcast to multiple recipients under the same small e:
+    Hastad's attack — combine the ciphertexts via the Chinese Remainder
+    Theorem, then take the integer e-th root of the result
+  - two moduli sharing a common factor: gcd them to factor both at once
+  - p and q close together: Fermat factorization
+  - suspiciously small private exponent d: Wiener's attack
+
+For symmetric crypto, check the mode first: ECB leaks structure (identical
+plaintext blocks -> identical ciphertext blocks), CBC is vulnerable to bit-flip
+and padding-oracle attacks, and a reused CTR/OFB keystream lets you XOR two
+ciphertexts to cancel the key. For XOR ciphers, a single-byte key is a
+256-value brute force scored by printable/English-ish output; a repeating-key
+XOR is a classic Vigenere-style frequency analysis problem.
+
+Write the shortest possible solver script (pycryptodome/gmpy2 are usually
+enough) rather than reaching for a heavier tool first — most crypto challenges
+resolve to under twenty lines of Python once the primitive is identified.
+"""
+
+required_tools = ["python3"]
+
+signal_low = ["not found", "no such file", "^$", "traceback"]
+signal_high = ["flag\\{", "FLAG\\{", "csictf\\{", "picoCTF\\{"]
+
+step_limit = 80
+network = "none"
+
+[tactic_families]
+factor = "factor|gcd|fermat|wiener|isqrt"
+decode = "base64|b64decode|xxd|hex|long_to_bytes"
+crt = "crt|chinese_remainder|iroot|cube"
+xor = "xor|frequency|vigenere"
+
+[budgets]
+per_hypothesis = 2
+per_family = 4
