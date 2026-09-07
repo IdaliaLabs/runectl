@@ -131,6 +131,8 @@ def replay_command(run_id: str, check: bool = typer.Option(False, "--check")) ->
         flag=outcome.flag,
         cost_usd=outcome.cost_usd,
         steps_used=outcome.steps_used,
+        progress_steps=outcome.progress_steps,
+        blocked_steps=outcome.blocked_steps,
     )
 
     typer.echo(replay_run_id)

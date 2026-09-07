@@ -56,6 +56,10 @@ class RunOutcome:
     exit_code: int
     steps_used: int
     cost_usd: float
+    # D16: the progress ratio is the primary metric, so it has to reach run.json,
+    # not only the run.finished event.
+    progress_steps: int = 0
+    blocked_steps: int = 0
 
 
 class Runner:
@@ -150,6 +154,9 @@ class Runner:
 
         for step in range(1, state.max_steps + 1):
             state.step = step
+            # D12: compaction is a context-pressure trigger, not a step counter —
+            # it runs before every request and no-ops until history is actually long.
+            state.history = self._context.maybe_compact(state.history)
             self._writer.emit(
                 LlmRequest(
                     step=step,
@@ -324,4 +331,5 @@ class Runner:
         return RunOutcome(
             outcome=outcome, flag=state.flag, exit_code=exit_code,
             steps_used=state.step, cost_usd=state.cost_usd,
+            progress_steps=state.progress_steps, blocked_steps=state.blocked_steps,
         )

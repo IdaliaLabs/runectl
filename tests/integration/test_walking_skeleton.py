@@ -110,6 +110,8 @@ def test_walking_skeleton_solves_end_to_end_and_replays(runectl_home: Path) -> N
         flag=outcome.flag,
         cost_usd=outcome.cost_usd,
         steps_used=outcome.steps_used,
+        progress_steps=outcome.progress_steps,
+        blocked_steps=outcome.blocked_steps,
     )
 
     assert outcome.outcome == "solved"
@@ -122,6 +124,11 @@ def test_walking_skeleton_solves_end_to_end_and_replays(runectl_home: Path) -> N
     manifest = reopened.read_manifest(run_id)
     assert manifest.outcome == "solved"
     assert manifest.flag == FLAG
+    # D16: the progress ratio is the primary metric, so it has to survive into
+    # run.json — not live only in the run.finished event.
+    assert manifest.steps_used == outcome.steps_used
+    assert manifest.progress_steps == outcome.progress_steps == 1
+    assert manifest.blocked_steps == outcome.blocked_steps == 0
 
     env = {**os.environ, "RUNECTL_HOME": str(runectl_home)}
 

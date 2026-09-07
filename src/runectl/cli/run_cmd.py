@@ -153,6 +153,8 @@ def run_command(
             flag=outcome.flag,
             cost_usd=outcome.cost_usd,
             steps_used=outcome.steps_used,
+            progress_steps=outcome.progress_steps,
+            blocked_steps=outcome.blocked_steps,
         )
         typer.echo(run_id)
         raise typer.Exit(code=outcome.exit_code)

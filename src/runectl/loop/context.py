@@ -18,7 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from runectl.categories.schema import Category
-from runectl.config import DEFAULT_TOOL_OUTPUT_LIMIT
+from runectl.config import DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_TOOL_OUTPUT_LIMIT
 from runectl.providers.base import Message
 
 _SALIENT_PATTERN = re.compile(r"(?i)flag\{|error|fail|not found|permission denied|[A-Za-z0-9+/]{20,}={0,2}")
@@ -68,10 +68,11 @@ def summarize_tool_output(
 
 @dataclass
 class ContextBuilder:
-    """Dedupes identical tool output by digest (plan §4.5/§5.4) and applies the
-    one context limit (D12)."""
+    """Dedupes identical tool output by digest (plan §4.5/§5.4), applies the one
+    context limit (D12), and owns history compaction."""
 
     limit: int = DEFAULT_TOOL_OUTPUT_LIMIT
+    max_messages: int = DEFAULT_MAX_HISTORY_MESSAGES
     llm_summarize: Callable[[str], str] | None = None
     _seen_digests: dict[str, int] = field(default_factory=dict)
 
@@ -83,6 +84,20 @@ class ContextBuilder:
         self._seen_digests[digest] = step
         return summarize_tool_output(text, limit=self.limit, llm_summarize=self.llm_summarize)
 
+    def maybe_compact(self, history: list[Message]) -> list[Message]:
+        """Compact once history outgrows the budget; a no-op below it."""
+        return compact_history(
+            history, max_messages=self.max_messages, summarize=self._summarize_messages
+        )
+
+    def _summarize_messages(self, messages: list[Message]) -> str:
+        rendered = "\n".join(f"[{m.role}] {m.content}" for m in messages)
+        if self.llm_summarize is not None:
+            return self.llm_summarize(rendered)
+        # No utility model wired (tests, replay): fall back to the deterministic
+        # extractive path rather than dropping the older context silently.
+        return summarize_tool_output(rendered, limit=self.limit)
+
 
 def compact_history(
     history: list[Message],
@@ -91,10 +106,26 @@ def compact_history(
     summarize: Callable[[list[Message]], str],
 ) -> list[Message]:
     """Once history exceeds ``max_messages``, replace the older portion with one
-    summary message produced via the standard provider path (D5, D12)."""
+    summary message produced via the standard provider path (D5, D12).
+
+    The compacted result is at most ``max_messages`` long *including* the summary
+    message, so a compacted history is never immediately over budget again — that
+    would re-summarize the summary on the very next step.
+
+    The split point is never allowed to land between an assistant's tool call and
+    its tool results: a retained ``tool`` message whose originating assistant turn
+    was compacted away is an orphan, and every provider rejects those. The
+    boundary walks forward past any leading tool messages, so the retained tail
+    always starts on a clean turn.
+    """
     if len(history) <= max_messages:
         return history
-    older, recent = history[: len(history) - max_messages], history[-max_messages:]
+    split = len(history) - max(max_messages - 1, 1)
+    while split < len(history) and history[split].role == "tool":
+        split += 1
+    if split >= len(history):
+        return history
+    older, recent = history[:split], history[split:]
     summary_text = summarize(older)
     summary_message = Message(
         role="user", content=f"[compacted summary of {len(older)} earlier messages]\n{summary_text}"

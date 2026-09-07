@@ -53,6 +53,10 @@ ARTIFACT_SPILL_THRESHOLD_BYTES = 8_000
 # D12 — one consistent, configurable context limit. No second dead constant.
 DEFAULT_TOOL_OUTPUT_LIMIT = 6_000
 
+# D12 — history compaction trigger. A message-count stand-in for a real
+# per-provider token budget; unmeasured, like every other number in this file.
+DEFAULT_MAX_HISTORY_MESSAGES = 40
+
 # D5 — retry with exponential backoff + jitter on 429/5xx/timeouts.
 DEFAULT_RETRY_ATTEMPTS = 4
 
