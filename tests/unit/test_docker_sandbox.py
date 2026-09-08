@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from docker.errors import NotFound
+from docker.errors import DockerException, NotFound
 
 from runectl.errors import SandboxError
 from runectl.sandbox.docker import DockerSandbox
@@ -21,9 +21,68 @@ def test_construction_does_not_touch_daemon() -> None:
 
 
 def test_start_wraps_daemon_failure_as_sandbox_error() -> None:
-    sandbox = DockerSandbox(network="bridge")
-    with pytest.raises(SandboxError):
+    """A dead daemon surfaces as SandboxError, never a raw SDK exception.
+
+    Uses an explicit failing client rather than relying on the developer's
+    machine having no daemon — this test silently started real containers once
+    a daemon and an arena image existed locally.
+    """
+
+    class _DeadClient:
+        images = SimpleNamespace(
+            get=lambda tag: (_ for _ in ()).throw(DockerException("daemon is not running"))
+        )
+
+    sandbox = DockerSandbox(network="bridge", client=_DeadClient())
+    with pytest.raises(SandboxError, match="could not reach the Docker daemon"):
         sandbox.start()
+
+
+def test_root_arena_image_is_refused() -> None:
+    """Model-authored code must not run as root, even if a loaded image says so."""
+    captured: dict[str, Any] = {}
+
+    class _Container:
+        def exec_run(self, *args: Any, **kwargs: Any) -> Any:
+            # workdir setup succeeds; the `id -u` probe reports root
+            script = args[0][-1] if args else ""
+            if "id -u" in script:
+                return SimpleNamespace(exit_code=0, output=(b"0\n", b""))
+            return SimpleNamespace(exit_code=0, output=(b"", b""))
+
+    class _Client:
+        images = SimpleNamespace(get=lambda tag: SimpleNamespace(id="sha256:abc"))
+        containers = SimpleNamespace(
+            get=lambda name: (_ for _ in ()).throw(NotFound(name)),
+            run=lambda image, **kw: captured.update(kw) or _Container(),
+        )
+
+    sandbox = DockerSandbox(network="none", run_id="r", client=_Client())
+    with pytest.raises(SandboxError, match="runs as root"):
+        sandbox.start()
+
+
+def test_pids_limit_is_applied() -> None:
+    """A fork bomb in an agent-written exploit shouldn't threaten the host VM."""
+    captured: dict[str, Any] = {}
+
+    class _Container:
+        def exec_run(self, *args: Any, **kwargs: Any) -> Any:
+            script = args[0][-1] if args else ""
+            if "id -u" in script:
+                return SimpleNamespace(exit_code=0, output=(b"1000\n", b""))
+            return SimpleNamespace(exit_code=0, output=(b"", b""))
+
+    class _Client:
+        images = SimpleNamespace(get=lambda tag: SimpleNamespace(id="sha256:abc"))
+        containers = SimpleNamespace(
+            get=lambda name: (_ for _ in ()).throw(NotFound(name)),
+            run=lambda image, **kw: captured.update(kw) or _Container(),
+        )
+
+    DockerSandbox(network="none", run_id="r", client=_Client()).start()
+
+    assert captured["pids_limit"] == 512
 
 
 def test_container_is_named_after_the_run() -> None:
@@ -53,6 +112,9 @@ def test_start_pins_the_platform_and_name(monkeypatch: pytest.MonkeyPatch) -> No
 
     class _Container:
         def exec_run(self, *args: Any, **kwargs: Any) -> Any:
+            script = args[0][-1] if args else ""
+            if "id -u" in script:
+                return SimpleNamespace(exit_code=0, output=(b"1000\n", b""))
             return SimpleNamespace(exit_code=0, output=(b"", b""))
 
     class _Client:

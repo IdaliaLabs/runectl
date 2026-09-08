@@ -9,6 +9,7 @@ reshaping this loop.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import dataclass
 from typing import Literal
@@ -279,7 +280,14 @@ class Runner:
                 )
             )
             state.tool_observations.append(
-                ToolObservation(seq=self._writer.seq, stdout=result.stdout, stderr=result.stderr)
+                ToolObservation(
+                    seq=self._writer.seq,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                    # Kept so the judge can tell a discovery from the agent
+                    # echoing its own guess back (D15 §1).
+                    command=json.dumps(primary.arguments, sort_keys=True, default=str),
+                )
             )
             rendered = self._context.render_tool_output(result.stdout or result.stderr, step=step)
             state.history.append(

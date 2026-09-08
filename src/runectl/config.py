@@ -80,6 +80,17 @@ SANDBOX_WORKDIR = "/ctf"
 # predecessor, which passed platform="linux/amd64" explicitly.
 SANDBOX_PLATFORM = "linux/amd64"
 
+# The agent writes and runs its own code in here. mem/cpu caps bound resource
+# use but not process count, and a fork bomb in a challenge exploit script is a
+# realistic accident. Docker's default is unlimited.
+SANDBOX_PIDS_LIMIT = 512
+
+# Docker defaults to TERM=dumb, which makes pwntools emit a curses warning on
+# every import. That noise lands in tool output, gets summarized into context,
+# and is billed as tokens on every pwn step. Set at run time rather than in the
+# image so it also covers an arena loaded via `arena ensure --from-file`.
+SANDBOX_ENV: dict[str, str] = {"TERM": "xterm-256color"}
+
 # Container naming: predictable, so a human can attach to a live run
 # (`docker exec -it runectl-<run_id> bash`) the way the predecessor allowed.
 CONTAINER_NAME_PREFIX = "runectl-"

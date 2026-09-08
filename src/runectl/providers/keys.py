@@ -38,9 +38,19 @@ def _read_keys_file() -> dict[str, str]:
 
 
 def _write_keys_file(keys: dict[str, str]) -> None:
+    """Create the key file 0600 atomically — never write-then-chmod.
+
+    `write_text()` creates the file with the process umask (commonly 0644) and
+    only narrows it afterwards, leaving a window in which another local user can
+    read the key. Opening with the mode up front closes that window; the explicit
+    chmod stays for the case where the file already existed with wider bits.
+    """
     path = keys_file_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(keys, indent=2))
+    path.parent.chmod(stat.S_IRWXU)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, stat.S_IRUSR | stat.S_IWUSR)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(keys, indent=2))
     path.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 

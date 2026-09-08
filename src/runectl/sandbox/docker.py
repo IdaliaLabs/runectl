@@ -24,8 +24,10 @@ from docker.models.containers import Container
 from runectl.config import (
     CONTAINER_NAME_PREFIX,
     SANDBOX_CPUS,
+    SANDBOX_ENV,
     SANDBOX_LIVE_LOG_PATH,
     SANDBOX_MEM_LIMIT,
+    SANDBOX_PIDS_LIMIT,
     SANDBOX_PLATFORM,
     SANDBOX_WORKDIR,
 )
@@ -88,6 +90,8 @@ class DockerSandbox:
                 nano_cpus=int(SANDBOX_CPUS * 1_000_000_000),
                 security_opt=["no-new-privileges"],
                 privileged=False,
+                pids_limit=SANDBOX_PIDS_LIMIT,
+                environment=dict(SANDBOX_ENV),
                 network_mode=self._network,
                 working_dir=SANDBOX_WORKDIR,
             )
@@ -96,6 +100,26 @@ class DockerSandbox:
         setup = self._raw_exec(f"mkdir -p {SANDBOX_WORKDIR} && touch {SANDBOX_LIVE_LOG_PATH}", timeout_s=10)
         if not setup.ok:
             raise SandboxError(f"arena container failed workdir setup: {setup.stderr}")
+        self._verify_non_root()
+
+    def _verify_non_root(self) -> None:
+        """Refuse to run the agent as root inside the sandbox (D2 posture).
+
+        The posture used to rest entirely on the Dockerfile's `USER ctf`, which
+        stopped being a guarantee once `arena ensure --from-file` and
+        `--from-registry` let an arbitrary image become the arena. Root inside
+        the container plus a kernel escape is a materially worse position than
+        an unprivileged user, so this is checked rather than assumed.
+        """
+        probe = self._raw_exec("id -u", timeout_s=10)
+        if not probe.ok:
+            raise SandboxError(f"could not determine the sandbox user: {probe.stderr}")
+        if probe.stdout.strip() == "0":
+            raise SandboxError(
+                f"the arena image {self._image!r} runs as root. runectl executes "
+                "model-authored code in this container and will not do so as root. "
+                "Add a non-root USER to the image (see arena/Dockerfile) and rebuild."
+            )
 
     def _remove_stale_namesake(self) -> None:
         """Clear a leftover container of the same name (a previous crashed run).
