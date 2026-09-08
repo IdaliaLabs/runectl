@@ -319,13 +319,38 @@ invent a second solve.
 
 ---
 
-## Stubs
+## `runectl bench run`
 
-### `runectl bench run [--suite bench/practice]`
+Runs every challenge in a suite through the same path `runectl run` uses, scores each
+against its `expected.json`, and reports the solve rate together with D16's progress-waste
+ratio. See [`bench/README.md`](../bench/README.md) for the suite itself.
 
-Lands in **M8**. Will run the capability suite across a directory of challenges and emit
-a report — solve rate and, per [`DECISIONS.md`](../DECISIONS.md) D16, the progress-waste
-ratio, not merely the step count.
+```bash
+runectl bench run --suite bench/practice --model claude-sonnet-5 --max-total-cost 1.00
+```
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--suite <dir>` | `bench/practice` | Directory of challenge directories. |
+| `--model <id>` | **required** | As for `runectl run`. |
+| `--only <name>` | — | Challenge name or directory name. Repeatable. |
+| `--max-cost <usd>` | `0.50` | Ceiling for **one** run. |
+| `--max-total-cost <usd>` | `0` (off) | Ceiling for the **whole suite**. It stops cleanly between challenges, and never lets one run overshoot what is left. |
+| `--max-steps`, `--approval`, `--utility-model`, `--api-key`, `--record` | as `runectl run` | Passed through to every run. |
+| `--report <path>` | — | Also write the JSON report to a file. |
+| `--output <human\|json>` | `human` | `json` prints the report object on stdout. |
+| `--dry-run` | off | List what would run and exit. Spends nothing. |
+
+**Exit codes.** `0` normally — including when nothing solved, because that is a result.
+`1` if any run **finalized a wrong flag**: a false flag is the one outcome worse than
+failing, so it fails the command. `6` for a malformed or missing suite.
+
+A wrong flag that was *held* for approval is not a false flag and does not fail the
+command — holding it is the D15 subsystem working.
+
+The report carries per-case `status` (`solved`, `false_flag`, `candidate`, `unsolved`,
+`error`), steps, progress ratio and cost, plus suite totals and `gate_met` — the V1 gate
+of 2 solved with 0 false flags.
 
 Note the shape: it is `runectl bench run`, a subcommand, not the bare `runectl bench` the
 D4 command-surface sketch used.

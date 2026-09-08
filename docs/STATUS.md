@@ -2,7 +2,7 @@
 
 Last updated **2026-09-08**.
 
-M0–M6 are built, typed, and green: 115 tests passing, `mypy --strict` clean,
+M0–M6 and M8 are built, typed, and green: 149 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 
@@ -25,6 +25,8 @@ point of this file is that nothing here should surprise you at run time.
 | All five D15 mechanisms, and that `--approval auto` still can't submit an invented or planted flag | `tests/unit/test_flags_judge_m6.py` |
 | An uncorroborated find exits 2, and `flag approve` finalizes it without rewriting the judge's decision | `tests/integration/test_pending_candidate_approval.py` |
 | Tactic classification, fingerprint normalization, signal scoring, budgets, forced shifts | `tests/unit/test_progress_*.py` |
+| Bench scoring, the false-flag/held distinction, suite cost ceiling, gate arithmetic | `tests/unit/test_bench_suite.py`, `tests/integration/test_bench_command.py` |
+| Every vendored challenge loads, its files resolve, and none carries its own answer | `tests/unit/test_bench_challenges.py` |
 | Core code never prints | `tests/unit/test_render_boundary.py` |
 | Tool dispatch, empty-command and path-traversal rejection | `tests/unit/test_dispatch.py` |
 | Secrets redacted, >8KB values spilled, torn tail tolerated, index rebuild | `tests/unit/test_trace.py` |
@@ -65,7 +67,6 @@ uv run runectl run --challenge bench/practice/easy-01/chal.toml --model claude-s
 
 | Surface | Behavior today | Lands in |
 |---|---|---|
-| `runectl bench run` | Prints an explanation, exits 6 | M8 |
 | `evidence.added` event | Defined in the schema; nothing emits it — findings carry forward in the conversation only | later |
 | LLM disconfirmation pass (D15 §2's last resort) | Not implemented; deterministic re-derivation covers every case reachable at V1 | later, on bench evidence |
 | `pwn`, `rev`, `forensics`, `osint`, `network` categories | No TOML; `--category pwn` exits 6 | M7 |
@@ -110,10 +111,15 @@ Accurate tokenization is a later refinement.
 
 **`--dry-run` from the D4 sketch doesn't exist.** No flag, no code path.
 
-**Two bench challenges are vendored.** `easy-01` and `easy-02` (both MIT-licensed, from
-`csivitu/ctf-challenges`, with provenance recorded). The V1 gate is 2 of 5 practice
-challenges solved with **0 false flags** — three more still need vendoring, and
-`runectl bench` (M8) is what scores the suite.
+**The bench suite is crypto-heavy.** Five MIT-licensed challenges are vendored
+(`bench/README.md`), but four of them are crypto — only `crypto`, `misc` and `web` ship as
+categories, and a web challenge needs a live service the offline sandbox cannot host. A
+solve rate measured today is a statement about cryptography and reasoning, not about
+`runectl` across all eight categories. Rebalance when M7 lands.
+
+**No live bench run has been scored yet.** `runectl bench` is tested against faked runs
+and a dry run; it has never been pointed at the API. Every budget and step limit therefore
+remains an unmeasured starting value.
 
 **`easy-01` is a known-unfair gate.** It was the first vendored challenge and its
 description does not contain enough to solve it without the original repo's file layout;
@@ -129,8 +135,11 @@ description does not contain enough to solve it without the original repo's file
 - **M6 — done.** Mandatory citable provenance, verification re-derivation, decoy
   detection, corroboration ≥2, the `--approval` policy, exit code 2, `flag list` /
   `flag approve`.
+- **M8 — done.** `runectl bench run`: scores a suite against `expected.json`, reports
+  solve rate with D16's progress-waste ratio, bounds spend per run and per suite, and
+  fails outright on a finalized wrong flag. Built before M7 so the remaining categories
+  can be measured as they land rather than after.
 - **M7 — the remaining five categories**, at equal depth.
-- **M8 — bench and the capability report.** What tunes the step limits and budgets.
 - **M9 — human render polish.** Compact, foldable, width-aware, over the same event
   stream.
 

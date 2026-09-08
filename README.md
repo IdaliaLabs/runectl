@@ -179,7 +179,7 @@ runectl arena build|status
 runectl index rebuild
 runectl flag list <run_id>           # pending candidates, as JSON lines
 runectl flag approve <run_id> [--flag <value>]
-runectl bench run [--suite <dir>]    # stub — lands in M8
+runectl bench run --model <id> [--suite <dir>] [--max-total-cost <usd>]
 ```
 
 Full reference, every flag, and the machine-readable output contract:

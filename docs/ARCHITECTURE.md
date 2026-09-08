@@ -20,7 +20,7 @@ src/runectl/
         keys_cmd.py     `runectl keys set|list|rm`
         arena_cmd.py    `runectl arena build|status`
         flag_cmd.py     `runectl flag list` / `flag approve`
-        bench_cmd.py    `runectl bench run`     (stub → M8)
+        bench_cmd.py    `runectl bench run`
         render.py       two pure event renderers: NDJSON→stdout, human→stderr
 
     trace/              the record
@@ -183,7 +183,7 @@ Each of these is shaped now so the milestone that fills it doesn't need an API c
 | Evidence store | `evidence.added` is defined in the trace schema but nothing emits it — findings carry forward in the conversation only | later |
 | LLM disconfirmation pass | D15 makes it a last resort behind deterministic re-derivation; nothing calls it yet | later, on bench evidence |
 | The other five categories | `pwn`, `rev`, `forensics`, `osint`, `network` TOMLs aren't written yet; the loader ships whatever is present | **M7** |
-| Benchmark suite | `runectl bench run` is a stub; one MIT-licensed challenge is vendored under `bench/practice/` | **M8** |
+| Suite breadth | Five MIT-licensed challenges are vendored, but four of five are crypto — only `crypto`/`misc`/`web` ship as categories, and web needs a live service | **M7** rebalance |
 | Human render polish | `render.py` is plain but correct — one line per event | **M9** |
 
 For exactly what is and isn't real today, see [`STATUS.md`](STATUS.md).
