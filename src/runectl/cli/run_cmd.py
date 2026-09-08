@@ -17,6 +17,7 @@ import typer
 from runectl.categories.loader import CategoryLoadError, CategoryNotFoundError
 from runectl.categories.loader import load as load_category
 from runectl.cli.render import render_human, render_ndjson
+from runectl.config import CONTAINER_NAME_PREFIX
 from runectl.errors import ProviderError, SandboxError, UsageError
 from runectl.loop.context import ContextBuilder
 from runectl.loop.runner import Runner
@@ -58,6 +59,15 @@ def _preflight_arena() -> None:
     if not status.present:
         raise SandboxError(
             f"arena image {status.tag} is not built.\n\n{arena_build.REMEDY_MESSAGE}"
+        )
+    if status.architecture_mismatch:
+        typer.echo(
+            arena_build.ARCH_WARNING.format(
+                tag=status.tag,
+                actual=status.architecture,
+                expected=status.expected_architecture,
+            ),
+            err=True,
         )
     if status.stale:
         # A warning, not a failure: the image still works, it is just older than
@@ -144,11 +154,19 @@ def run_command(
 
         resolved_output = output or ("human" if sys.stdout.isatty() else "jsonl")
         writer.set_on_emit(render_ndjson if resolved_output == "jsonl" else render_human)
+        if resolved_output == "human":
+            # The predecessor's take-over workflow: attach to the live container
+            # while the agent is still working (TEARDOWN.md item 12).
+            typer.echo(
+                f"run {run_id} — attach with: "
+                f"docker exec -it {CONTAINER_NAME_PREFIX}{run_id} bash",
+                err=True,
+            )
 
         effective_category = (
             category_data.model_copy(update={"step_limit": max_steps}) if max_steps else category_data
         )
-        sandbox = DockerSandbox(network=network or effective_category.network)
+        sandbox = DockerSandbox(network=network or effective_category.network, run_id=run_id)
 
         ledger = CostLedger()
         summarizer = make_utility_summarizer(utility_provider, utility_model_info, ledger)

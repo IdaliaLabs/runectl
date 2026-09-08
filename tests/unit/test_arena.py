@@ -18,9 +18,12 @@ from runectl.sandbox import arena_build
 
 
 class _FakeImage:
-    def __init__(self, image_id: str, labels: dict[str, str] | None) -> None:
+    def __init__(
+        self, image_id: str, labels: dict[str, str] | None, architecture: str = "amd64"
+    ) -> None:
         self.id = image_id
         self.labels = labels
+        self.attrs = {"Architecture": architecture}
 
 
 class _FakeImages:
@@ -158,3 +161,35 @@ def test_load_archive_surfaces_a_docker_failure(
     monkeypatch.setattr(arena_build.subprocess, "run", fake_run)
     with pytest.raises(SandboxError, match="permission denied"):
         arena_build.load_archive(archive)
+
+
+def test_arm64_image_is_flagged_as_an_architecture_mismatch(context_dir: Path) -> None:
+    """An arena built on an Apple Silicon host without the platform pin runs
+    fine right up until it has to execute an x86-64 challenge binary."""
+    client = _FakeClient(_FakeImage("sha256:abc", {}, architecture="arm64"))
+
+    status = arena_build.inspect(context_dir=context_dir, client=client)
+
+    assert status.architecture_mismatch
+    assert status.expected_architecture == "amd64"
+
+
+def test_amd64_image_is_not_a_mismatch(context_dir: Path) -> None:
+    client = _FakeClient(_FakeImage("sha256:abc", {}, architecture="amd64"))
+
+    assert not arena_build.inspect(context_dir=context_dir, client=client).architecture_mismatch
+
+
+def test_build_pins_the_platform(context_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[list[str]] = []
+
+    def fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        captured.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(arena_build.subprocess, "run", fake_run)
+    arena_build.build(context_dir=context_dir)
+
+    argv = captured[0]
+    assert "--platform" in argv
+    assert argv[argv.index("--platform") + 1] == "linux/amd64"

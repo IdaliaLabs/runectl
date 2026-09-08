@@ -29,6 +29,7 @@ from pathlib import Path
 import docker
 from docker.errors import APIError, DockerException, ImageNotFound
 
+from runectl.config import SANDBOX_PLATFORM
 from runectl.errors import SandboxError
 from runectl.sandbox.docker import ARENA_IMAGE
 
@@ -68,6 +69,8 @@ class ArenaStatus:
     image_id: str | None
     built_fingerprint: str | None
     expected_fingerprint: str
+    architecture: str | None = None
+    expected_architecture: str = SANDBOX_PLATFORM.split("/")[-1]
 
     @property
     def present(self) -> bool:
@@ -88,6 +91,20 @@ class ArenaStatus:
     @property
     def provenance_unknown(self) -> bool:
         return self.present and self.built_fingerprint is None
+
+    @property
+    def architecture_mismatch(self) -> bool:
+        """Built for a different CPU architecture than challenge binaries expect.
+
+        The common case is an image built on an arm64 host without the platform
+        pin: it runs fine, right up until the agent tries to execute an x86-64
+        challenge binary in it.
+        """
+        return (
+            self.present
+            and self.architecture is not None
+            and self.architecture != self.expected_architecture
+        )
 
 
 def _client(client: docker.DockerClient | None = None) -> docker.DockerClient:
@@ -120,11 +137,14 @@ def inspect(
     except (APIError, DockerException) as exc:
         raise SandboxError(f"could not reach the Docker daemon: {exc}") from exc
     labels = image.labels or {}
+    attrs = image.attrs or {}
+    architecture = attrs.get("Architecture")
     return ArenaStatus(
         tag=tag,
         image_id=str(image.id),
         built_fingerprint=labels.get(FINGERPRINT_LABEL),
         expected_fingerprint=expected,
+        architecture=str(architecture) if architecture else None,
     )
 
 
@@ -140,6 +160,10 @@ def build(*, tag: str = ARENA_IMAGE, context_dir: Path | None = None) -> int:
         [
             "docker", "build",
             "-t", tag,
+            # Pinned, never inferred from the host: see config.SANDBOX_PLATFORM.
+            # An arm64 arena cannot execute the x86-64 binaries most pwn and rev
+            # challenges ship, and the failure looks like a broken challenge.
+            "--platform", SANDBOX_PLATFORM,
             "--label", f"{FINGERPRINT_LABEL}={fingerprint}",
             str(context),
         ],
@@ -210,4 +234,10 @@ REMEDY_MESSAGE = (
     "  runectl arena build                       build it here (~15-40 min, pulls Kali)\n"
     "  runectl arena ensure --from-file PATH     load a `docker save` tarball you already have\n"
     "  runectl arena ensure --from-registry REF  pull a prebuilt image and tag it\n"
+)
+
+ARCH_WARNING = (
+    "warning: {tag} was built for {actual}, but challenge binaries are normally "
+    "{expected}. Most pwn and rev binaries will fail to execute in it. "
+    "Rebuild with `runectl arena build` to get a {expected} arena."
 )

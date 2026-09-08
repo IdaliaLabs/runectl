@@ -66,6 +66,18 @@ SANDBOX_CPUS = 2.0
 SANDBOX_LIVE_LOG_PATH = "/ctf/.agent_live.log"
 SANDBOX_WORKDIR = "/ctf"
 
+# The arena is pinned to x86-64 regardless of the host's own architecture.
+# CTF challenge binaries are overwhelmingly x86-64 ELF; on an arm64 host an
+# unpinned build produces an arm64 arena in which those binaries simply cannot
+# execute, and the failure looks like a broken challenge rather than a broken
+# arena. Docker emulates, which is slower but correct. Carried from the
+# predecessor, which passed platform="linux/amd64" explicitly.
+SANDBOX_PLATFORM = "linux/amd64"
+
+# Container naming: predictable, so a human can attach to a live run
+# (`docker exec -it runectl-<run_id> bash`) the way the predecessor allowed.
+CONTAINER_NAME_PREFIX = "runectl-"
+
 # PROMPT_ARCHIVE.md §6 — [STALE], unmeasured starting values. Do not treat as tuned.
 DEFAULT_STEP_LIMITS: dict[str, int] = {
     "pwn": 120,

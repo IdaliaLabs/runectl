@@ -8,6 +8,7 @@ smoke test before it is trusted — see the M4 handoff report.
 
 from __future__ import annotations
 
+import contextlib
 import io
 import shlex
 import tarfile
@@ -17,10 +18,17 @@ from pathlib import Path
 from typing import cast
 
 import docker
-from docker.errors import APIError, DockerException, ImageNotFound
+from docker.errors import APIError, DockerException, ImageNotFound, NotFound
 from docker.models.containers import Container
 
-from runectl.config import SANDBOX_CPUS, SANDBOX_LIVE_LOG_PATH, SANDBOX_MEM_LIMIT, SANDBOX_WORKDIR
+from runectl.config import (
+    CONTAINER_NAME_PREFIX,
+    SANDBOX_CPUS,
+    SANDBOX_LIVE_LOG_PATH,
+    SANDBOX_MEM_LIMIT,
+    SANDBOX_PLATFORM,
+    SANDBOX_WORKDIR,
+)
 from runectl.errors import SandboxError
 from runectl.sandbox.base import ExecResult
 
@@ -35,13 +43,24 @@ class DockerSandbox:
         *,
         image: str = ARENA_IMAGE,
         network: str = "bridge",
+        run_id: str | None = None,
+        platform: str = SANDBOX_PLATFORM,
         client: docker.DockerClient | None = None,
     ) -> None:
         self._image = image
         self._network = network
+        self._platform = platform
+        # Named after the run so a human can attach to it mid-run — the
+        # predecessor's `docker exec -it ctf-agent-<id> bash` workflow, which was
+        # actually used at competitions to take over from the agent.
+        self._name = f"{CONTAINER_NAME_PREFIX}{run_id}" if run_id else None
         self._client_override = client
         self._client: docker.DockerClient | None = None
         self._container: Container | None = None
+
+    @property
+    def container_name(self) -> str | None:
+        return self._name
 
     def start(self) -> None:
         # Deferred to start() rather than __init__: constructing a Sandbox must
@@ -57,11 +76,14 @@ class DockerSandbox:
             ) from exc
         except (APIError, DockerException) as exc:
             raise SandboxError(f"could not reach the Docker daemon: {exc}") from exc
+        self._remove_stale_namesake()
         try:
             self._container = self._client.containers.run(
                 self._image,
+                name=self._name,
                 command="sleep infinity",
                 detach=True,
+                platform=self._platform,
                 mem_limit=SANDBOX_MEM_LIMIT,
                 nano_cpus=int(SANDBOX_CPUS * 1_000_000_000),
                 security_opt=["no-new-privileges"],
@@ -74,6 +96,24 @@ class DockerSandbox:
         setup = self._raw_exec(f"mkdir -p {SANDBOX_WORKDIR} && touch {SANDBOX_LIVE_LOG_PATH}", timeout_s=10)
         if not setup.ok:
             raise SandboxError(f"arena container failed workdir setup: {setup.stderr}")
+
+    def _remove_stale_namesake(self) -> None:
+        """Clear a leftover container of the same name (a previous crashed run).
+
+        Named containers make attaching possible, but they also make a name
+        collision possible; the predecessor removed the namesake before starting
+        for exactly this reason.
+        """
+        if self._name is None or self._client is None:
+            return
+        try:
+            existing = self._client.containers.get(self._name)
+        except NotFound:
+            return
+        except (APIError, DockerException):
+            return
+        with contextlib.suppress(APIError):
+            existing.remove(force=True)
 
     def _require_container(self) -> Container:
         if self._container is None:

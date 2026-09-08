@@ -117,6 +117,13 @@ uv run runectl run \
   --file ./capture.pcap
 ```
 
+While it runs, you can take over — containers are named after the run:
+
+```bash
+docker exec -it runectl-<run_id> bash     # a shell inside the live sandbox
+tail -f /ctf/.agent_live.log              # or just watch every command it runs
+```
+
 **4. Read the trace.**
 
 ```bash

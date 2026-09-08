@@ -25,6 +25,7 @@ def _report(status: arena_build.ArenaStatus) -> None:
     built = status.built_fingerprint or "unknown (built before provenance stamping)"
     typer.echo(f"  built from Dockerfile fingerprint: {built}")
     typer.echo(f"  Dockerfile in this tree:           {status.expected_fingerprint}")
+    typer.echo(f"  architecture:                      {status.architecture or 'unknown'}")
 
 
 @app.command("status")
@@ -42,6 +43,16 @@ def status_cmd() -> None:
         raise typer.Exit(code=4)
 
     _report(current)
+    if current.architecture_mismatch:
+        typer.echo(
+            "  "
+            + arena_build.ARCH_WARNING.format(
+                tag=current.tag,
+                actual=current.architecture,
+                expected=current.expected_architecture,
+            ),
+            err=True,
+        )
     if current.stale:
         typer.echo(
             "  STALE: the Dockerfile changed since this image was built. "

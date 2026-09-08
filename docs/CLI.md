@@ -209,6 +209,7 @@ uv run runectl arena ensure --from-file ./arena.tar    # on the machine that doe
 runectl/arena:kali -> sha256:...
   built from Dockerfile fingerprint: 4f2a9c1b7e0d3a55
   Dockerfile in this tree:           4f2a9c1b7e0d3a55
+  architecture:                      amd64
 ```
 
 Exits 4 if the image isn't built (printing the remedies) and 4, with a different message,
@@ -232,6 +233,26 @@ Before creating a run directory or resolving your API key, `run` checks the imag
   spent.
 - **Daemon unreachable** → exit 4, with a message saying so specifically.
 - **Stale** → a warning on stderr, then the run proceeds.
+- **Built for the wrong architecture** → a warning on stderr, then the run proceeds.
+
+### Architecture
+
+The arena is always built and run as `linux/amd64`, whatever your host is. CTF challenge
+binaries are overwhelmingly x86-64, and an arm64 arena — what you get by default on Apple
+Silicon — cannot execute them; the failure looks like a broken challenge rather than a
+broken sandbox. Docker emulates, which is slower but correct. If you already have an arena
+built the wrong way, `arena status` says so.
+
+### Attaching to a live run
+
+Containers are named after the run, so you can take over from the agent while it works:
+
+```bash
+docker exec -it runectl-<run_id> bash      # a shell in the live container
+tail -f /ctf/.agent_live.log               # or just watch every command it runs
+```
+
+`runectl run` prints the exact command when it starts on a terminal.
 
 `run` never prompts you and never silently builds the image for you. That's deliberate
 ([`DECISIONS.md`](../DECISIONS.md) D2, D4, D17): a run that can block on a question isn't
