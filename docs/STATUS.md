@@ -122,7 +122,17 @@ categories, and a web challenge needs a live service the offline sandbox cannot 
 solve rate measured today is a statement about cryptography and reasoning, not about
 `runectl` across all eight categories. Rebalance when M7 lands.
 
-**The first live bench score is in, and the gate is not met: 0 solved, 1 false flag**
+**Two live bench scores, gate not met either time.** The second (after the D11 amendment)
+scores **3 of 5 solved, 1 false flag** — the review recovered three solves the old
+corroboration rule was holding. The remaining false flag is `quick-math`, and the second
+run established *why* no automated check will catch it: the reviewer validated the
+agent's derivation, which was mathematically correct, and the wrong answer is a correct
+process that stopped one step early. A fifth run's worth of mechanism will not fix that;
+a human or a self-evidently-correct answer will. There is also an unresolved tension
+between provenance/anti-echo and challenges whose flag is a *computed* value wrapped in a
+known prefix — see `bench/results/README.md`.
+
+**The first live bench score, for the record: 0 solved, 1 false flag**
 (`bench/results/README.md`, 2026-09-08, claude-sonnet-5, $0.38). Read the write-up rather
 than the headline number — the tool produced the *correct* flag in four of five challenges
 and held all four for approval, while the one it finalized was wrong. Both halves trace to
