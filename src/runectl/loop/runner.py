@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from runectl.categories.schema import Category
+from runectl.config import DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, SandboxError
 from runectl.flags.judge import ToolObservation, judge_candidate
 from runectl.loop import nudges
@@ -27,6 +28,7 @@ from runectl.sandbox.base import Sandbox
 from runectl.tools.dispatch import ToolDispatcher
 from runectl.tools.schema import TOOLS
 from runectl.trace.events import (
+    BudgetExhausted,
     ChallengeLoaded,
     CostUpdated,
     ErrorEvent,
@@ -73,6 +75,7 @@ class Runner:
         sandbox: Sandbox,
         writer: TraceWriter,
         approval_policy: str = "gated",
+        max_cost_usd: float = DEFAULT_MAX_COST_USD,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         triage_override: TriageResult | None = None,
         ledger: CostLedger | None = None,
@@ -82,6 +85,9 @@ class Runner:
         self._sandbox = sandbox
         self._writer = writer
         self._max_tokens = max_tokens
+        # D19 — 0 disables the ceiling; anything else stops the run cleanly the
+        # moment cumulative spend crosses it.
+        self._max_cost_usd = max_cost_usd
         self._triage_override = triage_override
         self._dispatcher = ToolDispatcher(sandbox)
         # A caller that wants utility/summarization calls costed alongside the
@@ -194,6 +200,17 @@ class Runner:
                     cumulative_cost_usd=state.cost_usd,
                 )
             )
+
+            # D19: check immediately after the ledger updates, so the run stops
+            # before paying for another call rather than one call too late.
+            if self._max_cost_usd > 0 and state.cost_usd >= self._max_cost_usd:
+                self._writer.emit(
+                    BudgetExhausted(
+                        step=step, limit_usd=self._max_cost_usd, spent_usd=state.cost_usd
+                    )
+                )
+                outcome, exit_code = "exhausted", 3
+                break
 
             tool_call_summary = None
             if completion.tool_calls:

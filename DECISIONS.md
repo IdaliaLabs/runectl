@@ -205,6 +205,24 @@ Added 2026-09-07. D2 established that the arena image is built once and that run
 
 *Not decided here:* whether Idalia publishes a prebuilt `runectl/arena:kali` to a registry. `--from-registry` accepts any reference, so publishing later is a distribution decision, not a code change.
 
+### D18 — Prompt caching is real, and the ledger prices it
+
+Added 2026-09-07. D5 promised prompt caching "on the stable system prefix where the provider supports it," and the registry advertised `supports_prompt_cache=True`, but no adapter ever sent a cache breakpoint — the feature existed only in this file. Two corrections:
+
+- **The breakpoint goes at the end of the message list, not on the system prompt.** Top-level `cache_control: {"type": "ephemeral"}` caches the last cacheable block, which in an agent loop is the growing conversation. Each step then reads tools + system + every earlier turn from cache at 0.10x instead of paying full input rate to re-send it. Caching only the system prefix would mostly *not fire*: the minimum cacheable prefix is 512-4096 tokens depending on model, and a category playbook alone is under it. This supersedes D5's "on the stable system prefix" wording.
+- **Cached tokens are billed differently, so `Usage` and `CostLedger` model them separately.** `input_tokens` now means *uncached* input; `cache_read_tokens` bills at 0.10x `price_in` and `cache_write_tokens` at 1.25x. Folding them together would have overstated a cached loop's cost by up to 10x. Providers without caching leave both at zero.
+
+Registry pricing was corrected the same day against a live `models.list()` and the published rates: Opus 5 was recorded at $15/$75 (actually $5/$25), Sonnet 5 at $3/$15 (actually $2/$10), and both at a 200K context window (actually 1M). The OpenAI and Google rows remain unverified estimates.
+
+### D19 — Every run has a hard spend ceiling
+
+Added 2026-09-07. `runectl` spends the user's own prepaid balance, and an agent loop's failure mode is *many steps*, so "it stopped because it ran out of steps" is not a sufficient guarantee — a step limit bounds actions, not dollars. `--max-cost` bounds dollars directly.
+
+- Default **$0.50** per run. Chosen so a runaway loop on a small prepaid balance is an annoyance, not a disaster. `--max-cost 0` disables the ceiling.
+- The check runs immediately after the ledger updates and **before** the next paid call, so the run stops one call early rather than one call late.
+- Crossing the ceiling is a normal outcome, not an error: the run emits `budget.exhausted`, finishes as `exhausted`, and exits **3**. The trace records the limit and the actual spend.
+- This is a *ceiling*, not an estimate. It cannot prevent a single very expensive call from overshooting it; it prevents the *next* one.
+
 ---
 
 ## Deliberately not decided yet

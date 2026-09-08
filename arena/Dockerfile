@@ -14,6 +14,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         # base
         bash coreutils file xxd binutils curl wget git jq unzip p7zip-full \
         netcat-traditional ca-certificates \
+        # build toolchain — Kali ships Python 3.14, and several pinned libs below
+        # (unicorn via angr, gmpy2) have no cp314 wheel yet, so pip compiles them
+        # from source. Carried from the predecessor's Dockerfile, which needed
+        # exactly this set. Dropping any of these fails the pip layer.
+        cmake pkg-config python3-dev \
+        libgmp-dev libmpfr-dev libmpc-dev libssl-dev libffi-dev \
         # pwn / rev
         gdb gdbserver radare2 checksec binwalk foremost \
         python3 python3-pip python3-venv \

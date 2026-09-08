@@ -32,10 +32,24 @@ class ToolCallRequest(BaseModel):
 
 
 class Usage(BaseModel):
+    """Token counts for one call.
+
+    ``input_tokens`` is *uncached* input only — cached tokens are reported
+    separately by the provider and billed at different rates (D18), so folding
+    them together would silently overstate cost by up to 10x on a cache hit.
+    Providers without prompt caching leave the cache fields at zero.
+    """
+
     model_config = ConfigDict(frozen=True)
 
     input_tokens: int
     output_tokens: int
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+
+    @property
+    def total_input_tokens(self) -> int:
+        return self.input_tokens + self.cache_read_tokens + self.cache_write_tokens
 
 
 class Message(BaseModel):
@@ -103,6 +117,8 @@ def complete_with_retry(
             model,
             input_tokens=completion.usage.input_tokens,
             output_tokens=completion.usage.output_tokens,
+            cache_read_tokens=completion.usage.cache_read_tokens,
+            cache_write_tokens=completion.usage.cache_write_tokens,
         )
         return completion
     raise ProviderError(f"{model.id}: exhausted {attempts} attempts, last error: {last_error}")

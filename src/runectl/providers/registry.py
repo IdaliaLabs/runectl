@@ -4,9 +4,16 @@
 caching, context window, price) come from this table. Adding a fourth provider
 is a registry entry plus an adapter, not a redesign (D5's "assumptions" note).
 
-Pricing/availability snapshot 2026-09-05 — re-verify before relying on it for
-real spend, per this repo's own convention (`CLAUDE.md`: "every research claim
-carries the date it was checked; availability and pricing rot fast").
+Pricing/availability snapshot 2026-09-07, Anthropic rows verified against a live
+`client.models.list()` call plus the published price table on that date. The
+earlier 2026-09-05 figures were wrong: Opus 5 was listed at 15/75 (actually
+5/25), Sonnet 5 at 3/15 (actually 2/10), and both at a 200K context window
+(actually 1M). OpenAI and Google rows remain unverified estimates — re-check
+them before trusting a cost report for those providers.
+
+Cache multipliers (D18): a cache *write* bills at 1.25x `price_in`, a cache
+*read* at 0.10x. Both are provider-standard for Anthropic today and are applied
+in `cost.py`, not stored per-model.
 """
 
 from __future__ import annotations
@@ -29,15 +36,20 @@ class ModelInfo(BaseModel):
     price_in: float  # USD per 1M input tokens
     price_out: float  # USD per 1M output tokens
 
+    # D18 — how much of `price_in` a cached token costs. Anthropic-standard
+    # today; if a provider ever differs these become per-model fields.
+    cache_write_multiplier: float = 1.25
+    cache_read_multiplier: float = 0.10
+
 
 MODEL_REGISTRY: dict[str, ModelInfo] = {
     "claude-opus-5": ModelInfo(
-        id="claude-opus-5", provider="anthropic", context_window=200_000,
-        supports_tools=True, supports_prompt_cache=True, price_in=15.0, price_out=75.0,
+        id="claude-opus-5", provider="anthropic", context_window=1_000_000,
+        supports_tools=True, supports_prompt_cache=True, price_in=5.0, price_out=25.0,
     ),
     "claude-sonnet-5": ModelInfo(
-        id="claude-sonnet-5", provider="anthropic", context_window=200_000,
-        supports_tools=True, supports_prompt_cache=True, price_in=3.0, price_out=15.0,
+        id="claude-sonnet-5", provider="anthropic", context_window=1_000_000,
+        supports_tools=True, supports_prompt_cache=True, price_in=2.0, price_out=10.0,
     ),
     "claude-haiku-4-5-20251001": ModelInfo(
         id="claude-haiku-4-5-20251001", provider="anthropic", context_window=200_000,

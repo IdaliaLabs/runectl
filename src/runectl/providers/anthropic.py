@@ -67,9 +67,17 @@ def _to_anthropic_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
 
 
 class AnthropicProvider:
-    def __init__(self, *, model_id: str, api_key: str, client: anthropic.Anthropic | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        model_id: str,
+        api_key: str,
+        client: anthropic.Anthropic | None = None,
+        prompt_cache: bool = True,
+    ) -> None:
         self._model_id = model_id
         self._client = client or anthropic.Anthropic(api_key=api_key)
+        self._prompt_cache = prompt_cache
 
     def complete(
         self,
@@ -79,6 +87,15 @@ class AnthropicProvider:
         tools: Sequence[ToolSchema],
         max_tokens: int,
     ) -> Completion:
+        # D18 — top-level auto-caching puts the breakpoint on the last cacheable
+        # block, which in an agent loop is the end of the growing message list.
+        # Each step therefore reads the whole previous prefix (tools + system +
+        # every earlier turn) from cache at a tenth the price instead of paying
+        # full input rate to re-send it. Caching the system prompt alone would
+        # not help much: it is well under the minimum cacheable prefix.
+        extra: dict[str, Any] = (
+            {"cache_control": {"type": "ephemeral"}} if self._prompt_cache else {}
+        )
         try:
             response = self._client.messages.create(
                 model=self._model_id,
@@ -88,6 +105,7 @@ class AnthropicProvider:
                 # these are plain JSON-schema-shaped dicts matching the documented wire format.
                 messages=cast(Any, _to_anthropic_messages(messages)),
                 tools=cast(Any, to_anthropic(tools)),
+                **cast(Any, extra),
             )
         except _TRANSIENT_ERRORS as exc:
             raise TransientProviderError(str(exc)) from exc
@@ -113,6 +131,8 @@ class AnthropicProvider:
             usage=Usage(
                 input_tokens=response.usage.input_tokens,
                 output_tokens=response.usage.output_tokens,
+                cache_read_tokens=response.usage.cache_read_input_tokens or 0,
+                cache_write_tokens=response.usage.cache_creation_input_tokens or 0,
             ),
             stop_reason=response.stop_reason or "unknown",
         )

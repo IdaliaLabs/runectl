@@ -57,6 +57,12 @@ DEFAULT_TOOL_OUTPUT_LIMIT = 6_000
 # per-provider token budget; unmeasured, like every other number in this file.
 DEFAULT_MAX_HISTORY_MESSAGES = 40
 
+# D19 — default hard spend ceiling for one run, in USD. A run stops cleanly the
+# moment the ledger crosses it. Chosen to be small enough that a runaway loop on
+# a prepaid balance is an annoyance rather than a disaster; override per run with
+# --max-cost, and set it to 0 to disable the ceiling entirely.
+DEFAULT_MAX_COST_USD = 0.50
+
 # D5 — retry with exponential backoff + jitter on 429/5xx/timeouts.
 DEFAULT_RETRY_ATTEMPTS = 4
 

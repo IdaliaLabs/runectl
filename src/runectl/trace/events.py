@@ -177,6 +177,16 @@ class CostUpdated(EventPayload):
     cumulative_cost_usd: float
 
 
+class BudgetExhausted(EventPayload):
+    """The run hit its spend ceiling and stopped itself (D19)."""
+
+    event_type: ClassVar[str] = "budget.exhausted"
+
+    step: int
+    limit_usd: float
+    spent_usd: float
+
+
 class ErrorEvent(EventPayload):
     event_type: ClassVar[str] = "error"
 
@@ -213,6 +223,7 @@ _ALL_PAYLOADS: tuple[type[EventPayload], ...] = (
     EvidenceAdded,
     FlagCandidate,
     FlagDecision,
+    BudgetExhausted,
     CostUpdated,
     ErrorEvent,
     RunFinished,

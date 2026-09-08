@@ -17,7 +17,7 @@ import typer
 from runectl.categories.loader import CategoryLoadError, CategoryNotFoundError
 from runectl.categories.loader import load as load_category
 from runectl.cli.render import render_human, render_ndjson
-from runectl.config import CONTAINER_NAME_PREFIX
+from runectl.config import CONTAINER_NAME_PREFIX, DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, SandboxError, UsageError
 from runectl.loop.context import ContextBuilder
 from runectl.loop.runner import Runner
@@ -39,7 +39,9 @@ from runectl.trace.store import Store
 
 def _build_provider(model: ModelInfo, api_key: str) -> Provider:
     if model.provider == "anthropic":
-        return AnthropicProvider(model_id=model.id, api_key=api_key)
+        return AnthropicProvider(
+            model_id=model.id, api_key=api_key, prompt_cache=model.supports_prompt_cache
+        )
     if model.provider == "openai":
         return OpenAIProvider(model_id=model.id, api_key=api_key)
     return GoogleProvider(model_id=model.id, api_key=api_key)
@@ -106,6 +108,11 @@ def run_command(
     approval: str = typer.Option("gated", "--approval"),
     network: str | None = typer.Option(None, "--network"),
     max_steps: int | None = typer.Option(None, "--max-steps"),
+    max_cost: float = typer.Option(
+        DEFAULT_MAX_COST_USD,
+        "--max-cost",
+        help="Hard spend ceiling in USD for this run; 0 disables it",
+    ),
     record: bool = typer.Option(False, "--record"),
     output: str | None = typer.Option(None, "--output", help="jsonl | human"),
 ) -> None:
@@ -180,6 +187,7 @@ def run_command(
             sandbox=sandbox,
             writer=writer,
             approval_policy=approval,
+            max_cost_usd=max_cost,
             ledger=ledger,
             context=context,
         )
