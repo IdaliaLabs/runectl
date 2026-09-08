@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import typer
 
+from runectl.cli.render import _line, _width
 from runectl.trace.reader import load_run
 from runectl.trace.store import Store
 
@@ -28,13 +29,10 @@ def show(
             typer.echo(event.model_dump_json())
         return
 
-    typer.echo(
-        f"run {manifest.run_id}  {manifest.challenge_name} [{manifest.category}]  model={manifest.model}"
-    )
+    # Same renderer as a live run (render.py), so what you read afterwards is
+    # exactly what you would have watched happen.
+    typer.echo(f"run {manifest.run_id}")
     for event in events:
-        typer.echo(f"  [{event.seq:>4}] {event.type:<18} {event.payload()}")
-    if manifest.outcome is not None:
-        typer.echo(
-            f"outcome={manifest.outcome} exit_code={manifest.exit_code} cost=${manifest.cost_usd:.4f} "
-            f"steps={manifest.steps_used}"
-        )
+        line = _line(event.payload(), _width())
+        if line is not None:
+            typer.echo(line)

@@ -26,3 +26,22 @@ def test_record_then_replay_is_byte_identical(tmp_path: Path) -> None:
     replay = ReplayProvider(cassette_path)
     replayed = replay.complete(system="sys", messages=[], tools=TOOLS, max_tokens=100)
     assert replayed == completion
+
+
+def test_replay_reports_zero_spend(tmp_path: Path) -> None:
+    """`replay` makes no API calls, so its manifest must not claim a cost.
+
+    Regression: a replay re-billed the recorded usage through the ledger and
+    reported the original run's price, which made a zero-spend feature look
+    expensive in the run store.
+    """
+    from runectl.providers.cost import CostLedger
+    from runectl.providers.registry import resolve as resolve_model
+
+    priced = resolve_model("claude-sonnet-5")
+    free = priced.model_copy(update={"price_in": 0.0, "price_out": 0.0})
+    ledger = CostLedger()
+
+    ledger.record(free, input_tokens=500_000, output_tokens=100_000, cache_read_tokens=2_000_000)
+
+    assert ledger.total_usd == 0.0

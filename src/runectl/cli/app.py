@@ -92,6 +92,12 @@ def replay_command(run_id: str, check: bool = typer.Option(False, "--check")) ->
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=6) from exc
 
+    # A replay contacts no API, so it must not report spend. The ledger prices
+    # whatever the provider returns, and ReplayProvider returns the *recorded*
+    # usage — which would otherwise be re-billed into run.json and make a replay
+    # look like it cost what the original run cost. Zero-priced model, zero
+    # reported cost; "replay at zero spend" has to be true in the manifest too.
+    model_info = model_info.model_copy(update={"price_in": 0.0, "price_out": 0.0})
     provider = ReplayProvider(cassette_path)
     exec_results = exec_results_from_trace(store.trace_path(run_id), store.artifacts_dir(run_id))
     sandbox = ReplaySandbox(exec_results)

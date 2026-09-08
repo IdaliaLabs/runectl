@@ -102,9 +102,24 @@ uv run runectl trace show <run_id>
 uv run runectl trace show <run_id> --format jsonl
 ```
 
-`timeline` (the default) prints a one-line-per-event human review surface, followed by
-the run's outcome, exit code, cost and step count. `jsonl` prints the raw event stream,
-one JSON object per line — the same shape written to `trace.jsonl`.
+`timeline` (the default) replays the run through the *same* renderer a live run uses, so
+what you read afterwards is exactly what you would have watched happen:
+
+```
+  ▶ modern-clueless-child [crypto]  claude-sonnet-5
+    max 20 steps · network=none · approval=gated
+  8 → run_command  python3 -c " parts = ['52','41','58','51','47','57','49','48',…
+  8 ← ok           b'csictf{you_are_a_basic_person}' (0.5s)
+  9 ✓ finalized: csictf{you_are_a_basic_person}
+      flag observed verbatim in tool output at seq 43
+  ■ solved — csictf{you_are_a_basic_person}
+    9 steps (7 with progress, 78%) · 0 blocked
+    $0.0724 · 66s · exit 0
+```
+
+Commands and outputs are clipped to one line each — an exploit script is thousands of
+characters and the live view has to stay watchable. The full text is always in
+`trace.jsonl`. `jsonl` prints the raw event stream, one JSON object per line.
 
 Exits 6 if the run id doesn't exist.
 
