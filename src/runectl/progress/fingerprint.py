@@ -29,6 +29,14 @@ _VOLATILE: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(?i)\bprocess \d+"), "process <PID>"),
     # Durations and elapsed times
     (re.compile(r"\b\d+(?:\.\d+)?\s*(?:ms|s|sec|seconds)\b"), "<DUR>"),
+    # Bare epoch timestamps — `time.time()` printed raw, with or without a
+    # fractional part. Added 2026-09-08 from a real trace: an agent that had
+    # been rejected three times re-ran its solver with `TIMESTAMP <epoch>`
+    # printed above the flag, which changed the fingerprint and satisfied the
+    # corroboration rule with what was otherwise the same observation
+    # (bench/results/README.md). Every other volatile pattern here was written
+    # for noise; this one is the first written for an adversary.
+    (re.compile(r"\b1[0-9]{9}(?:\.\d+)?\b"), "<EPOCH>"),
     # Byte/size counters that move between otherwise identical runs
     (re.compile(r"(?i)\b\d+\s*bytes?\b"), "<BYTES>"),
     # Ephemeral ports and temp paths

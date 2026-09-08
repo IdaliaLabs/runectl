@@ -174,3 +174,21 @@ def test_blocked_steps_count_toward_the_forced_shift() -> None:
 
     assert shift is not None
     assert "BLOCKED" in shift
+
+
+def test_a_bare_epoch_timestamp_does_not_make_a_repeat_look_new() -> None:
+    """Regression, from run 20260908-160323-444a1e (bench/results/README.md).
+
+    The agent had a correct-looking flag rejected three times, then re-ran the
+    same solver with a raw `time.time()` printed above it. That changed the
+    fingerprint, which is what let a repeat count as a second independent
+    observation and finalized a wrong flag.
+    """
+    from runectl.progress.fingerprint import fingerprint
+
+    plain = "csictf{683435743464}"
+    stamped = "TIMESTAMP 1788883486.042562\ncsictf{683435743464}"
+    later = "TIMESTAMP 1788883999.117030\ncsictf{683435743464}"
+    assert fingerprint(stamped) == fingerprint(later)
+    # And two runs of a genuinely different command still differ.
+    assert fingerprint(plain) != fingerprint("/ctf/out.txt:1:csictf{683435743464}")

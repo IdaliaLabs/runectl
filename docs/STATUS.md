@@ -117,9 +117,16 @@ categories, and a web challenge needs a live service the offline sandbox cannot 
 solve rate measured today is a statement about cryptography and reasoning, not about
 `runectl` across all eight categories. Rebalance when M7 lands.
 
-**No live bench run has been scored yet.** `runectl bench` is tested against faked runs
-and a dry run; it has never been pointed at the API. Every budget and step limit therefore
-remains an unmeasured starting value.
+**The first live bench score is in, and the gate is not met: 0 solved, 1 false flag**
+(`bench/results/README.md`, 2026-09-08, claude-sonnet-5, $0.38). Read the write-up rather
+than the headline number — the tool produced the *correct* flag in four of five challenges
+and held all four for approval, while the one it finalized was wrong. Both halves trace to
+D11's corroboration rule, which on this evidence cost four solves and prevented zero false
+flags. That is one run, not a mandate to change a locked decision.
+
+**The budgets are still unmeasured.** Zero steps were blocked across the entire suite —
+runs took 5–14 steps against limits of 60–80 — so the per-family and per-hypothesis
+budgets have never actually bound anything. Nothing here justifies moving a step limit.
 
 **`easy-01` is a known-unfair gate.** It was the first vendored challenge and its
 description does not contain enough to solve it without the original repo's file layout;
