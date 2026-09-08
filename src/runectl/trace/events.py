@@ -156,6 +156,21 @@ class FlagCandidate(EventPayload):
     provenance_artifact: str | None = None
 
 
+class FlagReviewed(EventPayload):
+    """The D15 disconfirmation pass's verdict on one candidate.
+
+    Its own event rather than a line in `flag.decision`'s reason, because the
+    point of the pass is that a human can read why a model doubted a flag.
+    """
+
+    event_type: ClassVar[str] = "flag.reviewed"
+
+    step: int
+    flag: str
+    sound: bool
+    reason: str
+
+
 class FlagDecision(EventPayload):
     event_type: ClassVar[str] = "flag.decision"
 
@@ -222,6 +237,7 @@ _ALL_PAYLOADS: tuple[type[EventPayload], ...] = (
     StrategyShift,
     EvidenceAdded,
     FlagCandidate,
+    FlagReviewed,
     FlagDecision,
     BudgetExhausted,
     CostUpdated,

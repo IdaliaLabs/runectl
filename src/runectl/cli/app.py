@@ -15,6 +15,7 @@ import typer
 from runectl.categories.loader import CategoryLoadError, CategoryNotFoundError
 from runectl.categories.loader import load as load_category
 from runectl.cli import arena_cmd, bench_cmd, flag_cmd, keys_cmd, run_cmd, trace_cmd
+from runectl.flags.review import ReviewVerdict, replay_reviewer
 from runectl.loop.runner import Runner
 from runectl.loop.state import Challenge
 from runectl.providers.registry import UnknownModelError
@@ -22,7 +23,7 @@ from runectl.providers.registry import resolve as resolve_model
 from runectl.providers.replay import ReplayProvider
 from runectl.sandbox.base import sandbox_session
 from runectl.sandbox.replay import ReplaySandbox, exec_results_from_trace
-from runectl.trace.events import ToolCall, TriageResult
+from runectl.trace.events import FlagReviewed, ToolCall, TriageResult
 from runectl.trace.index import IndexDB
 from runectl.trace.reader import TraceReader
 from runectl.trace.store import Store
@@ -104,11 +105,13 @@ def replay_command(run_id: str, check: bool = typer.Option(False, "--check")) ->
     approval_policy = str(manifest.config_snapshot.get("approval_policy", "gated"))
 
     triage_override = None
+    recorded_reviews: list[ReviewVerdict] = []
     for event in TraceReader(store.trace_path(run_id), store.artifacts_dir(run_id)):
         payload = event.payload()
-        if isinstance(payload, TriageResult):
+        if isinstance(payload, TriageResult) and triage_override is None:
             triage_override = payload
-            break
+        elif isinstance(payload, FlagReviewed):
+            recorded_reviews.append(ReviewVerdict(payload.sound, payload.reason))
 
     replay_run_id, writer = store.new_run(
         challenge_name=chal.name,
@@ -126,6 +129,7 @@ def replay_command(run_id: str, check: bool = typer.Option(False, "--check")) ->
         writer=writer,
         approval_policy=approval_policy,
         triage_override=triage_override,
+        reviewer=replay_reviewer(recorded_reviews),
     )
     with sandbox_session(sandbox):
         outcome = runner.run()

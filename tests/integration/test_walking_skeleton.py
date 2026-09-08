@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from runectl.categories.loader import load as load_category
+from runectl.flags.review import ReviewVerdict
 from runectl.loop.runner import Runner
 from runectl.loop.state import Challenge
 from runectl.providers.base import Completion, Message, ToolCallRequest, Usage
@@ -139,7 +140,11 @@ def test_walking_skeleton_solves_end_to_end_and_replays(runectl_home: Path) -> N
     sandbox = _stub_sandbox()
     sandbox.start()
     runner = Runner(
-        challenge=challenge, category=category, model=model, provider=provider, sandbox=sandbox, writer=writer
+        challenge=challenge, category=category, model=model, provider=provider, sandbox=sandbox,
+        writer=writer,
+        # D15 §2's disconfirmation pass, scripted: a live run sends this to the
+        # cheap utility model, and no test may reach an API.
+        reviewer=lambda request: ReviewVerdict(True, "derived from the challenge data"),
     )
     outcome = runner.run()
     sandbox.stop()

@@ -24,6 +24,7 @@ from runectl.trace.events import (
     EventPayload,
     FlagCandidate,
     FlagDecision,
+    FlagReviewed,
     LlmResponse,
     RunFinished,
     RunStarted,
@@ -97,6 +98,11 @@ def _line(payload: EventPayload, width: int) -> str | None:
         )
     if isinstance(payload, FlagCandidate):
         return f"{payload.step:>3} ? candidate {payload.flag}"
+    if isinstance(payload, FlagReviewed):
+        # The reviewer's own words, not a summary of them — reading why a model
+        # doubted a flag is the entire point of the pass.
+        mark = "ok" if payload.sound else "doubts"
+        return f"{payload.step:>3} ⚖ review {mark}: {_flat(payload.reason, width - 20)}"
     if isinstance(payload, FlagDecision):
         mark = {"finalized": "✓", "pending": "…", "rejected": "✗"}.get(payload.decision, "?")
         reason = _flat(payload.reason, width - 8)

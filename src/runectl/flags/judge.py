@@ -11,11 +11,15 @@ finalizing it. Five mechanisms, in the order D15 names them:
    That last part is not hypothetical: the first real run of this tool printed
    its own guess and had it accepted (run 20260908-033407-cfa0ad, 2026-09-07).
 2. **Verification re-derivation** — the cited command is re-run in the sandbox
-   and must produce the same string again. LLM verification is not implemented:
-   D15 makes it a last resort, and every V1 case is covered deterministically.
+   and must produce the same string again, plus the disconfirmation pass in
+   `flags/review.py`: one cheap model call, framed to find a reason the flag is
+   wrong (D15 mechanism 2's "framed to *disconfirm* rather than confirm").
 3. **Decoy detection** — `flags/decoys.py`.
-4. **Independent corroboration >= 2** — two different tool calls with different
-   output fingerprints (D8) must have produced the same string.
+4. **Independent corroboration** is still counted and reported, but **no longer
+   gates** — see the 2026-09-08 D11 amendment and `bench/results/README.md`. It
+   held four correct flags and finalized a wrong one, because a clean solve
+   produces its answer once and a stubborn agent produces it as many times as
+   the checker asks for.
 5. **No-flag-is-success** — enforced by the loop, not here: a rejection is
    feedback and the run continues; exhausting without a flag exits 3 rather
    than fabricating one. The base rules (`loop/context.py`) say so to the model.
@@ -32,11 +36,14 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from runectl.flags import decoys, plausibility
+from runectl.flags.review import Reviewer, ReviewRequest
 from runectl.progress.fingerprint import fingerprint
 
 Decision = Literal["finalized", "pending", "rejected"]
 
-# D15 mechanism 4 / D11: "two different tool calls with different fingerprints".
+# Still counted and reported; no longer part of the auto-finalize bar (D11,
+# amended 2026-09-08). Kept because "how many independent sightings" is real
+# information for whoever reads a held candidate.
 MIN_CORROBORATION = 2
 
 # A re-derivation is a repeat of a command that already ran once inside this
@@ -144,6 +151,7 @@ class FlagJudge:
         flag_format: str | None = None,
         description: str = "",
         sandbox: _Executor | None = None,
+        reviewer: Reviewer | None = None,
         require_provenance: bool = True,
         min_corroboration: int = MIN_CORROBORATION,
     ) -> None:
@@ -151,6 +159,7 @@ class FlagJudge:
         self._flag_format = flag_format
         self._description = description
         self._sandbox = sandbox
+        self._reviewer = reviewer
         self._require_provenance = require_provenance
         self._min_corroboration = min_corroboration
 
@@ -161,6 +170,7 @@ class FlagJudge:
         history: Sequence[ToolObservation],
         fallback_seq: int,
         provenance: str = "",
+        how_found: str = "",
     ) -> JudgeVerdict:
         checks: list[Check] = []
 
@@ -191,12 +201,13 @@ class FlagJudge:
         # 4. The gating checks. These never reject — they decide whether a
         #    candidate is eligible to be finalized without a human (D11).
         corroboration = self._corroboration(flag, history)
-        corroborated = corroboration >= self._min_corroboration
         checks.append(
             Check(
+                # Always passes: reported for whoever reads a held candidate,
+                # never a reason to hold one (D11, amended 2026-09-08).
                 "corroboration",
-                corroborated,
-                f"{corroboration} independent observation(s), need {self._min_corroboration}",
+                True,
+                f"{corroboration} independent observation(s)",
             )
         )
 
@@ -206,12 +217,17 @@ class FlagJudge:
         rederived, rederive_detail = self._rederive(flag, source)
         checks.append(Check("rederivation", rederived, rederive_detail))
 
+        # Run last: it is the only stage that costs tokens, so everything a
+        # deterministic check can settle is already settled by here.
+        reviewed, review_detail = self._review(flag, how_found, source)
+        checks.append(Check("review", reviewed, review_detail))
+
         return self._apply_policy(
             source_seq=source.seq,
             corroboration=corroboration,
-            corroborated=corroborated,
             format_ok=format_ok,
             rederived=rederived,
+            reviewed=reviewed,
             checks=checks,
         )
 
@@ -295,6 +311,21 @@ class FlagJudge:
             return True, f"matches {self._flag_format}"
         return False, f"does not match {self._flag_format}"
 
+    def _review(self, flag: str, how_found: str, source: ToolObservation) -> tuple[bool, str]:
+        """Ask a cheap model to find a reason this flag is wrong (D15 §2)."""
+        if self._reviewer is None:
+            return False, "no reviewer available to check this candidate"
+        verdict = self._reviewer(
+            ReviewRequest(
+                flag=flag,
+                how_found=how_found,
+                description=self._description,
+                source_command=source.shell_command or source.command,
+                source_output=source.text,
+            )
+        )
+        return verdict.sound, verdict.detail
+
     def _rederive(self, flag: str, source: ToolObservation) -> tuple[bool, str]:
         """Re-run the cited command and require the same string back (D15 §2)."""
         if self._sandbox is None:
@@ -316,9 +347,9 @@ class FlagJudge:
         *,
         source_seq: int,
         corroboration: int,
-        corroborated: bool,
         format_ok: bool,
         rederived: bool,
+        reviewed: bool,
         checks: list[Check],
     ) -> JudgeVerdict:
         if self._policy == "auto":
@@ -338,13 +369,13 @@ class FlagJudge:
                 checks=tuple(checks),
             )
 
-        if corroborated and format_ok and rederived:
+        if format_ok and rederived and reviewed:
             return JudgeVerdict(
                 decision="finalized",
                 provenance_seq=source_seq,
                 reason=(
-                    f"corroborated by {corroboration} independent observations, "
-                    f"re-derived in the sandbox, and matching the expected format"
+                    "re-derived in the sandbox, matching the expected format, and a "
+                    "disconfirmation review found no reason to doubt it"
                 ),
                 corroboration=corroboration,
                 checks=tuple(checks),

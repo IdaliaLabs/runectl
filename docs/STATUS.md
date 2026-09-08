@@ -86,12 +86,17 @@ before anything that costs sandbox time:
 3. **Decoy detection (D15 §3).** A bait-named source, a taunt next to the hit, or a token
    the author pasted into the description. Rejected.
 4. **Corroboration (D15 §4).** How many observations with *different* commands and
-   *different* output fingerprints produced this string.
+   *different* output fingerprints produced this string. **Reported, not gating** since
+   the 2026-09-08 D11 amendment.
 5. **Flag format.** Matched against `--flag-format` when one was given.
 6. **Re-derivation (D15 §2).** The cited command is re-run in the sandbox and must produce
    the same string again.
+7. **Disconfirmation review (D15 §2).** One call to the cheapest model of the same
+   provider (~$0.002), framed to find a reason the flag is *wrong*. Runs last, so a flag
+   rejected on provenance or a decoy marker never costs a token. A doubtful, unreadable,
+   or failed review holds the candidate — it can only withhold a solve, never grant one.
 
-Stages 1–3 reject under **every** `--approval` policy. Stages 4–6 only decide whether a
+Stages 1–3 reject under **every** `--approval` policy. Stages 5–7 decide whether a
 candidate can be finalized without a human: under `gated` all three must pass, otherwise
 the run ends at exit code 2 with the candidate in the trace for `runectl flag approve`.
 

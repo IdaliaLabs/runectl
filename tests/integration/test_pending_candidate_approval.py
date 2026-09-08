@@ -1,9 +1,14 @@
-"""D11 end to end: an uncorroborated find is a candidate, and a human closes it.
+"""D11 end to end: a doubted find is a candidate, and a human closes it.
 
 The run stops at exit code 2 with the candidate in the trace rather than
 claiming a solve, `runectl flag list` shows what was held and why, and
 `runectl flag approve` finalizes it — recording that a person, not the judge,
 made that call. All at zero spend: StubSandbox + ScriptedProvider.
+
+What holds the candidate here is the D15 §2 disconfirmation review saying it
+doubts the flag. Before 2026-09-08 this test held on corroboration instead; the
+first live bench showed that rule holding four *correct* flags, so the review is
+what the gate hangs on now (bench/results/README.md).
 """
 
 from __future__ import annotations
@@ -19,6 +24,7 @@ from pathlib import Path
 import pytest
 
 from runectl.categories.loader import load as load_category
+from runectl.flags.review import ReviewVerdict
 from runectl.loop.runner import Runner
 from runectl.loop.state import Challenge
 from runectl.providers.base import Completion, Message, ToolCallRequest, Usage
@@ -96,6 +102,7 @@ def _run(store: Store) -> str:
         provider=ScriptedProvider(_script()),
         sandbox=sandbox,
         writer=writer,
+        reviewer=lambda request: ReviewVerdict(False, "no derivation shown, just a file read"),
     )
     outcome = runner.run()
     sandbox.stop()
@@ -116,7 +123,7 @@ def _run(store: Store) -> str:
     return run_id
 
 
-def test_a_single_sighting_is_held_then_approved(runectl_home: Path) -> None:
+def test_a_doubted_flag_is_held_then_approved(runectl_home: Path) -> None:
     store = Store()
     run_id = _run(store)
 
@@ -134,8 +141,8 @@ def test_a_single_sighting_is_held_then_approved(runectl_home: Path) -> None:
     held = [json.loads(line) for line in listed.stdout.splitlines() if line.strip()]
     assert len(held) == 1
     assert held[0]["flag"] == FLAG
-    # The reason has to be actionable: it names the check that wasn't satisfied.
-    assert "corroboration" in held[0]["held_because"]
+    # The reason has to be actionable: it carries the reviewer's own words.
+    assert "no derivation shown" in held[0]["held_because"]
 
     approved = subprocess.run(
         [sys.executable, "-m", "runectl", "flag", "approve", run_id],

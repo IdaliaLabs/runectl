@@ -136,6 +136,12 @@ itself: every tool result reaches the model with an `[observation seq=N]` header
 judge re-reads and re-runs what that number names.
 `step`, `flag`, `how_found`, `provenance_seq`, `provenance_artifact`
 
+### `flag.reviewed`
+The disconfirmation pass's verdict on one candidate (D15 §2) — its own event rather than a
+line in `flag.decision`'s reason, because reading *why* a model doubted a flag is the
+point of the pass.
+`step`, `flag`, `sound`, `reason`
+
 ### `flag.decision`
 `finalized`, `pending`, or `rejected`, with the reason. A `rejected` decision is feedback —
 the run continues and the model is told why. A `pending` one ends the run at exit code 2.
