@@ -23,6 +23,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         sqlmap gobuster ffuf wfuzz whatweb \
         # forensics / stego
         exiftool steghide fcrackzip \
+        # misc: QR/barcode decoding (misc.toml required_tools: zbarimg)
+        zbar-tools \
         # network
         tshark scapy \
         # cracking

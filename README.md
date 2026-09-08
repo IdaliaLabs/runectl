@@ -65,13 +65,25 @@ directly, `uv tool install .` also works.
 
 ## Quickstart
 
-**1. Build the sandbox image.** One Kali-based image with a pinned CTF toolset, built
-once. This takes a while and downloads a lot.
+**1. Set up the sandbox image.** One Kali-based image with a pinned CTF toolset, built
+once. `ensure` walks you through it the first time.
 
 ```bash
-uv run runectl arena build
+uv run runectl arena ensure     # asks: build it, load a file you have, or pull one
 uv run runectl arena status     # runectl/arena:kali -> sha256:...
 ```
+
+Building takes a while and downloads several GB. If you already have the image as a
+`docker save` tarball — from another machine, or for an offline competition — skip the
+build entirely:
+
+```bash
+uv run runectl arena ensure --from-file ./arena.tar
+```
+
+`runectl run` checks for this image before it creates a run directory or touches your API
+key, and tells you exactly how to fix it if it's missing. It never prompts mid-run and
+never silently starts a 30-minute build.
 
 **2. Store a provider key.** It goes into your OS keyring, falling back to
 `~/.config/runectl/keys.json` at mode 0600. Keys are never written into a run's config

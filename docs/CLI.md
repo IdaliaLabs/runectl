@@ -158,22 +158,85 @@ See [`PROVIDERS.md`](PROVIDERS.md) for the full resolution order.
 
 ## `runectl arena`
 
+The arena image (`runectl/arena:kali`) is the sandbox every challenge runs inside. It is
+the one piece of setup required before `runectl run` will do anything.
+
 ```bash
-uv run runectl arena build
-uv run runectl arena status
+uv run runectl arena ensure      # first-time setup, interactive on a TTY
+uv run runectl arena build       # build from arena/Dockerfile
+uv run runectl arena status      # is it here, and is it current?
 ```
 
-`build` shells out to `docker build -t runectl/arena:kali arena/`, streaming Docker's
-output to your terminal, and returns Docker's exit code.
+### `arena ensure`
 
-`status` prints the image id if the image exists. It exits **4** if the image isn't built
-(with a message telling you to build it) and also **4**, with a different message, if the
-Docker daemon isn't reachable at all — the two failures are distinguishable on purpose.
+The first-run helper. With no flags on a TTY it asks which route you want:
 
-A `runectl run` gates on the image existing and fails with a clear message. It never
-silently builds it for you.
+```
+The arena sandbox image (runectl/arena:kali) isn't on this machine yet.
+Challenges run inside it, so runectl needs one before it can do anything.
 
----
+  1) Build it here from arena/Dockerfile
+     ~15-40 min, several GB, pulls kalilinux/kali-rolling:latest from Docker Hub
+  2) Load an image file I already have (a `docker save` tarball)
+  3) Pull a prebuilt image from a registry
+  4) Cancel
+
+Which [1]:
+```
+
+Every route also has a non-interactive form, so nothing here can block a script:
+
+| Flag | What it does |
+|---|---|
+| `--build` | Build from `arena/Dockerfile` |
+| `--from-file <path>` | `docker load` a tarball, re-tagging it as the arena image if it carried another name |
+| `--from-registry <ref>` | `docker pull` a prebuilt image and tag it |
+| `--force` | Act even if a current image is already present |
+
+With no flags **and no TTY**, `ensure` prints the remedies and exits 4 rather than
+prompting. Nothing in `runectl` can ever block waiting on a human.
+
+To move an arena image between machines, or keep one for an offline competition:
+
+```bash
+docker save runectl/arena:kali -o arena.tar            # on the machine that has it
+uv run runectl arena ensure --from-file ./arena.tar    # on the machine that doesn't
+```
+
+### `arena status`
+
+```
+runectl/arena:kali -> sha256:...
+  built from Dockerfile fingerprint: 4f2a9c1b7e0d3a55
+  Dockerfile in this tree:           4f2a9c1b7e0d3a55
+```
+
+Exits 4 if the image isn't built (printing the remedies) and 4, with a different message,
+if the Docker daemon isn't reachable at all — the two are distinguishable on purpose.
+
+If the two fingerprints differ, the image was built from an older Dockerfile and `status`
+says `STALE`. That's a warning, not a failure: the image still works, its toolset is just
+older than your checkout.
+
+### `arena build`
+
+Shells out to `docker build`, streaming Docker's output to your terminal, and returns
+Docker's exit code. It stamps the Dockerfile's fingerprint onto the image as a label,
+which is what makes the staleness check above possible.
+
+### What `runectl run` does about all this
+
+Before creating a run directory or resolving your API key, `run` checks the image:
+
+- **Missing** → exit 4, printing every remedy. No run directory is created, nothing is
+  spent.
+- **Daemon unreachable** → exit 4, with a message saying so specifically.
+- **Stale** → a warning on stderr, then the run proceeds.
+
+`run` never prompts you and never silently builds the image for you. That's deliberate
+([`DECISIONS.md`](../DECISIONS.md) D2, D4, D17): a run that can block on a question isn't
+scriptable, and a run that quietly kicks off a 30-minute build when you asked it to solve
+a challenge isn't honest.
 
 ## `runectl index rebuild`
 

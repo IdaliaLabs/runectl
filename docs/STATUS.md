@@ -2,7 +2,7 @@
 
 Last updated **2026-09-07**.
 
-The M0–M4 skeleton is built, typed, and green: 32 tests passing, `mypy --strict` clean,
+The M0–M4 skeleton is built, typed, and green: 43 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 
@@ -26,12 +26,18 @@ point of this file is that nothing here should surprise you at run time.
 | Secrets redacted, >8KB values spilled, torn tail tolerated, index rebuild | `tests/unit/test_trace.py` |
 | Utility-summarizer tokens land in the shared cost ledger | `tests/unit/test_utility_summarizer.py` |
 | Constructing a `DockerSandbox` never touches the daemon, and a daemon failure surfaces as `SandboxError` | `tests/unit/test_docker_sandbox.py` — against a mocked client |
+| Arena presence/staleness detection, fingerprint stamping, tarball load and re-tag | `tests/unit/test_arena.py` — against a fake client and stubbed `subprocess` |
+| No category claims a tool the arena Dockerfile never installs | `tests/unit/test_categories.py` |
+| A missing image or dead daemon exits 4 before any run directory is created | Verified by hand on 2026-09-07 with the daemon stopped |
 
 ## Never run for real
 
 These are the two paths the build session had no way to exercise. **Assume they need a
 first smoke test before you trust them.**
 
+- **`arena ensure`'s build / load / pull paths.** The argument construction is tested
+  against a stubbed `subprocess`, but no `docker build`, `docker load`, or `docker pull`
+  has ever actually run. The daemon-down and image-missing paths *were* exercised by hand.
 - **`DockerSandbox` and `arena/Dockerfile`.** No Docker daemon was available. The image
   is a best-effort pinned toolset; the sandbox is implemented to spec and type-checks.
   Neither has been built or executed. The container posture in particular — `mem_limit=2g`,

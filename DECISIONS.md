@@ -190,6 +190,18 @@ Locked. A run is not failing because it took many steps; it is failing because i
 
 *Skeleton seam:* M4's `RunState` (D6) already carries `steps_used` as a field; `progress_steps`/`blocked_steps` are real fields but computed by a no-op progress stub (M5 fills in real scoring) so `run.json` has the shape from day one even before the numbers mean anything.
 
+### D17 — First-run arena setup: **check always, remediate explicitly, never prompt inside a run**
+
+Added 2026-09-07. D2 established that the arena image is built once and that runs "gate on the image existing and fail with a clear message, never a silent build." That held, but it left a bad first-run experience: on a fresh machine the only remedy was a 15-40 minute network build, there was no way to hand `runectl` an image you already had, and nothing noticed when an existing image predated a Dockerfile change. D17 fills that in without weakening D2 or D4.
+
+- **Presence and provenance are checked before every run**, in a preflight that runs *before* the run directory is created and before any paid call. A missing image exits **4** with the full list of remedies. An unreachable daemon is a distinct message from a missing image.
+- **`build` stamps a fingerprint.** `docker build` applies `dev.idalia.runectl.arena-fingerprint=<sha256 of the Dockerfile, 16 hex>` as a label. `inspect()` compares it to the Dockerfile in the tree, so "your arena is older than your checkout" is detectable after an update. A **stale image warns and proceeds** — it still works, it is merely old. An image with **no** label is "unknown provenance," never "stale": an image built before stamping existed must not start nagging.
+- **Three remedies, all non-interactive by flag**: `runectl arena ensure --build` (build here), `--from-file PATH` (load a `docker save` tarball — the offline/air-gapped/USB-stick path, and how a prebuilt arena moves between machines), `--from-registry REF` (pull and tag a prebuilt image). `load_archive` re-tags an archive that carried a different name rather than making the user work out `docker tag`.
+- **`runectl arena ensure` with no flags on a TTY is the one interactive surface in the product.** It asks which route the user wants. With no flags and no TTY it prints the remedies and exits 4 — it can never block a script or an agent.
+- **`runectl run` still never prompts and never silently builds** (D2, D4 intact). It reports and exits; the human runs `arena ensure`. An agent driving the tool reads the same message and runs the same non-interactive command.
+
+*Not decided here:* whether Idalia publishes a prebuilt `runectl/arena:kali` to a registry. `--from-registry` accepts any reference, so publishing later is a distribution decision, not a code change.
+
 ---
 
 ## Deliberately not decided yet
