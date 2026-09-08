@@ -19,7 +19,7 @@ src/runectl/
         trace_cmd.py    `runectl trace show`
         keys_cmd.py     `runectl keys set|list|rm`
         arena_cmd.py    `runectl arena build|status`
-        flag_cmd.py     `runectl flag approve`  (stub → M6)
+        flag_cmd.py     `runectl flag list` / `flag approve`
         bench_cmd.py    `runectl bench run`     (stub → M8)
         render.py       two pure event renderers: NDJSON→stdout, human→stderr
 
@@ -59,7 +59,8 @@ src/runectl/
         nudges.py       the earned anti-failure nudges, as pure functions
 
     flags/
-        judge.py        provenance check (the seam M6's full judge replaces)
+        judge.py        the D15 pipeline: plausibility -> provenance -> decoy ->
+                        corroboration -> re-derivation -> D11 policy
 
     categories/         category data, loaded at runtime
         schema.py       what every category TOML validates against
@@ -179,8 +180,8 @@ Each of these is shaped now so the milestone that fills it doesn't need an API c
 
 | Seam | Where | Fills in |
 |---|---|---|
-| Progress scoring & budgets | `RunState.progress_steps` / `blocked_steps` are real fields fed by a crude proxy; `progress.scored` and `budget.blocked` events exist; `tactic_families`/`signal_*`/`budgets` are typed but inert category data | **M5** |
-| False-flag defense | `judge_candidate()` does only the provenance check; `flag.candidate` already carries `provenance_seq`; `--approval` and `--flag-format` are recorded but not enforced | **M6** |
+| Evidence store | `evidence.added` is defined in the trace schema but nothing emits it — findings carry forward in the conversation only | later |
+| LLM disconfirmation pass | D15 makes it a last resort behind deterministic re-derivation; nothing calls it yet | later, on bench evidence |
 | The other five categories | `pwn`, `rev`, `forensics`, `osint`, `network` TOMLs aren't written yet; the loader ships whatever is present | **M7** |
 | Benchmark suite | `runectl bench run` is a stub; one MIT-licensed challenge is vendored under `bench/practice/` | **M8** |
 | Human render polish | `render.py` is plain but correct — one line per event | **M9** |

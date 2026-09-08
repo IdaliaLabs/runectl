@@ -28,10 +28,10 @@ uv run runectl run --model gpt-5 --name "sanity" --category web --description ".
 | `--description <str>` | `""` | The challenge prompt as you were given it. |
 | `--description-file <path>` | — | Read the description from a file instead. `--description` wins if both are given. |
 | `--file <path>` | — | A provided challenge file to copy into the sandbox. Repeatable. |
-| `--flag-format <regex>` | — | Expected flag shape. Recorded in the trace; **not yet enforced** by the judge (M6). |
+| `--flag-format <regex>` | — | Expected flag shape. A candidate that does not match is held for approval rather than auto-finalized (D11). With no format supplied the check does not apply — it never blocks on its own absence. |
 | `--utility-model <id>` | cheapest model of `--model`'s provider | Model used for internal summarization calls. Its tokens land in the same cost ledger. |
 | `--api-key <str>` | — | Highest-precedence key source. Prefer `runectl keys set` or an env var. |
-| `--approval <gated\|strict\|auto>` | `gated` | Flag finalization policy. Recorded and emitted; **not yet enforced** (M6). |
+| `--approval <gated\|strict\|auto>` | `gated` | What a cleared candidate becomes. `gated`: auto-finalize only if corroborated by ≥2 independent observations, re-derived in the sandbox, and matching `--flag-format`; otherwise exit 2. `strict`: never auto-finalize. `auto`: finalize on plausibility and provenance alone. Provenance and decoy checks apply under all three. |
 | `--network <none\|bridge>` | the category's value | Container network mode. `none` for offline categories. |
 | `--max-steps <int>` | the category's `step_limit` | Hard step backstop for this run. |
 | `--record` | off | Record provider request/response pairs to `cassette.jsonl` so the run can be replayed at zero spend. |
@@ -82,7 +82,7 @@ esac
 | code | meaning | produced today? |
 |---|---|---|
 | 0 | flag found and finalized | yes |
-| 2 | flag candidate found, awaiting approval — not a failure | no — reserved for M6 |
+| 2 | flag candidate found, awaiting approval — not a failure | yes |
 | 3 | run exhausted, no candidate | yes |
 | 4 | sandbox / infrastructure failure | yes |
 | 5 | provider failure after retries | yes |
@@ -287,17 +287,39 @@ authoritative — deleting it loses nothing about any run's replayability.
 
 ---
 
-## Stubs
+## `runectl flag`
 
-These two are wired into the command surface so they're discoverable and stable, but
-their bodies land in later milestones. Both print an explanatory message to stderr and
-exit **6**.
+The human half of D11. Under the default `gated` policy, a run that finds something it
+cannot fully corroborate exits **2** and leaves the candidate in the trace instead of
+claiming a solve. These commands are what happens next.
+
+### `runectl flag list <run_id>`
+
+One JSON object per line per pending candidate — `step`, `flag`, `how_found`,
+`provenance_seq`, and `held_because` (the checks that were not satisfied, verbatim):
+
+```json
+{"step": 2, "flag": "flag{...}", "how_found": "decoded chal.txt", "provenance_seq": 8,
+ "held_because": "held for approval — corroboration: 1 independent observation(s), need 2"}
+```
+
+Exits **3** if the run held nothing.
 
 ### `runectl flag approve <run_id> [--flag <value>]`
 
-Lands in **M6**, with the false-flag defense subsystem. The current judge auto-decides
-every `submit_flag` call itself, so there is never a *pending* candidate for a human or a
-driving agent to approve.
+Finalizes a pending candidate: appends a `flag.decision` event (the trace is append-only,
+so the judge's original `pending` decision stays visible) and updates `run.json` to
+`outcome: solved`, `exit_code: 0`, with `approved_at` set. That timestamp is what keeps an
+approved solve distinguishable from one the judge cleared unattended — `runectl bench`
+scores them apart.
+
+`--flag` is required only when a run held more than one candidate. Exits **6** if the run
+has no pending candidate, which also makes approving twice a no-op rather than a way to
+invent a second solve.
+
+---
+
+## Stubs
 
 ### `runectl bench run [--suite bench/practice]`
 

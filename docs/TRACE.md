@@ -109,12 +109,14 @@ The structured result. `kind` is `output`, `error`, or `blocked`.
 `artifact_ref`
 
 ### `progress.scored`
-Per-step progress signal. **Emitted for real starting in M5** — the current loop tracks a
-crude proxy internally instead.
+Per-step progress signal, emitted after every executed tool call. `delta` is what the step
+moved the progress score by; a repeated fingerprint scores 0 no matter what the command
+exited with (D16 — progress means new information, not a zero exit code).
 `step`, `family`, `fingerprint`, `delta`, `signal` (`none`/`low`/`high`)
 
 ### `budget.blocked`
-A command rejected by a per-family or per-hypothesis budget. **M5.**
+A command rejected by a per-family or per-hypothesis budget, *before* it ran — a blocked
+call costs no sandbox time and no further tokens on a dead idea.
 `step`, `family`, `reason`
 
 ### `strategy.shift`
@@ -123,17 +125,22 @@ injected into context.
 `step`, `reason`, `evidence_summary`
 
 ### `evidence.added`
-A durable finding worth carrying forward. **M5.**
+A durable finding worth carrying forward. **Defined but not emitted** — findings currently
+carry forward in the conversation only.
 `step`, `kind`, `summary`, `source_seq`
 
 ### `flag.candidate`
 A `submit_flag` call. `provenance_seq` points at the `seq` of the `tool.result` where the
-flag was actually observed — that's the anti-invention mechanism, and it's in the schema
-from day one so M6's full judge slots in without an API change.
+flag was actually observed — the anti-invention mechanism (D15 §1). The agent cites it
+itself: every tool result reaches the model with an `[observation seq=N]` header, and the
+judge re-reads and re-runs what that number names.
 `step`, `flag`, `how_found`, `provenance_seq`, `provenance_artifact`
 
 ### `flag.decision`
-`finalized`, `pending`, or `rejected`, with the reason.
+`finalized`, `pending`, or `rejected`, with the reason. A `rejected` decision is feedback —
+the run continues and the model is told why. A `pending` one ends the run at exit code 2.
+A run can carry two decisions for the same flag: `pending` from the judge, then
+`finalized` appended later by `runectl flag approve`. The last one wins.
 `step`, `flag`, `decision`, `reason`
 
 ### `cost.updated`

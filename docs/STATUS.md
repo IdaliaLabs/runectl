@@ -1,8 +1,8 @@
 # Status
 
-Last updated **2026-09-07**.
+Last updated **2026-09-08**.
 
-The M0–M4 skeleton is built, typed, and green: 49 tests passing, `mypy --strict` clean,
+M0–M6 are built, typed, and green: 115 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 
@@ -21,6 +21,10 @@ point of this file is that nothing here should surprise you at run time.
 | History compaction triggers, never orphans a tool result, never re-summarizes its own summary | `tests/unit/test_context_compaction.py` |
 | Category TOMLs validate | `tests/unit/test_categories.py` |
 | The judge rejects a flag with no provenance | `tests/unit/test_flags_judge.py` |
+| The judge rejects the agent echoing its own guess back | `tests/unit/test_flag_laundering.py` — replayed against the real trace that did it |
+| All five D15 mechanisms, and that `--approval auto` still can't submit an invented or planted flag | `tests/unit/test_flags_judge_m6.py` |
+| An uncorroborated find exits 2, and `flag approve` finalizes it without rewriting the judge's decision | `tests/integration/test_pending_candidate_approval.py` |
+| Tactic classification, fingerprint normalization, signal scoring, budgets, forced shifts | `tests/unit/test_progress_*.py` |
 | Core code never prints | `tests/unit/test_render_boundary.py` |
 | Tool dispatch, empty-command and path-traversal rejection | `tests/unit/test_dispatch.py` |
 | Secrets redacted, >8KB values spilled, torn tail tolerated, index rebuild | `tests/unit/test_trace.py` |
@@ -61,26 +65,37 @@ uv run runectl run --challenge bench/practice/easy-01/chal.toml --model claude-s
 
 | Surface | Behavior today | Lands in |
 |---|---|---|
-| `runectl flag approve` | Prints an explanation, exits 6 | M6 |
 | `runectl bench run` | Prints an explanation, exits 6 | M8 |
-| Exit code 2 (candidate pending) | Reserved and documented; never produced | M6 |
-| `--approval gated\|strict\|auto` | Recorded in the manifest and `run.started`; never branched on. Values aren't validated either. | M6 |
-| `--flag-format` | Recorded in `challenge.loaded`; not enforced by the judge | M6 |
-| `progress.scored`, `budget.blocked`, `evidence.added` events | Defined; not emitted by the loop | M5 |
-| `tactic_families`, `signal_low`, `signal_high`, `budgets` | Typed, validated, inert | M5 |
+| `evidence.added` event | Defined in the schema; nothing emits it — findings carry forward in the conversation only | later |
+| LLM disconfirmation pass (D15 §2's last resort) | Not implemented; deterministic re-derivation covers every case reachable at V1 | later, on bench evidence |
 | `pwn`, `rev`, `forensics`, `osint`, `network` categories | No TOML; `--category pwn` exits 6 | M7 |
+| `--approval` values | Branched on correctly, but an unrecognized value silently behaves as `gated` rather than exiting 6 | small fix, unscheduled |
 
-## What the current judge actually does
+## What the judge actually does
 
-One check, and it is a real one: a submitted flag is finalized only if it appears
-**verbatim** in the stdout or stderr of a tool result this run actually observed.
-Otherwise it is rejected, the rejection goes back to the model as a tool message, and the
-run continues.
+Six stages, in order, and the order is the point — the cheap deterministic rejections run
+before anything that costs sandbox time:
 
-That single structural check kills invented flags. It is *not* the false-flag defense
-subsystem — no plausibility filtering, no decoy detection, no independent corroboration,
-no verification re-derivation, no approval policy. Those are M6, and they slot into the
-same `judge_candidate()` signature and the same `flag.candidate` / `flag.decision` events.
+1. **Plausibility.** Placeholders (`picoCTF{flag}`), UUIDs, JSON fragments,
+   capture-interface ids, multi-line strings. Rejected.
+2. **Provenance (D15 §1).** The flag must appear verbatim in a tool result this run
+   observed, that result must not have come from a command the agent wrote the flag into,
+   and the agent must cite the observation by `seq`. Every tool result reaches the model
+   with an `[observation seq=N]` header so it can. Rejected otherwise.
+3. **Decoy detection (D15 §3).** A bait-named source, a taunt next to the hit, or a token
+   the author pasted into the description. Rejected.
+4. **Corroboration (D15 §4).** How many observations with *different* commands and
+   *different* output fingerprints produced this string.
+5. **Flag format.** Matched against `--flag-format` when one was given.
+6. **Re-derivation (D15 §2).** The cited command is re-run in the sandbox and must produce
+   the same string again.
+
+Stages 1–3 reject under **every** `--approval` policy. Stages 4–6 only decide whether a
+candidate can be finalized without a human: under `gated` all three must pass, otherwise
+the run ends at exit code 2 with the candidate in the trace for `runectl flag approve`.
+
+A rejection is feedback, not failure — it goes back to the model as a tool message and the
+run continues. No flag with evidence beats a wrong flag (D15 §5).
 
 ## Known gaps
 
@@ -95,23 +110,32 @@ Accurate tokenization is a later refinement.
 
 **`--dry-run` from the D4 sketch doesn't exist.** No flag, no code path.
 
-**One bench challenge is vendored.** `bench/practice/easy-01` (MIT-licensed, from
+**Two bench challenges are vendored.** `easy-01` and `easy-02` (both MIT-licensed, from
 `csivitu/ctf-challenges`, with provenance recorded). The V1 gate is 2 of 5 practice
-challenges solved with **0 false flags** — four more challenges still need vendoring.
+challenges solved with **0 false flags** — three more still need vendoring, and
+`runectl bench` (M8) is what scores the suite.
+
+**`easy-01` is a known-unfair gate.** It was the first vendored challenge and its
+description does not contain enough to solve it without the original repo's file layout;
+`easy-02` replaced it as the one real runs are measured against.
 
 ## Milestones
 
 - **M0–M4 — done.** Repo skeleton, trace/store, sandbox layer, provider layer, and the
   walking-skeleton loop.
-- **M5 — progress machinery.** Tactic families, output fingerprinting, signal scoring,
-  per-family and per-hypothesis budgets, forced strategy shifts. Makes the D16 progress
-  ratio mean something.
-- **M6 — false-flag defense.** Mandatory provenance, verification re-derivation, decoy
-  detection, corroboration ≥2, the `--approval` policy, exit code 2, `flag approve`.
+- **M5 — done.** Tactic families, output fingerprinting, signal scoring, per-family and
+  per-hypothesis budgets, forced strategy shifts. Makes the D16 progress ratio mean
+  something.
+- **M6 — done.** Mandatory citable provenance, verification re-derivation, decoy
+  detection, corroboration ≥2, the `--approval` policy, exit code 2, `flag list` /
+  `flag approve`.
 - **M7 — the remaining five categories**, at equal depth.
 - **M8 — bench and the capability report.** What tunes the step limits and budgets.
 - **M9 — human render polish.** Compact, foldable, width-aware, over the same event
   stream.
 
-Ordering note: M5 and M6 are both prerequisites for trusting a solve, and M6 is the one
-that addresses the product's biggest risk — a wrong flag scores worse than no flag.
+Ordering note: M5 and M6 were both prerequisites for trusting a solve, and M6 addresses
+the product's biggest risk — a wrong flag scores worse than no flag. What neither of them
+did is *measure* anything: every budget number and step limit in the category TOMLs is
+still an unmeasured starting value (D16), and `runectl bench` is what earns the right to
+change them.

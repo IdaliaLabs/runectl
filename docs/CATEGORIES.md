@@ -50,11 +50,13 @@ per_family = 4
 | `step_limit` | int | ✓ | Default max steps. Overridable per run with `--max-steps`. |
 | `network` | `"none"` or `"bridge"` | — (default `bridge`) | Default container network mode. Overridable with `--network`. |
 | `required_tools` | list[string] | — | Tools this category expects in the arena image. Documentation for now. |
-| `tactic_families` | table of name → regex | — | Semantic classification of a command into a family. **Consumed in M5.** |
-| `signal_low` | list[regex] | — | Output patterns that are explicitly *not* progress. **M5.** |
-| `signal_high` | list[regex] | — | Output patterns worth pursuing. **M5.** |
-| `budgets.per_hypothesis` | int | — (default 2) | No-progress steps allowed per hypothesis before a block. **M5.** |
-| `budgets.per_family` | int | — (default 4) | No-progress steps allowed per tactic family. **M5.** |
+| `tactic_families` | table of name → regex | — | Semantic classification of a command into a family. A command matching none of them lands in `other`. |
+| `signal_low` | list[regex] | — | Output patterns that are explicitly *not* progress. |
+| `signal_high` | list[regex] | — | Output patterns worth pursuing. |
+| `budgets.per_hypothesis` | int | — (default 2) | No-progress steps allowed per hypothesis before a block. |
+| `budgets.per_family` | int | — (default 4) | No-progress steps allowed per tactic family. |
+| `budgets.no_progress_shift` | int | — (default 3) | No-progress steps before a forced strategy shift (D8). |
+| `budgets.consecutive_error_shift` | int | — (default 3) | Consecutive failing steps before a forced strategy shift. |
 
 The schema is `extra="forbid"` — a typo'd key is a load error, not a silently ignored
 line. `name` is supplied by the loader from the filename; don't put it in the file.
@@ -62,15 +64,20 @@ line. `name` is supplied by the loader from the filename; don't put it in the fi
 Regexes are Python `re` syntax, and TOML basic strings need backslashes doubled. Prefer
 `'single quotes'` (TOML literal strings) if you'd rather write them raw.
 
-## Inert-today fields
+## How the progress fields are used
 
-`tactic_families`, `signal_low`, `signal_high`, and `budgets` are real, typed, validated
-fields — and nothing reads them yet. The progress machinery that consumes them (output
-fingerprinting, signal scoring, per-family budgets, forced strategy shifts) lands in M5.
+`tactic_families`, `signal_low`, `signal_high`, and `budgets` are read on every executed
+step (`progress/`): the command is classified into a family, its output is normalized and
+fingerprinted, the signal patterns score it, and the budgets decide whether the next call
+on the same idea runs at all. A blocked call is rejected *before* execution — it costs no
+sandbox time and no further tokens on a dead hypothesis.
 
-Write them properly anyway. They are the input M5 is built against, and getting them into
-the data now means M5 is a scoring engine, not a scoring engine plus eight files of
-guesswork.
+Two consequences worth knowing when writing a category:
+
+- A `signal_low` pattern that is too broad makes real findings score as noise, which
+  spends the family budget faster and forces an early strategy shift.
+- A `tactic_families` regex that matches nothing leaves every command in `other`, where
+  they share one budget — the per-family mechanism effectively switches off.
 
 ## Step limits are unmeasured
 

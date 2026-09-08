@@ -157,14 +157,16 @@ uv run runectl replay <run_id> --check
 | code | meaning |
 |---|---|
 | 0 | flag found and finalized |
-| 2 | flag candidate found, awaiting approval — *not* a failure (lands in M6) |
+| 2 | flag candidate found, awaiting approval — *not* a failure |
 | 3 | run exhausted, no candidate |
 | 4 | sandbox / infrastructure failure |
 | 5 | provider failure after retries |
 | 6 | usage / config error |
 
-Note that code 2 is reserved and documented but the current judge never produces it —
-see [`docs/STATUS.md`](docs/STATUS.md).
+Code 2 is the default policy working as intended, not an error: under `--approval gated`
+a flag the judge could not fully corroborate ends the run as a *candidate* rather than a
+claimed solve. `runectl flag list` shows what was held and which check held it;
+`runectl flag approve` finalizes it. See [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Command surface
 
@@ -175,7 +177,8 @@ runectl replay <run_id> [--check]
 runectl keys set|list|rm <provider>
 runectl arena build|status
 runectl index rebuild
-runectl flag approve <run_id>        # stub — lands in M6
+runectl flag list <run_id>           # pending candidates, as JSON lines
+runectl flag approve <run_id> [--flag <value>]
 runectl bench run [--suite <dir>]    # stub — lands in M8
 ```
 
