@@ -22,6 +22,7 @@ from runectl.loop import nudges
 from runectl.loop.context import ContextBuilder, build_system_prompt
 from runectl.loop.state import Challenge, RunState
 from runectl.loop.triage import triage as run_triage
+from runectl.progress.tracker import ProgressTracker
 from runectl.providers.base import Message, Provider, ToolCallRequest, complete_with_retry
 from runectl.providers.cost import CostLedger
 from runectl.providers.registry import ModelInfo
@@ -29,6 +30,7 @@ from runectl.sandbox.base import Sandbox
 from runectl.tools.dispatch import ToolDispatcher
 from runectl.tools.schema import TOOLS
 from runectl.trace.events import (
+    BudgetBlocked,
     BudgetExhausted,
     ChallengeLoaded,
     CostUpdated,
@@ -37,6 +39,7 @@ from runectl.trace.events import (
     FlagDecision,
     LlmRequest,
     LlmResponse,
+    ProgressScored,
     RunFinished,
     RunStarted,
     StrategyShift,
@@ -48,6 +51,23 @@ from runectl.trace.events import (
 from runectl.trace.writer import TraceWriter
 
 DEFAULT_MAX_TOKENS = 4096
+
+
+def _command_text(arguments: dict[str, object]) -> str:
+    """The part of a tool call that carries the *idea*, for classification.
+
+    `run_command` has `command`; `search_flag` has a pattern; `run_gdb` has a
+    binary plus a script. Falling back to the whole argument blob keeps every
+    tool classifiable rather than silently landing in `other`.
+    """
+    for key in ("command", "flag_pattern", "binary_path", "filename"):
+        value = arguments.get(key)
+        if isinstance(value, str) and value:
+            extra = arguments.get("gdb_commands")
+            if key == "binary_path" and isinstance(extra, list):
+                return f"gdb {value} " + " ".join(str(c) for c in extra)
+            return value
+    return " ".join(str(v) for v in arguments.values())
 
 Outcome = Literal["solved", "candidate", "exhausted", "error"]
 
@@ -91,6 +111,9 @@ class Runner:
         self._max_cost_usd = max_cost_usd
         self._triage_override = triage_override
         self._dispatcher = ToolDispatcher(sandbox)
+        # D8: the four progress mechanisms. A plain collaborator (D6) — the loop
+        # applies what it returns; it never touches RunState itself.
+        self._progress = ProgressTracker(category=category)
         # A caller that wants utility/summarization calls costed alongside the
         # main loop's (D5, D12) passes a ledger/context pre-wired to a
         # utility-model summarizer (providers.base.make_utility_summarizer);
@@ -157,7 +180,6 @@ class Runner:
 
         outcome: Outcome = "exhausted"
         exit_code = 3
-        consecutive_no_progress = 0
 
         for step in range(1, state.max_steps + 1):
             state.step = step
@@ -270,6 +292,33 @@ class Runner:
                     break
                 continue
 
+            # D8 mechanism 4: budgets block *before* execution. A blocked call
+            # costs no sandbox time and no further tokens on a dead idea.
+            command_text = _command_text(primary.arguments)
+            verdict = self._progress.check_budget(command_text)
+            if verdict.blocked:
+                self._writer.emit(
+                    BudgetBlocked(step=step, family=verdict.family, reason=verdict.reason)
+                )
+                state.blocked_steps += 1
+                # A blocked step is still a wasted step: it has to count toward
+                # the no-progress run or the forced shift can never fire once
+                # budgets start biting.
+                self._progress.note_blocked(verdict.family, verdict.reason, step=step)
+                state.history.append(
+                    Message(
+                        role="tool", tool_call_id=primary.id, tool_name=primary.name,
+                        content=f"blocked: {verdict.reason}",
+                    )
+                )
+                shift = self._progress.due_shift()
+                if shift:
+                    self._writer.emit(
+                        StrategyShift(step=step, reason="budget", evidence_summary=shift)
+                    )
+                    state.history.append(Message(role="user", content=shift))
+                continue
+
             self._writer.emit(ToolCall(step=step, tool=primary.name, arguments=primary.arguments))
             result = self._dispatcher.dispatch(primary.name, primary.arguments)
             self._writer.emit(
@@ -294,24 +343,35 @@ class Runner:
                 Message(role="tool", tool_call_id=primary.id, tool_name=primary.name, content=rendered)
             )
 
-            # M5 stub: real fingerprint/signal scoring isn't built yet. This crude
-            # proxy (ok output = progress, error/blocked = not) exists so run.json's
-            # progress ratio (D16) and the stuck-nudge have something real to use.
-            if result.kind == "output":
-                state.progress_steps += 1
-                consecutive_no_progress = 0
-            else:
-                if result.kind == "blocked":
-                    state.blocked_steps += 1
-                consecutive_no_progress += 1
-
-            nudge_text = nudges.stuck_new_hypothesis(state, consecutive_no_progress=consecutive_no_progress)
-            if nudge_text:
-                self._writer.emit(
-                    StrategyShift(step=step, reason="no-progress threshold", evidence_summary=nudge_text)
+            # D8 mechanisms 1-3: classify, fingerprint, score. "Progress" means
+            # new information, not a zero exit code (D16).
+            assessment = self._progress.record(
+                command_text, result.stdout or result.stderr, ok=result.ok, step=step
+            )
+            self._writer.emit(
+                ProgressScored(
+                    step=step,
+                    family=assessment.family,
+                    fingerprint=assessment.fingerprint,
+                    delta=assessment.delta,
+                    signal=assessment.signal,
                 )
-                state.history.append(Message(role="user", content=nudge_text))
-                consecutive_no_progress = 0
+            )
+            if assessment.progressed:
+                state.progress_steps += 1
+            if result.kind == "blocked":
+                state.blocked_steps += 1
+
+            shift_text = self._progress.due_shift()
+            if shift_text:
+                self._writer.emit(
+                    StrategyShift(
+                        step=step,
+                        reason=self._progress.shift_reason_kind,
+                        evidence_summary=shift_text,
+                    )
+                )
+                state.history.append(Message(role="user", content=shift_text))
 
         return self._finish(started, outcome=outcome, exit_code=exit_code)
 

@@ -42,3 +42,7 @@ cmdinj = ";\\s*id|\\$\\(.*\\)|`.*`"
 [budgets]
 per_hypothesis = 2
 per_family = 4
+# D8: forced strategy shift after N no-progress steps or M consecutive errors.
+# Unmeasured starting values (D16) — `runectl bench` is what tunes them.
+no_progress_shift = 3
+consecutive_error_shift = 3

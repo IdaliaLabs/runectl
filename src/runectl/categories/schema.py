@@ -17,8 +17,15 @@ from pydantic import BaseModel, ConfigDict, Field
 class CategoryBudgets(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    # No-progress steps allowed before a specific approach / a whole tactic
+    # family is blocked (D8 mechanism 4).
     per_hypothesis: int = 2
     per_family: int = 4
+
+    # D8: "a forced strategy shift after N no-progress steps or M consecutive
+    # errors". Thresholds live here in data, never in code.
+    no_progress_shift: int = 3
+    consecutive_error_shift: int = 3
 
 
 class Category(BaseModel):
