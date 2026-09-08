@@ -18,4 +18,9 @@ class ToolResult(BaseModel):
     duration_s: float = 0.0
     truncated: bool = False
     artifact_ref: str | None = None
+    # The shell command this tool actually ran, when it ran one. `run_gdb` and
+    # `search_flag` build theirs here in dispatch, so the judge cannot
+    # reconstruct them from the tool arguments alone — and D15's verification
+    # pass needs to re-run exactly what ran.
+    shell_command: str = ""
     meta: dict[str, str] = Field(default_factory=dict)

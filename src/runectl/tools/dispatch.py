@@ -1,10 +1,9 @@
 """Maps a tool call to a sandbox action (D7, plan §4.2-4.4).
 
 Handles the four tools that touch the sandbox: ``run_command``, ``run_gdb``,
-``write_file``, ``search_flag``. ``submit_flag`` never reaches here — it
-doesn't touch the sandbox at all, so the runner (loop/runner.py) intercepts it
-directly and hands it to ``flags.judge`` instead (see that module's docstring
-for why this is a deliberate, minimal seam rather than the full D15 subsystem).
+``write_file``, ``search_flag``. ``submit_flag`` never reaches here — it is not
+a sandbox action, so the runner (loop/runner.py) intercepts it and hands it to
+``flags.judge``, the D15 subsystem, instead.
 
 Preflight stays thin on purpose (plan §4.3): trim, reject empty, apply a
 timeout. No fat auto-install logic — tooling is the arena image's job
@@ -29,10 +28,11 @@ def _blocked(reason: str) -> ToolResult:
     return ToolResult(ok=False, kind="blocked", stderr=reason)
 
 
-def _from_exec(result: ExecResult) -> ToolResult:
+def _from_exec(result: ExecResult, command: str) -> ToolResult:
     return ToolResult(
         ok=result.ok,
         kind="output" if result.ok else "error",
+        shell_command=command,
         stdout=result.stdout,
         stderr=result.stderr,
         exit_code=result.exit_code,
@@ -61,7 +61,7 @@ class ToolDispatcher:
         if not command:
             return _blocked("run_command: empty command")
         timeout_s = _LONG_RUNNING_TIMEOUT_S if arguments.get("long_running") else _DEFAULT_TIMEOUT_S
-        return _from_exec(self._sandbox.exec(command, timeout_s=timeout_s))
+        return _from_exec(self._sandbox.exec(command, timeout_s=timeout_s), command)
 
     def _run_gdb(self, arguments: dict[str, Any]) -> ToolResult:
         binary_path = str(arguments.get("binary_path", "")).strip()
@@ -72,7 +72,7 @@ class ToolDispatcher:
             return _blocked("run_gdb: missing gdb_commands")
         ex_flags = " ".join(f"-ex {shlex.quote(str(c))}" for c in gdb_commands)
         command = f"gdb -q -batch {ex_flags} {shlex.quote(binary_path)}"
-        return _from_exec(self._sandbox.exec(command, timeout_s=_LONG_RUNNING_TIMEOUT_S))
+        return _from_exec(self._sandbox.exec(command, timeout_s=_LONG_RUNNING_TIMEOUT_S), command)
 
     def _write_file(self, arguments: dict[str, Any]) -> ToolResult:
         filename = str(arguments.get("filename", "")).strip()
@@ -95,4 +95,4 @@ class ToolDispatcher:
             return _blocked("search_flag: empty flag_pattern")
         # -r recursive, -n line numbers (provenance, plan §4.4), -o only-matching, -I skip binaries
         command = f"grep -rnoIE {shlex.quote(pattern)} /ctf/ 2>/dev/null | head -200"
-        return _from_exec(self._sandbox.exec(command, timeout_s=_DEFAULT_TIMEOUT_S))
+        return _from_exec(self._sandbox.exec(command, timeout_s=_DEFAULT_TIMEOUT_S), command)

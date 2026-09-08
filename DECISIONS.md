@@ -157,6 +157,8 @@ Locked. `--approval` takes three values:
 
 `gated` is the default because the CLI is meant to be AI-driven — pure human-in-the-loop can't be the only mode — while an uncorroborated guess still never gets submitted silently. This is revisitable once the `REBUILD_NOTES.md` §4 questionnaire is answered; it is the one default here most likely to move.
 
+*Implementation clarification, 2026-09-08 (M6).* The policy above is unchanged; one case it does not name had to be resolved to write the judge. **When no `--flag-format` is supplied, the format condition does not apply rather than failing.** Read the other way — an absent format counts as an unmet condition — `gated` would silently behave as `strict` for every challenge whose format the user did not type out, which is a default nobody chose. The other three `gated` conditions (plausibility, corroboration ≥2, re-derivation) are unaffected, and a *supplied* format that does not match still holds the candidate. Separately: mechanisms 1 and 3 of D15 (provenance, decoy detection) are enforced under **all three** policies — `--approval auto` buys speed on corroboration and re-derivation, not the right to submit an invented or planted string.
+
 ### D12 — Context management: **summarize, don't truncate; one limit**
 
 Locked. One configurable `context.tool_output_limit` (default 6000 chars) with no second dead constant. Over the limit, the output is written to `artifacts/` and an extractive summarizer (deterministic first: head + tail + regex-salient lines; LLM summarization only if still over) produces what enters context. Identical tool output is deduplicated to a back-reference by digest (preserve item 9). History compaction runs on a token-budget trigger, not "every 15 steps," and goes through the standard provider path (D5).
@@ -186,6 +188,8 @@ Locked. False flags are the #1 product risk — a wrong flag scores worse than n
 5. **No-flag-is-success.** Stated plainly as a base rule the agent sees: no flag with solid, cited evidence is a correct outcome; an unsupported guess is a failure. A run exits **3** rather than fabricate. This is the explicit counterweight to "act, don't ask" (an earned rule from the predecessor, `REBUILD_NOTES.md` §2 item 4) which, alone, biases the model toward answering.
 
 *Skeleton seam:* M4 ships a minimal `submit_flag`/judge that already takes `provenance` and emits `flag.candidate` / `flag.decision` events, but does not yet implement verification, decoy detection, or corroboration counting — those are M6.
+
+*Built 2026-09-08 (M6), with two notes.* All five mechanisms are implemented in `flags/` (`judge.py`, `plausibility.py`, `decoys.py`). (a) **Mechanism 1 needed a vocabulary.** The agent can only cite a `seq` if it can see one, so every tool result now reaches the model with an `[observation seq=N]` header, and `submit_flag`'s `provenance` argument is that number. (b) **LLM verification is not implemented at all.** D15 makes it a last resort behind deterministic re-derivation; every case reachable at V1 is covered by re-running the cited command in the sandbox, so the costed disconfirmation call has no caller yet. Adding one is a decision to make against real bench data (M8), not an omission to quietly fill in.
 
 ### D16 — Budgets measure **step *waste*, not step count**
 

@@ -94,15 +94,24 @@ TOOLS: tuple[ToolSchema, ...] = (
         name="submit_flag",
         description=(
             "Submit the flag once you can point to exactly where you observed it. "
-            "Never guess — an unsupported guess is worse than no flag."
+            "Never guess — an unsupported guess is worse than no flag. The flag must "
+            "appear in output some command produced, not in output you printed it into."
         ),
         parameters={
             "type": "object",
             "properties": {
                 "flag": {"type": "string", "description": "The flag value, exactly as observed"},
                 "how_found": {"type": "string", "description": "How you found it"},
+                "provenance": {
+                    "type": "string",
+                    "description": (
+                        "The seq number from the [observation seq=N] header of the tool "
+                        "result where this flag appeared, e.g. 42. It is re-read and "
+                        "re-run to verify the flag; a flag you cannot cite is rejected."
+                    ),
+                },
             },
-            "required": ["flag", "how_found"],
+            "required": ["flag", "how_found", "provenance"],
         },
     ),
 )

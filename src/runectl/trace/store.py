@@ -40,6 +40,11 @@ class RunManifest(BaseModel):
     steps_used: int = 0
     progress_steps: int = 0
     blocked_steps: int = 0
+    # Set when a human (or driving agent) finalized a pending candidate with
+    # `runectl flag approve` (D11). It keeps an approved solve distinguishable
+    # from one the judge cleared on its own — `runectl bench` scores them apart,
+    # and a report that hid the difference would be flattering, not honest.
+    approved_at: float | None = None
 
 
 class Store:
@@ -114,6 +119,25 @@ class Store:
                 "steps_used": steps_used,
                 "progress_steps": progress_steps,
                 "blocked_steps": blocked_steps,
+            }
+        )
+        self._write_manifest(manifest)
+        return manifest
+
+    def approve_flag(self, run_id: str, *, flag: str) -> RunManifest:
+        """Finalize a pending candidate out of band (D11's `flag approve`).
+
+        Deliberately not `finish_run`: the run already finished, and rewriting
+        `finished_at` would erase when it actually ended. This records a second,
+        later decision on top of a completed run.
+        """
+        manifest = self.read_manifest(run_id)
+        manifest = manifest.model_copy(
+            update={
+                "outcome": "solved",
+                "exit_code": 0,
+                "flag": flag,
+                "approved_at": time.time(),
             }
         )
         self._write_manifest(manifest)

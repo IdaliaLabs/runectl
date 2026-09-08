@@ -45,8 +45,9 @@ class RunState:
 
     step: int = 0
     cost_usd: float = 0.0
-    # Real scoring lands in M5; the skeleton's runner still increments these
-    # from a no-op stub so `run.json`'s shape (D16) exists from day one.
+    # D16's primary metric: the progress *ratio*, not the step count. Fed by
+    # `progress.tracker`, reported in `run.json`, and what `runectl bench`
+    # optimizes toward.
     progress_steps: int = 0
     blocked_steps: int = 0
 

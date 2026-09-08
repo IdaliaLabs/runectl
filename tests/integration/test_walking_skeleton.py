@@ -11,8 +11,10 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -20,18 +22,55 @@ import pytest
 from runectl.categories.loader import load as load_category
 from runectl.loop.runner import Runner
 from runectl.loop.state import Challenge
-from runectl.providers.base import Completion, ToolCallRequest, Usage
+from runectl.providers.base import Completion, Message, ToolCallRequest, Usage
 from runectl.providers.registry import resolve as resolve_model
 from runectl.providers.replay import RecordingProvider
-from runectl.providers.scripted import ScriptedProvider
+from runectl.providers.scripted import ScriptedProvider, Step
 from runectl.sandbox.stub import StubSandbox, ok
 from runectl.trace.store import Store
 
 FLAG = "flag{sk3l3t0n_w4lk}"
 ENCODED = "ZmxhZ3tzazNsM3Qwbl93NGxrfQ=="  # base64 of FLAG
+SEARCH_COMMAND = "grep -rnoIE 'flag\\{' /ctf/ 2>/dev/null | head -200"
+_OBSERVATION_SEQ = re.compile(r"\[observation seq=(\d+)\]")
 
 
-def _scripted_completions() -> list[Completion]:
+def _cite_last_observation(messages: Sequence[Message]) -> str:
+    """The seq the agent would read off the most recent tool result (D15 §1)."""
+    for message in reversed(messages):
+        match = _OBSERVATION_SEQ.search(message.content)
+        if match:
+            return match.group(1)
+    return ""
+
+
+def _submit_citing_evidence(messages: Sequence[Message]) -> Completion:
+    return Completion(
+        text="",
+        tool_calls=(
+            ToolCallRequest(
+                id="call_3",
+                name="submit_flag",
+                arguments={
+                    "flag": FLAG,
+                    "how_found": "decoded the base64 blob from chal.txt, then confirmed it on disk",
+                    "provenance": _cite_last_observation(messages),
+                },
+            ),
+        ),
+        usage=Usage(input_tokens=140, output_tokens=18),
+        stop_reason="tool_use",
+    )
+
+
+def _scripted_completions() -> list[Step]:
+    """Two independent routes to the same string, then a cited submission.
+
+    That shape is not padding: under `gated` (D11) a candidate is auto-finalized
+    only if two *different* tool calls with *different* output fingerprints
+    produced it (D15 §4), so a one-command solve is a `pending` candidate by
+    design. This is the corroborated path.
+    """
     return [
         Completion(
             text="",
@@ -53,13 +92,14 @@ def _scripted_completions() -> list[Completion]:
             tool_calls=(
                 ToolCallRequest(
                     id="call_2",
-                    name="submit_flag",
-                    arguments={"flag": FLAG, "how_found": "decoded the base64 blob from chal.txt"},
+                    name="search_flag",
+                    arguments={"flag_pattern": "flag\\{"},
                 ),
             ),
-            usage=Usage(input_tokens=140, output_tokens=18),
+            usage=Usage(input_tokens=130, output_tokens=20),
             stop_reason="tool_use",
         ),
+        _submit_citing_evidence,
     ]
 
 
@@ -70,6 +110,7 @@ def _stub_sandbox() -> StubSandbox:
             "file /ctf/* 2>/dev/null": ok("/ctf/chal.txt: ASCII text"),
             "strings -a -n 8 /ctf/* 2>/dev/null | head -60": ok(ENCODED),
             f"echo {ENCODED} | base64 -d": ok(FLAG),
+            SEARCH_COMMAND: ok(f"/ctf/solution.txt:1:{FLAG}"),
         }
     )
 
@@ -127,7 +168,7 @@ def test_walking_skeleton_solves_end_to_end_and_replays(runectl_home: Path) -> N
     # D16: the progress ratio is the primary metric, so it has to survive into
     # run.json — not live only in the run.finished event.
     assert manifest.steps_used == outcome.steps_used
-    assert manifest.progress_steps == outcome.progress_steps == 1
+    assert manifest.progress_steps == outcome.progress_steps == 2
     assert manifest.blocked_steps == outcome.blocked_steps == 0
 
     env = {**os.environ, "RUNECTL_HOME": str(runectl_home)}

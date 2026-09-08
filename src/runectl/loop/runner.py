@@ -1,10 +1,12 @@
-"""The walking-skeleton loop: decide -> one tool call -> observe (D6, plan §5.2).
+"""The loop: decide -> one tool call -> observe (D6, plan §5.2).
 
 Category-agnostic; every branch emits a trace event and the runner never
-prints (D4/D13 — only `cli/` renders). Progress scoring/budgets (M5) and the
-full false-flag subsystem (M6) are no-op-shaped stubs here — see
-`loop/state.py` and `flags/judge.py` for the exact seams they replace without
-reshaping this loop.
+prints (D4/D13 — only `cli/` renders). Two collaborators do the judging and
+never mutate state themselves: `progress.tracker` scores each step and blocks
+dead ideas (D8/D16), and `flags.judge` decides what a submitted flag is
+(D15/D11). The loop applies what they return, which is the whole reason a
+`submit_flag` has three outcomes here — solved, held for approval, or rejected
+back to the model as feedback.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from typing import Literal
 from runectl.categories.schema import Category
 from runectl.config import DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, SandboxError
-from runectl.flags.judge import ToolObservation, judge_candidate
+from runectl.flags.judge import FlagJudge, ToolObservation
 from runectl.loop import nudges
 from runectl.loop.context import ContextBuilder, build_system_prompt
 from runectl.loop.state import Challenge, RunState
@@ -70,6 +72,7 @@ def _command_text(arguments: dict[str, object]) -> str:
     return " ".join(str(v) for v in arguments.values())
 
 Outcome = Literal["solved", "candidate", "exhausted", "error"]
+Decision = Literal["finalized", "pending", "rejected"]
 
 
 @dataclass(frozen=True)
@@ -111,6 +114,15 @@ class Runner:
         self._max_cost_usd = max_cost_usd
         self._triage_override = triage_override
         self._dispatcher = ToolDispatcher(sandbox)
+        # D15: the false-flag subsystem. It gets the sandbox (to re-derive a
+        # cited command), the description (to spot a lure the author pasted in)
+        # and the flag format — and returns verdicts the loop applies (D6).
+        self._judge = FlagJudge(
+            approval_policy=approval_policy,
+            flag_format=challenge.flag_format,
+            description=challenge.description,
+            sandbox=sandbox,
+        )
         # D8: the four progress mechanisms. A plain collaborator (D6) — the loop
         # applies what it returns; it never touches RunState itself.
         self._progress = ProgressTracker(category=category)
@@ -286,9 +298,15 @@ class Runner:
                 )
 
             if primary.name == "submit_flag":
-                finalized = self._handle_submit_flag(step, primary, state)
-                if finalized:
+                decision = self._handle_submit_flag(step, primary, state)
+                if decision == "finalized":
                     outcome, exit_code = "solved", 0
+                    break
+                if decision == "pending":
+                    # D11: a candidate that cleared the unconditional checks but
+                    # not the auto-finalize bar stops the run and exits 2, with
+                    # the candidate in the trace for `runectl flag approve`.
+                    outcome, exit_code = "candidate", 2
                     break
                 continue
 
@@ -328,19 +346,30 @@ class Runner:
                     duration_s=result.duration_s, truncated=result.truncated,
                 )
             )
+            observation_seq = self._writer.seq
             state.tool_observations.append(
                 ToolObservation(
-                    seq=self._writer.seq,
+                    seq=observation_seq,
                     stdout=result.stdout,
                     stderr=result.stderr,
                     # Kept so the judge can tell a discovery from the agent
                     # echoing its own guess back (D15 §1).
                     command=json.dumps(primary.arguments, sort_keys=True, default=str),
+                    tool=primary.name,
+                    shell_command=result.shell_command,
                 )
             )
             rendered = self._context.render_tool_output(result.stdout or result.stderr, step=step)
+            # D15 §1 requires the agent to cite where it saw a flag. It can only
+            # do that if it can see the seq numbers, so every tool result carries
+            # its own — this header is the provenance vocabulary.
             state.history.append(
-                Message(role="tool", tool_call_id=primary.id, tool_name=primary.name, content=rendered)
+                Message(
+                    role="tool",
+                    tool_call_id=primary.id,
+                    tool_name=primary.name,
+                    content=f"[observation seq={observation_seq}]\n{rendered}",
+                )
             )
 
             # D8 mechanisms 1-3: classify, fingerprint, score. "Progress" means
@@ -375,28 +404,38 @@ class Runner:
 
         return self._finish(started, outcome=outcome, exit_code=exit_code)
 
-    def _handle_submit_flag(self, step: int, call: ToolCallRequest, state: RunState) -> bool:
+    def _handle_submit_flag(self, step: int, call: ToolCallRequest, state: RunState) -> Decision:
+        """Run the D15 pipeline over one candidate and apply what it returns."""
         flag = str(call.arguments.get("flag", ""))
         how_found = str(call.arguments.get("how_found", ""))
+        provenance = str(call.arguments.get("provenance", ""))
         fallback_seq = self._writer.seq + 1
-        decision = judge_candidate(flag=flag, history=state.tool_observations, fallback_seq=fallback_seq)
+        verdict = self._judge.judge(
+            flag=flag,
+            history=state.tool_observations,
+            fallback_seq=fallback_seq,
+            provenance=provenance,
+        )
         self._writer.emit(
-            FlagCandidate(step=step, flag=flag, how_found=how_found, provenance_seq=decision.provenance_seq)
+            FlagCandidate(step=step, flag=flag, how_found=how_found, provenance_seq=verdict.provenance_seq)
         )
-        if decision.accepted:
-            self._writer.emit(
-                FlagDecision(step=step, flag=flag, decision="finalized", reason=decision.reason)
-            )
-            state.flag = flag
-            return True
-        self._writer.emit(FlagDecision(step=step, flag=flag, decision="rejected", reason=decision.reason))
-        state.history.append(
-            Message(
-                role="tool", tool_call_id=call.id, tool_name=call.name,
-                content=f"rejected: {decision.reason}",
-            )
+        self._writer.emit(
+            FlagDecision(step=step, flag=flag, decision=verdict.decision, reason=verdict.reason)
         )
-        return False
+        if verdict.decision == "rejected":
+            # Feedback, not failure: the run continues and the agent gets to
+            # act on why (D15 §5 — no flag beats a wrong one).
+            state.history.append(
+                Message(
+                    role="tool", tool_call_id=call.id, tool_name=call.name,
+                    content=f"rejected: {verdict.reason}",
+                )
+            )
+            return "rejected"
+        # Both `finalized` and `pending` record the flag: a pending candidate is
+        # the run's answer, it just is not one the tool will claim unattended.
+        state.flag = flag
+        return verdict.decision
 
     def _finish(self, started: float, *, outcome: Outcome, exit_code: int) -> RunOutcome:
         state = self.state
