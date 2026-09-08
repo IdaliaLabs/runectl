@@ -1,0 +1,10 @@
+name = "rivest-shamir-adleman"
+category = "crypto"
+flag_format = "csictf\\{[\\w!@#?$%.'\"+:>-]{3,60}\\}"
+files = ["files/enc.txt"]
+
+description = """
+These 3 guys encrypted my flag, but they didn't tell me how to decrypt it.
+
+The values of n, e and c are in enc.txt.
+"""

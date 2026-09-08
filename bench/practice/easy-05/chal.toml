@@ -1,0 +1,13 @@
+name = "little-rsa"
+category = "crypto"
+flag_format = "csictf\\{[\\w!@#?$%.'\"+:>-]{3,60}\\}"
+files = ["files/a.txt", "files/flag.zip"]
+
+description = """
+The flag.zip contains the flag I am looking for but it is password protected.
+The password is the encrypted message which has to be correctly decrypted so I
+can use it to open the zip file. I tried using RSA but the zip doesn't open by
+it. Can you help me get the flag please?
+
+Hint 1: Try applying Wiener's attack approximations.
+"""

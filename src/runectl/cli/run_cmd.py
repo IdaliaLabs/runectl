@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path
 
 import typer
@@ -20,7 +21,7 @@ from runectl.cli.render import render_human, render_ndjson
 from runectl.config import CONTAINER_NAME_PREFIX, DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, SandboxError, UsageError
 from runectl.loop.context import ContextBuilder
-from runectl.loop.runner import Runner
+from runectl.loop.runner import Runner, RunOutcome
 from runectl.loop.state import Challenge
 from runectl.providers.anthropic import AnthropicProvider
 from runectl.providers.base import Provider, make_utility_summarizer
@@ -35,6 +36,12 @@ from runectl.sandbox import arena_build
 from runectl.sandbox.base import sandbox_session
 from runectl.sandbox.docker import DockerSandbox
 from runectl.trace.store import Store
+
+
+@dataclass(frozen=True)
+class RunResult:
+    run_id: str
+    outcome: RunOutcome
 
 
 def _build_provider(model: ModelInfo, api_key: str) -> Provider:
@@ -82,9 +89,20 @@ def _preflight_arena() -> None:
         )
 
 
-def _challenge_from_file(path: Path) -> Challenge:
+def challenge_from_file(path: Path) -> Challenge:
+    """Load a challenge TOML, resolving its `files` relative to the TOML itself.
+
+    Not relative to the working directory: a challenge directory is a unit that
+    gets moved and vendored as a whole, and `runectl run --challenge
+    bench/practice/easy-03/chal.toml` from the repo root has to find
+    `easy-03/files/enc.txt` — not `./files/enc.txt`. Absolute paths are left
+    alone so a one-off challenge can still point anywhere.
+    """
     raw = tomllib.loads(path.read_text())
-    files = tuple(Path(f) for f in raw.get("files", []))
+    base = path.parent
+    files = tuple(
+        Path(f) if Path(f).is_absolute() else (base / f) for f in raw.get("files", [])
+    )
     return Challenge(
         name=raw["name"],
         category=raw["category"],
@@ -92,6 +110,131 @@ def _challenge_from_file(path: Path) -> Challenge:
         files=files,
         flag_format=raw.get("flag_format"),
     )
+
+
+@dataclass(frozen=True)
+class RunRequest:
+    """Everything one run needs beyond the challenge itself.
+
+    Exists so `runectl bench` (M8) drives real runs through exactly the same
+    code path as `runectl run` — a benchmark that measured a second, parallel
+    implementation of the loop would be measuring the wrong thing.
+    """
+
+    model: str
+    utility_model: str | None = None
+    api_key: str | None = None
+    approval: str = "gated"
+    network: str | None = None
+    max_steps: int | None = None
+    max_cost: float = DEFAULT_MAX_COST_USD
+    record: bool = False
+    output: str | None = None
+
+
+def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | None = None) -> RunResult:
+    """Resolve, run, persist. Raises `UsageError`/`SandboxError`/`ProviderError`;
+    a finished run — solved, held, or exhausted — is a return value, not an exception."""
+    try:
+        category_data = load_category(challenge.category)
+    except (CategoryNotFoundError, CategoryLoadError) as exc:
+        raise UsageError(str(exc)) from exc
+
+    try:
+        model_info = resolve_model(request.model)
+    except UnknownModelError as exc:
+        raise UsageError(str(exc)) from exc
+
+    _preflight_arena()
+
+    key = resolve_key(model_info.provider, cli_flag=request.api_key)
+    provider: Provider = _build_provider(model_info, key)
+
+    # D5: utility calls (context/history summarization) default to the
+    # cheapest model of the same provider and share the main loop's cost
+    # ledger — never a hardcoded model, never untracked tokens.
+    utility_model_info = (
+        resolve_model(request.utility_model)
+        if request.utility_model
+        else cheapest_model_for(model_info.provider)
+    )
+    utility_key = (
+        key
+        if utility_model_info.provider == model_info.provider
+        else resolve_key(utility_model_info.provider)
+    )
+    utility_provider: Provider = _build_provider(utility_model_info, utility_key)
+
+    store = store or Store()
+    run_id, writer = store.new_run(
+        challenge_name=challenge.name,
+        category=challenge.category,
+        model=model_info.id,
+        provider=model_info.provider,
+        config_snapshot={
+            "challenge": challenge.model_dump(mode="json"),
+            "approval_policy": request.approval,
+        },
+    )
+
+    if request.record:
+        provider = RecordingProvider(provider, store.cassette_path(run_id))
+        utility_provider = RecordingProvider(utility_provider, store.cassette_path(run_id))
+
+    resolved_output = request.output or ("human" if sys.stdout.isatty() else "jsonl")
+    writer.set_on_emit(render_ndjson if resolved_output == "jsonl" else render_human)
+    if resolved_output == "human":
+        # The predecessor's take-over workflow: attach to the live container
+        # while the agent is still working (TEARDOWN.md item 12).
+        typer.echo(
+            f"run {run_id} — attach with: "
+            f"docker exec -it {CONTAINER_NAME_PREFIX}{run_id} bash",
+            err=True,
+        )
+
+    effective_category = (
+        category_data.model_copy(update={"step_limit": request.max_steps})
+        if request.max_steps
+        else category_data
+    )
+    sandbox = DockerSandbox(network=request.network or effective_category.network, run_id=run_id)
+
+    ledger = CostLedger()
+    summarizer = make_utility_summarizer(utility_provider, utility_model_info, ledger)
+    context = ContextBuilder(llm_summarize=summarizer)
+
+    runner = Runner(
+        challenge=challenge,
+        category=effective_category,
+        model=model_info,
+        provider=provider,
+        sandbox=sandbox,
+        writer=writer,
+        approval_policy=request.approval,
+        max_cost_usd=request.max_cost,
+        ledger=ledger,
+        context=context,
+    )
+    try:
+        with sandbox_session(sandbox):
+            outcome = runner.run()
+    except (SandboxError, ProviderError) as exc:
+        writer.close()
+        store.finish_run(run_id, outcome="error", exit_code=exc.exit_code)
+        raise
+
+    writer.close()
+    store.finish_run(
+        run_id,
+        outcome=outcome.outcome,
+        exit_code=outcome.exit_code,
+        flag=outcome.flag,
+        cost_usd=outcome.cost_usd,
+        steps_used=outcome.steps_used,
+        progress_steps=outcome.progress_steps,
+        blocked_steps=outcome.blocked_steps,
+    )
+    return RunResult(run_id=run_id, outcome=outcome)
 
 
 def run_command(
@@ -119,107 +262,29 @@ def run_command(
     """Solve one challenge end-to-end, writing a replayable trace (D3, D4)."""
     try:
         chal = _resolve_challenge(challenge, name, category, description, description_file, file, flag_format)
-
-        try:
-            category_data = load_category(chal.category)
-        except (CategoryNotFoundError, CategoryLoadError) as exc:
-            raise UsageError(str(exc)) from exc
-
-        try:
-            model_info = resolve_model(model)
-        except UnknownModelError as exc:
-            raise UsageError(str(exc)) from exc
-
-        _preflight_arena()
-
-        key = resolve_key(model_info.provider, cli_flag=api_key)
-        provider: Provider = _build_provider(model_info, key)
-
-        # D5: utility calls (context/history summarization) default to the
-        # cheapest model of the same provider and share the main loop's cost
-        # ledger — never a hardcoded model, never untracked tokens.
-        utility_model_info = (
-            resolve_model(utility_model) if utility_model else cheapest_model_for(model_info.provider)
+        result = execute_run(
+            chal,
+            RunRequest(
+                model=model,
+                utility_model=utility_model,
+                api_key=api_key,
+                approval=approval,
+                network=network,
+                max_steps=max_steps,
+                max_cost=max_cost,
+                record=record,
+                output=output,
+            ),
         )
-        utility_key = key if utility_model_info.provider == model_info.provider else resolve_key(
-            utility_model_info.provider
-        )
-        utility_provider: Provider = _build_provider(utility_model_info, utility_key)
-
-        store = Store()
-        run_id, writer = store.new_run(
-            challenge_name=chal.name,
-            category=chal.category,
-            model=model_info.id,
-            provider=model_info.provider,
-            config_snapshot={"challenge": chal.model_dump(mode="json"), "approval_policy": approval},
-        )
-
-        if record:
-            provider = RecordingProvider(provider, store.cassette_path(run_id))
-            utility_provider = RecordingProvider(utility_provider, store.cassette_path(run_id))
-
-        resolved_output = output or ("human" if sys.stdout.isatty() else "jsonl")
-        writer.set_on_emit(render_ndjson if resolved_output == "jsonl" else render_human)
-        if resolved_output == "human":
-            # The predecessor's take-over workflow: attach to the live container
-            # while the agent is still working (TEARDOWN.md item 12).
-            typer.echo(
-                f"run {run_id} — attach with: "
-                f"docker exec -it {CONTAINER_NAME_PREFIX}{run_id} bash",
-                err=True,
-            )
-
-        effective_category = (
-            category_data.model_copy(update={"step_limit": max_steps}) if max_steps else category_data
-        )
-        sandbox = DockerSandbox(network=network or effective_category.network, run_id=run_id)
-
-        ledger = CostLedger()
-        summarizer = make_utility_summarizer(utility_provider, utility_model_info, ledger)
-        context = ContextBuilder(llm_summarize=summarizer)
-
-        runner = Runner(
-            challenge=chal,
-            category=effective_category,
-            model=model_info,
-            provider=provider,
-            sandbox=sandbox,
-            writer=writer,
-            approval_policy=approval,
-            max_cost_usd=max_cost,
-            ledger=ledger,
-            context=context,
-        )
-        try:
-            with sandbox_session(sandbox):
-                outcome = runner.run()
-        except (SandboxError, ProviderError) as exc:
-            writer.close()
-            store.finish_run(run_id, outcome="error", exit_code=exc.exit_code)
-            typer.echo(str(exc), err=True)
-            raise typer.Exit(code=exc.exit_code) from exc
-
-        writer.close()
-        store.finish_run(
-            run_id,
-            outcome=outcome.outcome,
-            exit_code=outcome.exit_code,
-            flag=outcome.flag,
-            cost_usd=outcome.cost_usd,
-            steps_used=outcome.steps_used,
-            progress_steps=outcome.progress_steps,
-            blocked_steps=outcome.blocked_steps,
-        )
-        typer.echo(run_id)
-        raise typer.Exit(code=outcome.exit_code)
-    except SandboxError as exc:
-        # Raised by the arena preflight, before any run directory exists.
+    except (SandboxError, ProviderError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=exc.exit_code) from exc
     except UsageError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=6) from exc
+
+    typer.echo(result.run_id)
+    raise typer.Exit(code=result.outcome.exit_code)
 
 
 def _resolve_challenge(
@@ -232,7 +297,7 @@ def _resolve_challenge(
     flag_format: str | None,
 ) -> Challenge:
     if challenge_path:
-        return _challenge_from_file(Path(challenge_path))
+        return challenge_from_file(Path(challenge_path))
     if not name or not category:
         raise UsageError("either --challenge or both --name and --category are required")
     desc = description or (Path(description_file).read_text() if description_file else "")
