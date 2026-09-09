@@ -1,8 +1,8 @@
 # Status
 
-Last updated **2026-09-08**.
+Last updated **2026-09-09**.
 
-M0–M6 and M8 are built, typed, and green: 175 tests passing, `mypy --strict` clean,
+M0–M8 are built, typed, and green: 204 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 
@@ -38,30 +38,34 @@ point of this file is that nothing here should surprise you at run time.
 | No category claims a tool the arena Dockerfile never installs | `tests/unit/test_categories.py` |
 | A missing image or dead daemon exits 4 before any run directory is created | Verified by hand on 2026-09-07 with the daemon stopped |
 
-## Never run for real
+## Live-verified since the skeleton
 
-These are the two paths the build session had no way to exercise. **Assume they need a
-first smoke test before you trust them.**
+The build session had no Docker daemon and no API keys, so several paths shipped
+unexercised. Two live sessions have since closed most of that gap:
 
-- **`arena ensure`'s build / load / pull paths.** The argument construction is tested
-  against a stubbed `subprocess`, but no `docker build`, `docker load`, or `docker pull`
-  has ever actually run. The daemon-down and image-missing paths *were* exercised by hand.
-- **`DockerSandbox` and `arena/Dockerfile`.** No Docker daemon was available. The image
-  is a best-effort pinned toolset; the sandbox is implemented to spec and type-checks.
-  Neither has been built or executed. The container posture in particular — `mem_limit=2g`,
-  2 CPUs, `no-new-privileges`, non-root, per-run network mode — is asserted by nothing but
-  reading the code.
-- **The three provider adapters.** No API keys were available. Each was written against
-  its installed SDK's actual types and exception hierarchy, but none has ever talked to
-  the live service.
+- **2026-09-07** — `arena build` + `arena status` on an M3 MacBook Air (amd64 image),
+  three live `runectl run`s against Anthropic, and `replay --check`.
+- **2026-09-09** — the arena rebuilt for M7's toolset, and a full ten-challenge
+  `runectl bench run` against Anthropic (`bench/results/README.md`).
 
-The smoke test:
+Exercised for real as a result: `arena build`/`arena status`; `DockerSandbox` building
+and running real containers (triage and agent commands execute inside the amd64 arena);
+and the **Anthropic** adapter against the live API — including its error handling (a
+rejected key exits 6 cleanly, an invalid request exits 5, verified 2026-09-09). The
+container's security *posture* is applied and functional, but its isolation is asserted
+by configuration, not adversarial testing (see [`SECURITY.md`](../SECURITY.md)).
 
-```bash
-uv run runectl arena build
-uv run runectl arena status
-uv run runectl run --challenge bench/practice/easy-01/chal.toml --model claude-sonnet-5 --record
-```
+## Still never run for real
+
+**Assume each needs a first smoke test before you trust it.**
+
+- **`arena ensure`'s load / pull paths** (`--from-file`, `--from-registry`). Only `build`
+  has actually run; the `docker load` / `docker pull` argument construction is tested
+  against a stubbed `subprocess` but has never moved a real image. The daemon-down and
+  image-missing paths *were* exercised by hand.
+- **The OpenAI and Google adapters.** Each was written against its installed SDK's actual
+  types and exception hierarchy, but no OpenAI or Google key has ever talked to the live
+  service. Treat the first real run on each as its smoke test.
 
 ## Stubs — wired, discoverable, no body yet
 

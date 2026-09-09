@@ -140,7 +140,9 @@ propagate.
 
 Return a `Completion` with `text`, `tool_calls`, `usage`, and `stop_reason`.
 
-> **Not yet verified against live APIs.** The three shipped adapters were written and
-> type-checked against their installed SDKs but have never been exercised against the real
-> services — no keys were available when they were built. Treat the first real run as the
-> smoke test. See [`STATUS.md`](STATUS.md).
+> **Anthropic verified; OpenAI and Google not yet.** All three adapters were written and
+> type-checked against their installed SDKs. The **Anthropic** adapter has since run
+> against the live API — the 2026-09-09 ten-challenge bench and its auth/error handling
+> (a rejected key exits 6, a bad request exits 5). The **OpenAI** and **Google** adapters
+> have never talked to their real services; treat the first run on each as its smoke test.
+> See [`STATUS.md`](STATUS.md).

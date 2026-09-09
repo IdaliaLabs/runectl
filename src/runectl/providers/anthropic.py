@@ -1,10 +1,11 @@
 """Anthropic adapter (D5, plan §3.4).
 
-NOTE for reviewers: this adapter's shape was verified against the installed
-`anthropic` SDK (message/usage field names, `messages.create` signature,
-exception hierarchy) but was never exercised against the live API — no
-Anthropic key was available in the build environment. See the M4 handoff
-report before trusting it for a real run.
+Verified against the live API as of 2026-09-09: the ten-challenge bench ran
+through this adapter (`bench/results/README.md`), and its error handling was
+exercised too — a rejected key raises a clean UsageError (exit 6) and other API
+errors a ProviderError (exit 5), see `providers/base.py` and
+`tests/unit/test_provider_errors.py`. The message/usage field names and
+`messages.create` signature were validated against the installed `anthropic` SDK.
 """
 
 from __future__ import annotations

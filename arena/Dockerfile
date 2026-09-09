@@ -1,10 +1,11 @@
 # runectl/arena:kali — the per-run challenge sandbox image (D2).
 #
-# NOTE for reviewers: this could not be built or smoke-tested against a live
-# Docker daemon while building the skeleton (no daemon was available in the
-# build environment). It is a best-effort, pinned toolset covering all eight
-# categories per D2/plan §2.4 — treat it as needing a live `docker build` +
-# `runectl arena status` pass before trusting it, per the M4 handoff report.
+# Built and smoke-tested against a live Docker daemon: first on 2026-09-07, and
+# rebuilt 2026-09-09 for M7's expanded toolset (all eight categories). `runectl
+# arena build` succeeds on amd64 and the ten-challenge bench ran challenges
+# inside this image. When you add or drop a package, rebuild and re-run
+# `runectl arena status` — the label fingerprint changes and an existing image
+# will report as stale (D17) until you do.
 
 FROM kalilinux/kali-rolling:latest
 
