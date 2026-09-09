@@ -29,10 +29,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         openssl hashid \
         # web
         sqlmap gobuster ffuf wfuzz whatweb \
-        # forensics / stego (outguess: JPEG stego; sleuthkit: disk-image
-        # mmls/fls/icat/tsk_recover; poppler-utils: pdftotext/pdfdetach/pdfinfo;
-        # sox/ffmpeg: audio + spectrograms; multimon-ng: DTMF/POCSAG decode)
-        exiftool steghide fcrackzip outguess sleuthkit poppler-utils \
+        # forensics / stego (sleuthkit: disk-image mmls/fls/icat/tsk_recover;
+        # poppler-utils: pdftotext/pdfdetach/pdfinfo; sox/ffmpeg: audio +
+        # spectrograms; multimon-ng: DTMF/POCSAG decode)
+        exiftool steghide fcrackzip sleuthkit poppler-utils \
         sox ffmpeg multimon-ng \
         # misc: QR/barcode decoding (misc.toml required_tools: zbarimg)
         zbar-tools \

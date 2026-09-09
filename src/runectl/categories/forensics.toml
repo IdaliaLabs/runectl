@@ -10,9 +10,10 @@ memory dump each want a completely different second step.
    easy flags hide. Decode any base64/hex token you find and follow it
    immediately rather than noting it and moving on.
 2. Route on the file type:
-     image (PNG/BMP)  -> zsteg for LSB/plane stego; steghide/outguess for
-                         embedded data (try an empty passphrase first)
-     JPEG             -> outguess, and check for data appended after the FFD9 EOF
+     image (PNG/BMP)  -> zsteg for LSB/plane stego; steghide for embedded
+                         data (try an empty passphrase first)
+     JPEG             -> steghide with an empty or guessed passphrase, and
+                         check for data appended after the FFD9 EOF
      audio (WAV/MP3)  -> a spectrogram (sox/ffmpeg) shows visual text; DTMF via
                          multimon-ng
      PDF              -> pdftotext and pdfdetach; look for hidden text and
@@ -30,7 +31,7 @@ is not progress; re-triaging a *newly extracted* file is. Follow decoded content
 to its next concrete step instead of re-scanning the original.
 """
 
-required_tools = ["file", "exiftool", "binwalk", "foremost", "steghide", "zsteg", "outguess", "sleuthkit", "volatility3", "fcrackzip", "pdftotext", "sox", "python3"]
+required_tools = ["file", "exiftool", "binwalk", "foremost", "steghide", "zsteg", "sleuthkit", "volatility3", "fcrackzip", "pdftotext", "sox", "python3"]
 
 signal_low = ['not found', 'No such file', '^$', 'Nothing to extract', 'no data']
 signal_high = ['flag\{', 'FLAG\{', 'picoCTF\{', 'csictf\{', '[A-Za-z0-9+/]{20,}={0,2}']
@@ -40,7 +41,7 @@ network = "bridge"
 
 [tactic_families]
 triage = '^file |exiftool|^xxd |^strings '
-stego = 'zsteg|steghide|stegseek|outguess|lsb|steganograph'
+stego = 'zsteg|steghide|lsb|steganograph'
 carve = 'binwalk -e|binwalk --run|foremost|tsk_recover|tail -c'
 memory = 'vol |volatility|pslist|filescan|hashdump|cmdline'
 disk = 'mmls|fls |icat|tsk_recover|fsstat'
