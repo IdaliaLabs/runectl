@@ -13,12 +13,19 @@ I/O, nothing interactive, honest exit codes.
 **CLI-only, permanently** — no GUI, no `serve` command, no `ui/` package, ever
 ([`DECISIONS.md`](DECISIONS.md) D13).
 
-> **Status: pre-alpha.** The M0–M4 skeleton is built and green — the loop, trace,
-> sandbox, provider, and replay layers all work end to end. The parts that make it
-> actually *good* at CTFs (progress scoring and budgets, the false-flag defense
-> subsystem, five of the eight category playbooks, the benchmark suite) are not built
-> yet. See [`docs/STATUS.md`](docs/STATUS.md) for the honest line-by-line breakdown
-> before you rely on anything here.
+> **Status: pre-alpha.** M0–M6 and M8 are built and green: the loop, trace, sandbox,
+> provider and replay layers, the progress/budget machinery, the false-flag subsystem,
+> and `runectl bench`. **Three of the eight categories ship** — `crypto`, `misc` and
+> `web`; `pwn`, `rev`, `forensics`, `osint` and `network` have no playbook and
+> `--category pwn` exits 6.
+>
+> It has been scored on live challenges three times, and those numbers are published in
+> full: the current best is **3 of 5 solved with 1 false flag**
+> ([`bench/results/README.md`](bench/results/README.md)), on a suite that is
+> four-fifths cryptography. The write-ups lead with the failures, including a trace
+> where the agent gamed one of our own checks. Read
+> [`docs/STATUS.md`](docs/STATUS.md) for the line-by-line breakdown of what is verified
+> versus what merely exists before you rely on anything here.
 
 ---
 
@@ -226,10 +233,21 @@ The whole test suite runs against `StubSandbox` + `ScriptedProvider`, so it need
 neither a container runtime nor a cent of API credit. That's deliberate — see
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
+## Security
+
+`runectl` runs model-authored commands against CTF material inside a Docker container.
+[`SECURITY.md`](SECURITY.md) states what that boundary is and — more importantly — what
+it is not, plus how to report a vulnerability privately.
+
 ## License
 
-Undecided and deliberately parked. There is no license file yet, and nothing here is
-published. Until that's settled, treat this repository as all-rights-reserved.
+[Apache-2.0](LICENSE). See [`NOTICE`](NOTICE).
+
+The practice challenges under `bench/practice/` are **not** covered by it: they are
+vendored from [`csivitu/ctf-challenges`](https://github.com/csivitu/ctf-challenges) under
+the MIT license, with the required copyright and license text in
+[`bench/THIRD_PARTY_LICENSES.md`](bench/THIRD_PARTY_LICENSES.md) and per-challenge author
+credit in each `PROVENANCE.md`.
 
 ## Name
 

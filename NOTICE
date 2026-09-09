@@ -1,0 +1,9 @@
+runectl
+Copyright 2026 Idalia Labs
+
+This product includes software developed at Idalia Labs.
+
+The practice challenge suite under bench/practice/ is third-party material,
+vendored under the MIT license. See bench/THIRD_PARTY_LICENSES.md for the
+required copyright and license text, and each challenge's PROVENANCE.md for
+its source and author credit.

@@ -11,6 +11,13 @@ files/           # the challenge's own inputs, byte for byte from upstream
 
 Score it with `runectl bench run --suite bench/practice --model <id>`.
 
+**These challenges are not ours.** Every one is vendored from
+[`csivitu/ctf-challenges`](https://github.com/csivitu/ctf-challenges) under the MIT
+license; the required copyright and license text is in
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md) and each challenge's
+`PROVENANCE.md` credits its original author. Only the `chal.toml`,
+`expected.json` and `PROVENANCE.md` wrappers are this project's.
+
 ## The gate
 
 V1 is **2 of 5 solved with 0 false flags** (`DECISIONS.md` D15). The report says

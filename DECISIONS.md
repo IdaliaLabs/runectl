@@ -249,7 +249,7 @@ Added 2026-09-07. `runectl` spends the user's own prepaid balance, and an agent 
 
 ## Deliberately not decided yet
 
-- **License.** Parked (`CLAUDE.md`). `solver/` ships with no license file until it's decided; nothing goes public before then.
+- **License.** **Decided 2026-09-08: Apache-2.0** (`LICENSE`, `NOTICE`, declared in `pyproject.toml`). Permissive, standard for infrastructure tooling, and unlike MIT it carries an explicit patent grant — which matters for a company that intends to build commercial products next to this one. It keeps an open-core layer available later; copyleft would have blocked the adoption the project is being open-sourced to get. The practice challenges under `bench/practice/` are **not** covered by it: they are third-party MIT material, with the required copyright and license text in `bench/THIRD_PARTY_LICENSES.md` and per-challenge author credit in each `PROVENANCE.md`.
 - **Step-limit and budget numbers.** Carried from `PROMPT_ARCHIVE.md` §6 as marked-unmeasured starting values. `runectl bench` tunes them; do not treat them as tuned.
 - **Anything about hosting, accounts, or billing.** Out of scope for V1 (`REBUILD_NOTES.md` §6).
 
