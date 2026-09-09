@@ -7,6 +7,89 @@ These are kept in the repo on purpose. D16 says step limits and budgets come
 down as real data arrives and never go up, which is only checkable if the data
 that justified a change is still here to read.
 
+## 2026-09-09 — claude-sonnet-5 — the M7 ten-challenge suite
+
+The first bench on the suite M7 grew to ten (all eight categories now ship). It
+adds one case each for `rev`, `forensics`, `network`, `pwn` and `osint` to the
+five that were here before; `pwn` and `osint` are scored outside the gate for the
+structural reasons in their `expected.json`.
+
+| | result |
+|---|---|
+| solve rate | **7 / 10** (70%) |
+| false flags | 1 |
+| progress ratio | 0.58 (waste 0.42) |
+| cost | $1.3447 |
+| **V1 gate (2 solved, 0 false over the gated subset)** | **MET — 6 solved, 0 false over 7 gated cases** |
+
+The gate is met, and on a much broader suite than the one it was first met on:
+the six gated solves span crypto (`modern-clueless-child`, `rivest-shamir-adleman`,
+`little-rsa`), misc (`machine-fix`), **forensics** (`gradient-sky`) and **network**
+(`stream-secret`). But read the failures first — three of them, and the most
+interesting one is a category the tool nearly solved.
+
+### 1. `esrever` (rev) — unsolved, but the ceiling stopped it mid-derivation
+
+This is the one gated new category that did not solve, and the honest read is
+that it is a **budget outcome, not a capability wall**. By step 14 the run had
+recovered the exact XOR key — `insovietrussiapikachucatchesyou` — by inverting
+the two `enc4` permutations to get `enc1(key)` and rotating it, and was computing
+the `enc2` XOR output against the ciphertext. It was one or two steps from
+assembling the flag. Step 15 hit the **$0.50 per-run spend ceiling (D19)** and the
+run exited `exhausted` with no candidate.
+
+So `runectl` did not fail to reverse the chain — it ran out of the dollars it was
+allowed before it finished. On this single data point the D19 default is tuned a
+little too tight for a multi-step reversing problem, and a higher `--max-cost`
+(or a stronger model) very likely turns this into a solve. That is a knob, not a
+missing capability — but the suite says `unsolved`, and the honest headline for
+the new categories is **two of the three gated ones solved, `rev` did not**.
+
+### 2. `quick-math` still finalizes the one false flag — unchanged and expected
+
+The single false flag in the headline is entirely `quick-math`, which finalized
+`csictf{683435743464}` against an expected `csictf{h45t4d}` — the same
+one-transformation-short failure documented across the last three benches (the
+recovered integer's decimal digits are hex bytes spelling `h45t4d`, a step the
+agent never takes). It is scored outside the gate precisely because no mechanism
+the tool has can catch a correct process that stops one step early. Over the 7
+**gated** cases there were **zero** false flags.
+
+### 3. `flying-places` (osint) — unsolved, exactly as designed
+
+It ran 32 steps, tried `exiftool` GPS tags and even `apt-get download`ing an
+image-to-ASCII tool to read the photo, and hit the per-run ceiling with no
+candidate. The answer is not in the file — it lives in rotted live social-media
+state — which is why the case is outside the gate. An offline run failing it is
+the expected result, not a regression.
+
+### What the new categories showed that worked
+
+- **`gradient-sky` (forensics) — solved in 3 steps for $0.02.** `binwalk` surfaced
+  the appended archive, `strings | grep csictf` read the flag, submitted. Clean.
+- **`stream-secret` (network) — solved, and the false-flag subsystem did its job
+  on it.** The agent's first candidate, eyeballed straight from
+  `tshark -qz follow,tcp,ascii,0`, was **rejected** — the flag appeared in output
+  only because the follow command reassembled it, not as a cited derivation. The
+  run then re-extracted the payload with a `tshark` field filter and a hex decode,
+  earned real provenance, and submitted. The authored capture behaved like a real
+  challenge, provenance and all.
+- **`pwn-intended-0x1` — "solved" in 2 steps for $0.013, which is exactly why it
+  is outside the gate.** It did not exploit anything; in a single-container
+  sandbox the flag file is directly readable, so the run just read it. This is the
+  measured confirmation of the `gate_note`'s argument, not a capability result.
+
+### Caveats
+
+- One model (claude-sonnet-5), one run. No variance data.
+- Two runs (`esrever`, `flying-places`) hit the D19 per-run $0.50 ceiling. For
+  `flying-places` that is the ceiling doing its job on an unsolvable case; for
+  `esrever` it cut off a solve in progress, which is worth remembering before
+  reading its `unsolved` as a capability gap.
+- `stream-secret` is Idalia-authored, not vendored (no MIT pcap existed). A tool
+  solving a challenge its authors wrote is weaker evidence than a competition
+  capture — noted here as it is in the challenge's `PROVENANCE.md`.
+
 ## 2026-09-08b — claude-sonnet-5 — after the D11 amendment
 
 Same suite, same model, same ceilings, run immediately after corroboration was

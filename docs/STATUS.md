@@ -137,15 +137,21 @@ forensics and network, so a solve rate is no longer only a statement about crypt
 Three categories still can't be measured in the gate — `web` needs a live service the
 offline sandbox can't host, and `pwn`/`osint` are present but scored *outside the gate*
 (pwn: a local flag file the agent can read directly; osint: an answer in rotted
-live-internet state). The three live bench scores below predate M7 and were run on the
-five-challenge suite; **a re-bench across all ten is the next step.**
+live-internet state). The ten-challenge suite was scored on 2026-09-09 (claude-sonnet-5,
+`bench/results/README.md`): **7/10 solved, 1 false flag, and the V1 gate MET — 6 solved,
+0 false over the 7 gated cases.** Of the new categories, forensics and network solved;
+rev was cut off mid-derivation by the per-run spend ceiling (a budget outcome, not a
+capability wall).
 
-**Three live bench scores. The gate is met on the third — read what that means.**
-`gate_met: true` on the third run (2026-09-08, `bench/results/README.md`) means **3 solved
-and 0 false flags across 4 gated cases**. The unqualified suite numbers in the same report
-are **3 of 5 solved with 1 false flag**, and they have not moved since the second run. The
-gate says the false-flag subsystem is doing its job. It does not say the solver is
-finished, and it is measured on a suite that is four-fifths cryptography.
+**Four live bench scores. The gate is met on the third and again on the fourth — read
+what that means.** The latest run (2026-09-09, `bench/results/README.md`, the M7
+ten-challenge suite) scored **7 of 10 solved with 1 false flag**, with the gate **met — 6
+solved, 0 false over 7 gated cases** spanning crypto, misc, forensics and network. The
+earlier third run (2026-09-08) met it at 3 solved / 0 false over 4 gated cases on the
+five-challenge, four-fifths-crypto suite. The gate says the false-flag subsystem is doing
+its job on the cases it can fairly judge. It does not say the solver is finished — `rev`
+went unsolved (cut off by the per-run spend ceiling mid-derivation), and the one false
+flag is still `quick-math`, below.
 
 `quick-math` is the excluded case, and it is excluded for a stated reason rather than for
 being hard: its run does the Hastad broadcast attack correctly and submits the recovered
@@ -200,7 +206,8 @@ description does not contain enough to solve it without the original repo's file
   can be measured as they land rather than after.
 - **M7 — done (2026-09-09).** The remaining five categories (`pwn`, `rev`, `forensics`,
   `osint`, `network`) ship as data at equal depth, the arena grew the toolset they name,
-  and the bench grew from 5 to 10 (one case per new category). Live re-bench pending.
+  and the bench grew from 5 to 10 (one case per new category). Re-benched the same day:
+  7/10 solved, 1 false flag, V1 gate met over the 7 gated cases.
 - **M9 — human render polish.** Compact, foldable, width-aware, over the same event
   stream.
 
