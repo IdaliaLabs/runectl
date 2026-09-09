@@ -31,7 +31,7 @@ uv run runectl run --model gpt-5 --name "sanity" --category web --description ".
 | `--flag-format <regex>` | — | Expected flag shape. A candidate that does not match is held for approval rather than auto-finalized (D11). With no format supplied the check does not apply — it never blocks on its own absence. |
 | `--utility-model <id>` | cheapest model of `--model`'s provider | Model used for internal summarization calls. Its tokens land in the same cost ledger. |
 | `--api-key <str>` | — | Highest-precedence key source. Prefer `runectl keys set` or an env var. |
-| `--approval <gated\|strict\|auto>` | `gated` | What a cleared candidate becomes. `gated`: auto-finalize only if re-derived in the sandbox, matching `--flag-format`, and cleared by the disconfirmation review; otherwise exit 2. `strict`: never auto-finalize. `auto`: finalize on plausibility and provenance alone. Provenance and decoy checks apply under all three. |
+| `--approval <gated\|strict\|auto>` | `gated` | What a cleared candidate becomes. `gated`: auto-finalize only if re-derived in the sandbox and matching `--flag-format`; otherwise exit 2. `strict`: never auto-finalize. `auto`: finalize on plausibility and provenance alone. Provenance and decoy checks apply under all three. Corroboration and the disconfirmation review are reported on every candidate and gate nothing (D11, amended 2026-09-08). |
 | `--network <none\|bridge>` | the category's value | Container network mode. `none` for offline categories. |
 | `--max-steps <int>` | the category's `step_limit` | Hard step backstop for this run. |
 | `--record` | off | Record provider request/response pairs to `cassette.jsonl` so the run can be replayed at zero spend. |
@@ -289,9 +289,10 @@ authoritative — deleting it loses nothing about any run's replayability.
 
 ## `runectl flag`
 
-The human half of D11. Under the default `gated` policy, a run that finds something it
-cannot fully corroborate exits **2** and leaves the candidate in the trace instead of
-claiming a solve. These commands are what happens next.
+The human half of D11. Under the default `gated` policy, a run that finds a candidate it
+cannot re-derive in the sandbox — or that does not match the `--flag-format` you supplied —
+exits **2** and leaves it in the trace instead of claiming a solve. These commands are what
+happens next.
 
 ### `runectl flag list <run_id>`
 
@@ -300,7 +301,7 @@ One JSON object per line per pending candidate — `step`, `flag`, `how_found`,
 
 ```json
 {"step": 2, "flag": "flag{...}", "how_found": "decoded chal.txt", "provenance_seq": 8,
- "held_because": "held for approval — corroboration: 1 independent observation(s), need 2"}
+ "held_because": "held for approval — rederivation: re-running the cited command did not produce the flag again"}
 ```
 
 Exits **3** if the run held nothing.

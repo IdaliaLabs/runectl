@@ -171,8 +171,8 @@ uv run runectl replay <run_id> --check
 | 6 | usage / config error |
 
 Code 2 is the default policy working as intended, not an error: under `--approval gated`
-a flag the judge could not fully corroborate ends the run as a *candidate* rather than a
-claimed solve. `runectl flag list` shows what was held and which check held it;
+a flag the judge could not re-derive in the sandbox ends the run as a *candidate* rather
+than a claimed solve. `runectl flag list` shows what was held and which check held it;
 `runectl flag approve` finalizes it. See [`docs/STATUS.md`](docs/STATUS.md).
 
 ## Command surface
@@ -217,6 +217,9 @@ Override with `RUNECTL_HOME` and `RUNECTL_CONFIG_HOME` (both honor `XDG_DATA_HOM
 | [`docs/PROVIDERS.md`](docs/PROVIDERS.md) | Model registry, key resolution, cost accounting, record/replay |
 | [`docs/CATEGORIES.md`](docs/CATEGORIES.md) | How to write a category TOML — adding a category is never a code change |
 | [`docs/STATUS.md`](docs/STATUS.md) | What is real, what is a stub, what is a known gap |
+| [`bench/README.md`](bench/README.md) | The practice suite, the V1 gate, and how a case is scored |
+| [`bench/results/README.md`](bench/results/README.md) | Every live bench run, failures first, with the traces |
+| [`SECURITY.md`](SECURITY.md) | The sandbox threat model, what Docker is *not* protecting you from, reporting |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Dev setup, the checks, and the architectural rules a PR must not break |
 | [`DECISIONS.md`](DECISIONS.md) | The locked architecture (D1–D16). Read before changing anything structural. |
 

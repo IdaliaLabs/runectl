@@ -139,7 +139,8 @@ judge re-reads and re-runs what that number names.
 ### `flag.reviewed`
 The disconfirmation pass's verdict on one candidate (D15 §2) — its own event rather than a
 line in `flag.decision`'s reason, because reading *why* a model doubted a flag is the
-point of the pass.
+point of the pass. **Advisory since 2026-09-08**: this event is the whole output of the
+pass, and a `sound: false` verdict no longer holds anything (D11).
 `step`, `flag`, `sound`, `reason`
 
 ### `flag.decision`

@@ -262,8 +262,19 @@ the solver is finished.
 
 ### Open after this run
 
-- **The reviewer's blind spot.** It cannot see challenge files. Fixing it would
-  likely convert `machine-fix` from held to solved. Needs a decision on cost.
+- ~~**The reviewer's blind spot.**~~ **Answered the same day, the other way.** Rather
+  than widen what the reviewer sees, the pass was **demoted to advisory** (D11,
+  amended 2026-09-08): it still runs and is still recorded, and it no longer holds
+  anything. Its record across benches 2 and 3 was nine reviews — six correct clears,
+  two wrong flags cleared, one correct flag held, nothing caught. The blind spot is
+  still real and still unfixed; it just costs nothing now, so it is parked.
+
+  What that leaves as the gate is worth stating, because it is the pattern across
+  three benches: **both mechanisms tried as the auto-finalize bar and removed —
+  corroboration, then the review — were forms of model or agent judgement, and each
+  was satisfiable or fooled by the model it was judging.** What survives is the
+  sandbox. Provenance says the string came out of a tool rather than the agent's own
+  command; re-derivation says the tool produces it again.
 - **Five categories still unbuilt** (`pwn`, `rev`, `forensics`, `osint`,
   `network`). Four of the five bench cases are crypto; the suite currently
   measures one category well and nothing else at all.
