@@ -87,7 +87,14 @@ def bench_run(
         )
         try:
             result = execute_run(challenge, request)
-        except (SandboxError, ProviderError, UsageError) as exc:
+        except UsageError as exc:
+            # A usage/config error (an invalid API key, an unknown model) is not
+            # challenge-specific — it will fail every run in the suite identically.
+            # Abort the whole bench cleanly with exit 6 rather than scoring ten
+            # copies of the same misconfiguration.
+            typer.echo(str(exc), err=True)
+            raise typer.Exit(code=6) from exc
+        except (SandboxError, ProviderError) as exc:
             # One broken challenge does not end the suite; it is scored as an
             # error and the report says so.
             results.append(

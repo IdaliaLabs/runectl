@@ -103,6 +103,26 @@ def test_the_suite_ceiling_stops_it_partway(patched, tmp_path: Path) -> None:  #
     assert json.loads(report_path.read_text())["stopped_early"] == report["stopped_early"]
 
 
+def test_an_invalid_key_aborts_the_whole_suite_cleanly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A UsageError (invalid key / unknown model) is not challenge-specific, so
+    the bench exits 6 on the first one rather than scoring ten identical errors
+    or crashing with a traceback (the 2026-09-09 incident)."""
+    from runectl.errors import UsageError
+
+    calls = {"n": 0}
+
+    def boom(challenge, request, store=None):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        raise UsageError("Anthropic rejected the API credentials. Try `runectl keys set anthropic`.")
+
+    monkeypatch.setattr(bench_cmd, "execute_run", boom)
+    result = runner.invoke(app, ["bench", "run", "--suite", SUITE, "--model", "claude-sonnet-5",
+                                 "--output", "json"])
+    assert result.exit_code == 6
+    assert calls["n"] == 1  # aborted on the first failure, did not attempt all ten
+    assert "keys set anthropic" in result.output
+
+
 def test_only_runs_one_challenge(patched) -> None:  # type: ignore[no-untyped-def]
     patched({"machine-fix": ("solved", EXPECTED["easy-04"], 0.02)})
     result = runner.invoke(app, ["bench", "run", "--suite", SUITE, "--model", "claude-sonnet-5",

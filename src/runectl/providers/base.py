@@ -17,7 +17,7 @@ from typing import Any, Literal, Protocol
 from pydantic import BaseModel, ConfigDict
 
 from runectl.config import DEFAULT_RETRY_ATTEMPTS
-from runectl.errors import ProviderError
+from runectl.errors import ProviderError, UsageError
 from runectl.providers.cost import CostLedger
 from runectl.providers.registry import ModelInfo
 from runectl.tools.schema import ToolSchema
@@ -77,6 +77,30 @@ class Completion(BaseModel):
 class TransientProviderError(Exception):
     """Raised by an adapter for a 429/5xx/timeout. Retried with backoff; never
     escapes :func:`complete_with_retry` — callers only ever see :class:`ProviderError`."""
+
+
+def auth_error(provider: str, exc: Exception) -> UsageError:
+    """A rejected/invalid API key is a config error, not a provider outage.
+
+    Adapters raise this (never a raw SDK ``AuthenticationError``) so a bad key
+    exits cleanly with code 6 and an actionable message instead of a traceback.
+    It is *not* a :class:`TransientProviderError`, so it is never retried —
+    hammering a bad key four times only wastes the user's time.
+    """
+    return UsageError(
+        f"{provider} rejected the API credentials ({exc}). Check the key with "
+        f"`runectl keys set {provider.lower()}`, the {provider.upper()}_API_KEY "
+        f"environment variable, or pass --api-key."
+    )
+
+
+def api_error(provider: str, exc: Exception) -> ProviderError:
+    """A non-transient, non-auth API failure (a 400/404/422, an unexpected 4xx).
+
+    Surfaced as a clean :class:`ProviderError` (exit 5) rather than letting the
+    raw SDK exception escape as a traceback. Not retried — these do not clear on
+    their own the way a 429/5xx does."""
+    return ProviderError(f"{provider} API call failed: {exc}")
 
 
 class Provider(Protocol):
