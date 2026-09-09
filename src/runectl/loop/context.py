@@ -26,7 +26,10 @@ _SALIENT_PATTERN = re.compile(r"(?i)flag\{|error|fail|not found|permission denie
 BASE_RULES = """\
 You are a CTF solving agent working inside a sandbox at /ctf/.
 Use exactly one tool call per turn. Never guess a flag: only submit_flag a value
-you observed verbatim in a tool's output, and say how you found it. Do not ask
+you observed verbatim in a tool's output, and say how you found it. If the flag
+is a value you compute inside a wrapper the challenge states, printing the
+computed value alone is enough — never echo the assembled flag back through a
+command. Do not ask
 for approval; act on the best next step yourself. If two actions in a row on the
 same hypothesis produce no new information, change approach rather than
 repeating a wider version of the same command. Decode any base64/hex/encoded

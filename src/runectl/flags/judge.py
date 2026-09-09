@@ -10,6 +10,9 @@ finalizing it. Five mechanisms, in the order D15 names them:
    that the flag did not appear *because the agent wrote it into the command*.
    That last part is not hypothetical: the first real run of this tool printed
    its own guess and had it accepted (run 20260908-033407-cfa0ad, 2026-09-07).
+   What must appear is the flag's **payload** — the part inside the wrapper —
+   because the wrapper is published in the challenge and nobody earns it
+   (`_payload_is_provenance`, 2026-09-08).
 2. **Verification re-derivation** — the cited command is re-run in the sandbox
    and must produce the same string again, plus the disconfirmation pass in
    `flags/review.py`: one cheap model call, framed to find a reason the flag is
@@ -51,14 +54,33 @@ MIN_CORROBORATION = 2
 REDERIVE_TIMEOUT_S = 60
 
 # The distinctive part of a flag: whatever sits inside the outermost braces.
-# `csictf{h45t4d}` -> `h45t4d`. Flags without braces are used whole.
-_FLAG_CORE = re.compile(r"^[^{]*\{(?P<core>.+)\}[^}]*$", re.DOTALL)
+# `csictf{h45t4d}` -> prefix `csictf`, payload `h45t4d`. Flags without braces
+# have no wrapper and are used whole.
+_FLAG_CORE = re.compile(r"^(?P<prefix>[^{]*)\{(?P<core>.+)\}[^}]*$", re.DOTALL)
 
-# Below this length a "core" is too generic to be evidence of authorship —
-# `flag{a}` would match nearly any command text.
+# Below this length a payload is too generic to be evidence of authorship —
+# `flag{a}` would match nearly any command text. This threshold guards a
+# *rejection*, so erring short is the safe direction.
 _MIN_CORE_LEN = 4
 
+# The threshold for letting a payload sighting stand as provenance. This one
+# guards an *acceptance*, so it errs long: a short string appearing somewhere in
+# a wall of output is coincidence, not evidence.
+_MIN_PAYLOAD_LEN = 8
+
 _SEQ_IN_TEXT = re.compile(r"\d+")
+
+
+def _payload_of(flag: str) -> str:
+    """The earned part of a flag: what sits inside the wrapper, else the whole."""
+    match = _FLAG_CORE.match(flag)
+    return match.group("core") if match else flag
+
+
+def _prefix_of(flag: str) -> str:
+    """The wrapper's name — `csictf{...}` -> `csictf`. Empty when unwrapped."""
+    match = _FLAG_CORE.match(flag)
+    return match.group("prefix").strip() if match else ""
 
 
 class _Executor(Protocol):
@@ -80,10 +102,9 @@ def _authored_in(flag: str, command: str) -> bool:
         return False
     if flag in command:
         return True
-    match = _FLAG_CORE.match(flag)
-    if match is None:
+    core = _payload_of(flag)
+    if core == flag:
         return False
-    core = match.group("core")
     return len(core) >= _MIN_CORE_LEN and core in command
 
 
@@ -185,7 +206,7 @@ class FlagJudge:
         if source is None:
             checks.append(Check("provenance", False, error))
             return self._rejected(fallback_seq, error, checks)
-        checks.append(Check("provenance", True, f"observed at seq {source.seq}"))
+        checks.append(Check("provenance", True, self._provenance_detail(flag, source)))
 
         # 3. Decoy detection (D15 mechanism 3) — also unconditional.
         decoy = decoys.assess(
@@ -233,14 +254,56 @@ class FlagJudge:
 
     # -- stages ---------------------------------------------------------------
 
+    def _payload_is_provenance(self, flag: str) -> bool:
+        """May a sighting of the payload alone stand as provenance?
+
+        The wrapper is public. It is printed in the challenge description and
+        passed as `--flag-format`, so nobody earns it, and no correct solver can
+        be required to make it appear in output. For a flag that is a computed
+        value inside a known wrapper — `csictf{785539772602034710213927792950}`,
+        bench `machine-fix` — the whole string can only reach a tool's output if
+        the agent types the wrapper into the command, which is exactly what the
+        anti-echo rule rejects. Provenance therefore matches on the payload, and
+        the wrapper has to be attested by the challenge rather than invented by
+        the agent: if the agent made the prefix up, this returns False and the
+        whole flag is required as before.
+        """
+        payload = _payload_of(flag)
+        if payload == flag or len(payload) < _MIN_PAYLOAD_LEN:
+            return False
+        prefix = _prefix_of(flag)
+        if not prefix:
+            return False
+        attested = f"{self._description}\n{self._flag_format or ''}".lower()
+        return prefix.lower() in attested
+
+    def _evident_in(self, text: str, flag: str) -> bool:
+        """Does this text carry the flag — whole, or as its earned payload?"""
+        if flag in text:
+            return True
+        return self._payload_is_provenance(flag) and _payload_of(flag) in text
+
+    def _observes(self, obs: ToolObservation, flag: str) -> bool:
+        return self._evident_in(obs.stdout, flag) or self._evident_in(obs.stderr, flag)
+
+    def _provenance_detail(self, flag: str, source: ToolObservation) -> str:
+        if flag in source.text:
+            return f"observed at seq {source.seq}"
+        return f"payload observed at seq {source.seq}, inside a wrapper the challenge states"
+
     def _resolve_provenance(
         self, flag: str, history: Sequence[ToolObservation], provenance: str
     ) -> tuple[ToolObservation | None, str]:
         """The cited observation, or why no observation can support this flag."""
-        matches = [obs for obs in history if obs.contains(flag)]
+        matches = [obs for obs in history if self._observes(obs, flag)]
         supported = [obs for obs in matches if not _authored_in(flag, obs.command)]
 
         if not matches:
+            if self._payload_is_provenance(flag):
+                return None, (
+                    "neither the flag nor the value inside its wrapper appears in any "
+                    "tool output this run has observed"
+                )
             return None, "flag does not appear verbatim in any tool output this run has observed"
         if not supported:
             return None, (
@@ -284,7 +347,7 @@ class FlagJudge:
         seen_prints: set[str] = set()
         count = 0
         for obs in history:
-            if not obs.contains(flag) or _authored_in(flag, obs.command):
+            if not self._observes(obs, flag) or _authored_in(flag, obs.command):
                 continue
             print_ = fingerprint(obs.text)
             if obs.command in seen_commands or print_ in seen_prints:
@@ -338,7 +401,7 @@ class FlagJudge:
             return False, f"re-running the cited command failed: {exc}"
         stdout = str(getattr(result, "stdout", ""))
         stderr = str(getattr(result, "stderr", ""))
-        if flag in stdout or flag in stderr:
+        if self._evident_in(stdout, flag) or self._evident_in(stderr, flag):
             return True, "re-running the cited command produced the same flag"
         return False, "re-running the cited command did not produce the flag again"
 

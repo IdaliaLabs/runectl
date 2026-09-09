@@ -269,3 +269,75 @@ def test_a_verdict_records_every_check_it_ran() -> None:
         "plausibility", "provenance", "decoy", "corroboration", "flag_format",
         "rederivation", "review",
     ]
+
+
+# -- payload provenance (2026-09-08) ------------------------------------------
+#
+# Bench `machine-fix` is the case: the flag is a computed number inside a
+# wrapper the challenge prints. The whole string can only appear in output if
+# the agent types the wrapper in, which is what the anti-echo rule rejects.
+
+_COMPUTED = "csictf{785539772602034710213927792950}"
+_PAYLOAD = "785539772602034710213927792950"
+_STATED = "The flag would be of the format csictf{answer_you_get_from_above}."
+
+
+def _payload_judge(**kwargs: object) -> FlagJudge:
+    executor = _Executor({"python3 solve.py": _PAYLOAD})
+    defaults: dict[str, object] = {
+        "description": _STATED,
+        "flag_format": r"csictf\{[\w]{3,60}\}",
+        "sandbox": executor,
+        "reviewer": lambda request: ReviewVerdict(True, "derivation checks out"),
+    }
+    defaults.update(kwargs)
+    return FlagJudge(**defaults)  # type: ignore[arg-type]
+
+
+def test_payload_alone_is_provenance_when_the_challenge_states_the_wrapper() -> None:
+    history = [_observation(7, _PAYLOAD, command='{"command": "python3 solve.py"}')]
+    verdict = _payload_judge().judge(
+        flag=_COMPUTED, history=history, fallback_seq=7, provenance="seq 7"
+    )
+    assert verdict.decision == "finalized"
+    assert verdict.provenance_seq == 7
+
+
+def test_payload_provenance_still_rejects_the_agent_echoing_its_own_answer() -> None:
+    """The anti-echo rule is unchanged: typing the payload in is not evidence."""
+    history = [
+        _observation(7, _PAYLOAD, command=f'{{"command": "echo {_PAYLOAD}"}}'),
+    ]
+    verdict = _payload_judge().judge(
+        flag=_COMPUTED, history=history, fallback_seq=7, provenance="seq 7"
+    )
+    assert verdict.decision == "rejected"
+    assert "echoing" in verdict.reason
+
+
+def test_a_wrapper_the_challenge_never_mentions_is_not_attested() -> None:
+    """An invented prefix falls back to requiring the whole flag verbatim."""
+    history = [_observation(7, _PAYLOAD, command='{"command": "python3 solve.py"}')]
+    verdict = _payload_judge(description="no format given here", flag_format=None).judge(
+        flag=_COMPUTED, history=history, fallback_seq=7, provenance="seq 7"
+    )
+    assert verdict.decision == "rejected"
+    assert "does not appear verbatim" in verdict.reason
+
+
+def test_a_short_payload_is_coincidence_not_provenance() -> None:
+    """`_MIN_PAYLOAD_LEN` guards an acceptance, so it errs long."""
+    history = [_observation(7, "exit status 1337", command='{"command": "python3 solve.py"}')]
+    verdict = _payload_judge().judge(
+        flag="csictf{1337}", history=history, fallback_seq=7, provenance="seq 7"
+    )
+    assert verdict.decision == "rejected"
+
+
+def test_payload_provenance_reports_which_kind_of_sighting_it_was() -> None:
+    history = [_observation(7, _PAYLOAD, command='{"command": "python3 solve.py"}')]
+    verdict = _payload_judge().judge(
+        flag=_COMPUTED, history=history, fallback_seq=7, provenance="seq 7"
+    )
+    provenance = next(check for check in verdict.checks if check.name == "provenance")
+    assert "payload observed" in provenance.detail

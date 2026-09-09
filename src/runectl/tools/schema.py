@@ -95,7 +95,11 @@ TOOLS: tuple[ToolSchema, ...] = (
         description=(
             "Submit the flag once you can point to exactly where you observed it. "
             "Never guess — an unsupported guess is worse than no flag. The flag must "
-            "appear in output some command produced, not in output you printed it into."
+            "appear in output some command produced, not in output you printed it into. "
+            "When the flag is a value you compute inside a wrapper the challenge already "
+            "states, print the computed value on its own and cite that observation — do "
+            "not paste the wrapper and value into a command to make the whole string "
+            "appear, which reads as you echoing your own answer."
         ),
         parameters={
             "type": "object",
