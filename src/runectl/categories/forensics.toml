@@ -1,0 +1,56 @@
+brief = "Start with file/metadata triage, decode embedded artifacts, then an extraction chain and targeted scans."
+
+playbook = """
+FORENSICS: identify what the artifact actually is before choosing a technique.
+The category is broad — an image, an audio file, a PDF, a disk image, and a
+memory dump each want a completely different second step.
+
+1. Triage every file first: `file`, `exiftool -a -u -g1`, `binwalk` (embedded
+   files?), and a `strings` + `xxd` head. Metadata and appended data are where
+   easy flags hide. Decode any base64/hex token you find and follow it
+   immediately rather than noting it and moving on.
+2. Route on the file type:
+     image (PNG/BMP)  -> zsteg for LSB/plane stego; steghide/outguess for
+                         embedded data (try an empty passphrase first)
+     JPEG             -> outguess, and check for data appended after the FFD9 EOF
+     audio (WAV/MP3)  -> a spectrogram (sox/ffmpeg) shows visual text; DTMF via
+                         multimon-ng
+     PDF              -> pdftotext and pdfdetach; look for hidden text and
+                         embedded files
+     disk image       -> sleuthkit: `mmls` for the partition table, then
+                         `fls`/`icat`/`tsk_recover`, including deleted files
+     memory dump      -> volatility3: pslist, cmdline, filescan, hashdump
+     archive          -> try an empty password, then fcrackzip/john against a
+                         wordlist; check the ZIP comment
+3. When binwalk shows embedded files, carve them (`binwalk -e` or `foremost`)
+   and re-triage the extracted files from step 1 — nested containers are common.
+
+A second stego tool that reports nothing on a file the first one already cleared
+is not progress; re-triaging a *newly extracted* file is. Follow decoded content
+to its next concrete step instead of re-scanning the original.
+"""
+
+required_tools = ["file", "exiftool", "binwalk", "foremost", "steghide", "zsteg", "outguess", "sleuthkit", "volatility3", "fcrackzip", "pdftotext", "sox", "python3"]
+
+signal_low = ['not found', 'No such file', '^$', 'Nothing to extract', 'no data']
+signal_high = ['flag\{', 'FLAG\{', 'picoCTF\{', 'csictf\{', '[A-Za-z0-9+/]{20,}={0,2}']
+
+step_limit = 70
+network = "bridge"
+
+[tactic_families]
+triage = '^file |exiftool|^xxd |^strings '
+stego = 'zsteg|steghide|stegseek|outguess|lsb|steganograph'
+carve = 'binwalk -e|binwalk --run|foremost|tsk_recover|tail -c'
+memory = 'vol |volatility|pslist|filescan|hashdump|cmdline'
+disk = 'mmls|fls |icat|tsk_recover|fsstat'
+archive = 'fcrackzip|unzip|7z |unrar|john'
+pdf = 'pdftotext|pdfdetach|pdf-parser|pdfinfo|pdfimages'
+
+[budgets]
+per_hypothesis = 2
+per_family = 4
+# D8: forced strategy shift after N no-progress steps or M consecutive errors.
+# Unmeasured starting values (D16) — `runectl bench` is what tunes them.
+no_progress_shift = 3
+consecutive_error_shift = 3

@@ -15,9 +15,16 @@ SUITE = Path(__file__).resolve().parents[2] / "bench" / "practice"
 CASES = load_suite(SUITE)
 
 
-def test_the_suite_has_five_challenges() -> None:
-    """The V1 gate is 2 of 5 (plan §10.1) — it needs five to be 2 of 5."""
-    assert len(CASES) == 5
+def test_the_suite_covers_the_expected_categories() -> None:
+    """M7 (2026-09-09) grew the suite from 5 to 10 so every category the tool
+    can measure offline is represented. Two of the additions (pwn, osint) sit
+    outside the gate for structural reasons recorded in their expected.json."""
+    assert len(CASES) == 10
+    categories = {case.category for case in CASES}
+    assert {"crypto", "misc", "rev", "forensics", "network", "pwn", "osint"} <= categories
+    # Gate composition: quick-math (crypto), pwn and osint are advisory-only.
+    outside = {case.name for case in CASES if not case.in_gate}
+    assert outside == {"quick-math", "pwn-intended-0x1", "flying-places"}
 
 
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.name)

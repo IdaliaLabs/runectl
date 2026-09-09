@@ -1,0 +1,8 @@
+name = "gradient-sky"
+category = "forensics"
+flag_format = 'csictf\{[\w]+\}'
+files = ["files/sky.jpg"]
+
+description = """
+Gradient sky is a beginner-level forensics challenge aimed towards rookies.
+"""

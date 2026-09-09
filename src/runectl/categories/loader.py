@@ -1,8 +1,8 @@
 """Load category data from TOML at runtime (D9, plan §8.2 — the loader is HANDOFF).
 
-Adding a category is a data file, never a code change. The skeleton ships a
-subset of the eight standard categories to exercise this loader; M7 fills in
-the rest, with equal depth from day one (D14 — no earner-first order).
+Adding a category is a data file, never a code change. As of M7 (2026-09-08) all
+eight standard categories ship as data, at equal depth from day one (D14 — no
+earner-first order); `load_all()` asserts the full set is present.
 """
 
 from __future__ import annotations
@@ -15,9 +15,8 @@ from runectl.categories.schema import Category
 
 _CATEGORY_DIR = Path(__file__).resolve().parent
 
-# The full standard set (`REBUILD_NOTES.md` §6). M7 fills in whichever aren't
-# yet shipped as data; `load_all()` below intentionally does NOT assert this
-# full set is present until then (plan §8.2 skeleton note).
+# The full standard set (`REBUILD_NOTES.md` §6). All eight ship as data as of M7;
+# `load_all()` asserts this set is present.
 STANDARD_CATEGORIES = ("pwn", "web", "crypto", "forensics", "rev", "misc", "osint", "network")
 
 
@@ -51,9 +50,17 @@ def load(category: str) -> Category:
 
 
 def load_all() -> dict[str, Category]:
-    """Load every category currently shipped as data.
+    """Load every shipped category, asserting the full standard set is present (D14).
 
-    M7 changes this to assert all of :data:`STANDARD_CATEGORIES` are present;
-    the skeleton ships 1-2 to exercise the loader (plan §8.2).
+    A missing standard category is a packaging error, not a silent partial load:
+    all eight ship together as of M7, so a build that dropped one should fail
+    loudly here rather than quietly offer seven.
     """
-    return {name: load(name) for name in available_categories()}
+    loaded = {name: load(name) for name in available_categories()}
+    missing = [name for name in STANDARD_CATEGORIES if name not in loaded]
+    if missing:
+        raise CategoryLoadError(
+            f"missing standard category data: {', '.join(missing)} "
+            f"(shipped: {', '.join(sorted(loaded)) or 'none'})"
+        )
+    return loaded

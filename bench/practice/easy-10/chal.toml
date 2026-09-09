@@ -1,0 +1,9 @@
+name = "flying-places"
+category = "osint"
+flag_format = 'csictf\{[\w]+\}'
+files = ["files/Flight.jpg"]
+
+description = """
+A reporter wanted to know where this flight is headed. Where does he (the
+reporter) live? Wrap your answer as csictf{...}.
+"""

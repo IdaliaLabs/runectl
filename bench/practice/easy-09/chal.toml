@@ -1,0 +1,11 @@
+name = "pwn-intended-0x1"
+category = "pwn"
+flag_format = 'csictf\{[^}]+\}'
+files = ["files/pwn-intended-0x1", "files/pwn-intended-0x1.c", "files/flag.txt"]
+
+description = """
+I really want to have some coffee!
+
+You are given the vulnerable service binary and its C source. When run, the
+binary reads its flag from a file named flag.txt in the working directory.
+"""

@@ -1,0 +1,9 @@
+name = "stream-secret"
+category = "network"
+flag_format = 'flag\{[\w]+\}'
+files = ["files/capture.pcap"]
+
+description = """
+A packet capture was pulled from a host during an incident review. The secret
+was transmitted in the clear over one of the TCP conversations — recover it.
+"""

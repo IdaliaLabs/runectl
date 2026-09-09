@@ -13,19 +13,19 @@ I/O, nothing interactive, honest exit codes.
 **CLI-only, permanently** — no GUI, no `serve` command, no `ui/` package, ever
 ([`DECISIONS.md`](DECISIONS.md) D13).
 
-> **Status: pre-alpha.** M0–M6 and M8 are built and green: the loop, trace, sandbox,
+> **Status: pre-alpha.** M0–M8 are built and green: the loop, trace, sandbox,
 > provider and replay layers, the progress/budget machinery, the false-flag subsystem,
-> and `runectl bench`. **Three of the eight categories ship** — `crypto`, `misc` and
-> `web`; `pwn`, `rev`, `forensics`, `osint` and `network` have no playbook and
-> `--category pwn` exits 6.
+> `runectl bench`, and (M7, 2026-09-09) **all eight categories ship** — `crypto`, `misc`,
+> `web`, `pwn`, `rev`, `forensics`, `osint` and `network`, at equal depth.
 >
 > It has been scored on live challenges three times, and those numbers are published in
 > full: the current best is **3 of 5 solved with 1 false flag**
-> ([`bench/results/README.md`](bench/results/README.md)), on a suite that is
-> four-fifths cryptography. The write-ups lead with the failures, including a trace
-> where the agent gamed one of our own checks. Read
-> [`docs/STATUS.md`](docs/STATUS.md) for the line-by-line breakdown of what is verified
-> versus what merely exists before you rely on anything here.
+> ([`bench/results/README.md`](bench/results/README.md)). Those scores predate M7 and
+> were run on the older five-challenge, four-fifths-crypto suite; the suite is now ten
+> challenges spanning five categories, and **a re-bench across all ten is pending**. The
+> write-ups lead with the failures, including a trace where the agent gamed one of our
+> own checks. Read [`docs/STATUS.md`](docs/STATUS.md) for the line-by-line breakdown of
+> what is verified versus what merely exists before you rely on anything here.
 
 ---
 

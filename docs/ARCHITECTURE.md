@@ -183,8 +183,6 @@ Each of these is shaped now so the milestone that fills it doesn't need an API c
 | Seam | Where | Fills in |
 |---|---|---|
 | Evidence store | `evidence.added` is defined in the trace schema but nothing emits it — findings carry forward in the conversation only | later |
-| The other five categories | `pwn`, `rev`, `forensics`, `osint`, `network` TOMLs aren't written yet; the loader ships whatever is present | **M7** |
-| Suite breadth | Five MIT-licensed challenges are vendored, but four of five are crypto — only `crypto`/`misc`/`web` ship as categories, and web needs a live service | **M7** rebalance |
 | Human render polish | `render.py` is plain but correct — one line per event | **M9** |
 
 For exactly what is and isn't real today, see [`STATUS.md`](STATUS.md).

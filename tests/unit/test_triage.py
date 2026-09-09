@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import inspect
 
+from runectl.categories.loader import STANDARD_CATEGORIES
 from runectl.categories.loader import load as load_category
 from runectl.loop.triage import commands_for, triage
 from runectl.sandbox.stub import StubSandbox, ok
@@ -30,3 +31,11 @@ def test_triage_runs_fixed_commands_against_sandbox() -> None:
     sandbox.stop()
     assert result.category == "misc"
     assert "ls -la /ctf/" in result.commands
+
+
+def test_every_category_has_a_challenge_blind_triage_set() -> None:
+    """All eight categories triage from the same base set, keyed only by name (D10)."""
+    for name in STANDARD_CATEGORIES:
+        commands = commands_for(load_category(name))
+        assert commands[0] == "ls -la /ctf/"
+        assert any("file /ctf/*" in c for c in commands)

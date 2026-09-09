@@ -69,11 +69,11 @@ def test_it_scores_the_suite_and_reports_the_waste_ratio(patched) -> None:  # ty
                                  "--output", "json"])
     assert result.exit_code == 0, result.output
     report = json.loads(result.stdout)
-    assert report["total"] == 5
+    assert report["total"] == 10
     assert report["solved"] == 2
     assert report["false_flags"] == 0
     assert report["gate_met"] is True
-    # D16: 5 runs x 4 progress of 10 steps.
+    # D16: every faked run reports 4 progress of 10 steps, so the ratio is 0.4.
     assert report["progress_ratio"] == 0.4
     assert report["waste_ratio"] == 0.6
     assert [c["status"] for c in report["cases"]].count("candidate") == 1

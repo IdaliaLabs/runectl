@@ -1,0 +1,55 @@
+brief = "Prioritize checksec, symbols, a controlled crash, then the offset before writing any exploit script."
+
+playbook = """
+PWN: recover information before you write a single byte of payload. The order
+below is not optional busywork — each step decides which attack the next step
+even makes sense to try.
+
+1. Triage the binary: `file` (arch, static/dynamic, stripped?), `checksec`
+   (NX, PIE, canary, RELRO), and a `strings` pass for a plaintext flag, a
+   "/bin/sh", or a win-function name. A stripped, statically linked binary is a
+   different problem than a dynamic one with symbols.
+2. Read the code before running it. Disassemble main and any obviously-named
+   function (`win`, `vuln`, `backdoor`) in gdb or rizin. Find the bug — an
+   unbounded read, a `printf(user_input)`, a signed/unsigned mixup — rather than
+   fuzzing blindly.
+3. The protections chosen at step 1 map to the attack:
+     no NX          -> shellcode on the stack
+     NX, no PIE     -> ret2plt / ret2libc with static gadget addresses
+     NX + PIE       -> leak the PIE/libc base first, then ROP
+     canary         -> leak it (a format string %p chain) before overflowing
+     no/partial RELRO -> a GOT overwrite is on the table
+4. Find the offset once, with a cyclic pattern, and record it. Re-running a
+   fresh cyclic pattern search after you already know the offset is the single
+   most common way this category burns steps — that is not progress.
+5. Write the exploit as a pwntools script (`write_file` then `run_command`),
+   test against the local process, and only then point it at a remote host if
+   the challenge gives one (`--network bridge`, which is the default here).
+
+A repeated identical crash with no new register/leak information is not
+progress. A new leaked address, a found offset, or a controlled RIP is.
+"""
+
+required_tools = ["file", "checksec", "gdb", "radare2", "rizin", "pwntools", "ROPgadget", "one_gadget", "python3"]
+
+signal_low = ['command not found', 'No such file', '^$', 'Illegal instruction']
+signal_high = ['flag\{', 'FLAG\{', 'uid=', '/bin/sh', 'pop rdi']
+
+step_limit = 120
+network = "bridge"
+
+[tactic_families]
+triage = 'checksec|^file |^strings |readelf|nm '
+disasm = 'gdb|objdump|rizin|radare2|r2 |pdf @|disas'
+offset = 'cyclic|pattern_create|pattern_offset'
+rop = 'ROPgadget|one_gadget|ropper|rop\('
+fmtstr = '%p|%n|fmtstr_payload|%[0-9]+\$'
+heap = 'malloc|free|tcache|fastbin|unsorted|vis_heap'
+
+[budgets]
+per_hypothesis = 2
+per_family = 4
+# D8: forced strategy shift after N no-progress steps or M consecutive errors.
+# Unmeasured starting values (D16) — `runectl bench` is what tunes them.
+no_progress_shift = 3
+consecutive_error_shift = 3
