@@ -8,13 +8,15 @@ from collections.abc import Sequence
 
 import pytest
 
-from runectl.errors import ProviderError
+from runectl.errors import ProviderError, UsageError
 from runectl.providers.base import (
     Completion,
     Message,
     ToolCallRequest,
     TransientProviderError,
     Usage,
+    api_error,
+    auth_error,
     complete_with_retry,
 )
 from runectl.providers.cost import CostLedger
@@ -84,3 +86,40 @@ def test_tool_call_request_round_trips_through_scripted_provider() -> None:
     # sanity: the fixture types used across provider tests are constructible
     call = ToolCallRequest(id="c1", name="run_command", arguments={"command": "ls"})
     assert call.name == "run_command"
+
+
+class _AuthFailingProvider:
+    """An adapter that classified a 401 as a UsageError (an invalid key)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(
+        self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema], max_tokens: int
+    ) -> Completion:
+        self.calls += 1
+        raise auth_error("Anthropic", RuntimeError("401 invalid x-api-key"))
+
+
+def test_auth_error_is_not_retried_and_surfaces_as_usage_error() -> None:
+    """A bad key must fail once, cleanly (exit 6), not be hammered four times."""
+    provider = _AuthFailingProvider()
+    ledger = CostLedger()
+    with pytest.raises(UsageError) as caught:
+        complete_with_retry(
+            provider, _MODEL, ledger,
+            system="sys", messages=[], tools=(), max_tokens=10,
+            attempts=4, sleep=lambda _: None,
+        )
+    assert provider.calls == 1  # no retry on a permanent auth failure
+    assert not ledger.entries
+    assert caught.value.exit_code == 6
+    assert "keys set anthropic" in str(caught.value)
+
+
+def test_error_factories_carry_actionable_text_and_the_right_exit_codes() -> None:
+    ue = auth_error("OpenAI", RuntimeError("401"))
+    assert isinstance(ue, UsageError) and ue.exit_code == 6
+    assert "OPENAI_API_KEY" in str(ue) and "keys set openai" in str(ue)
+    pe = api_error("Google", RuntimeError("400 bad request"))
+    assert isinstance(pe, ProviderError) and pe.exit_code == 5

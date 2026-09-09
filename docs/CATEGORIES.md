@@ -10,8 +10,9 @@ All eight categories get the same machinery and the same depth — there is no
 
 `pwn`, `web`, `crypto`, `forensics`, `rev`, `misc`, `osint`, `network`
 
-**Shipped today:** `web`, `crypto`, `misc`. The other five land in M7. `runectl run
---category pwn` currently exits 6 with a message listing what *is* available.
+**Shipped today:** all eight. `pwn`, `rev`, `forensics`, `osint` and `network` landed in
+M7 (2026-09-09) at equal depth with the original three. A `--category` with no TOML still
+exits 6 with a message listing what *is* available.
 
 ## File format
 
@@ -94,18 +95,20 @@ The starting values, for reference:
 
 | Category | step_limit | network | shipped? |
 |---|---|---|---|
-| pwn | 120 | — | M7 |
-| rev | 100 | — | M7 |
+| pwn | 120 | bridge | ✓ |
+| rev | 100 | bridge | ✓ |
 | web | 80 | bridge | ✓ |
 | crypto | 80 | none | ✓ |
-| forensics | 70 | — | M7 |
+| forensics | 70 | bridge | ✓ |
 | misc | 60 | none | ✓ |
-| osint | 50 | — | M7 |
-| network | 60 | — | M7 |
+| osint | 50 | bridge | ✓ |
+| network | 60 | bridge | ✓ |
 
-The step limits for the unshipped five live in `DEFAULT_STEP_LIMITS` in `config.py`,
-waiting on their TOML files; their network modes are an M7 decision and aren't set
-anywhere yet.
+The five M7 categories default to `network = "bridge"` (a 2026-09-09 decision, `DECISIONS.md`
+D14): remote-target pwn, live osint lookups, and network challenges that give a host all
+want egress by default, and `--network none` is one flag away for offline work. `crypto`
+and `misc` stay `none`. `DEFAULT_STEP_LIMITS` in `config.py` still carries the same
+starting step limits; they remain unmeasured until `runectl bench` tunes them.
 
 ## Writing a good playbook
 

@@ -23,6 +23,8 @@ from runectl.providers.base import (
     ToolCallRequest,
     TransientProviderError,
     Usage,
+    api_error,
+    auth_error,
 )
 from runectl.tools.schema import ToolSchema, to_google
 
@@ -107,7 +109,11 @@ class GoogleProvider:
         except genai_errors.APIError as exc:
             if _is_transient(exc):
                 raise TransientProviderError(str(exc)) from exc
-            raise
+            if isinstance(exc, genai_errors.ClientError) and exc.code in (401, 403):
+                raise auth_error("Google", exc) from exc
+            # Any other API error (400/404/422, an unexpected client/server error):
+            # a clean ProviderError, never a raw traceback.
+            raise api_error("Google", exc) from exc
 
         text_parts: list[str] = []
         tool_calls: list[ToolCallRequest] = []

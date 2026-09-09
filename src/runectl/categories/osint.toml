@@ -1,0 +1,51 @@
+brief = "Extract entities, run structured source checks, correlate and validate before submission."
+
+playbook = """
+OSINT: the challenge description is the primary source — mine it before touching
+a tool. Pull out every concrete handle: names, usernames, emails, domains, IPs,
+timestamps, coordinates, and social profiles. The flag path almost always
+threads through one of those.
+
+Some OSINT is self-contained in the provided files and needs no network:
+  - image geolocation: `exiftool` GPS tags, then convert DMS to decimal; the
+    location itself is often the answer
+  - document metadata: author, company, and revision history in a .docx/.pdf
+    (`exiftool`, or unzip the .docx and read docProps/core.xml)
+
+Live enumeration (this category defaults to `--network bridge`, but a given
+sandbox may still be offline — check reachability before assuming a failure is a
+dead end rather than a blocked network):
+  - usernames: the GitHub API (users, repos, gists, commit history — deleted
+    files and secret commits are classic)
+  - domains: `whois` for registrant contacts, `dig`/`nslookup` TXT records
+    (flags and hints hide there), and crt.sh for certificate-transparency subdomains
+  - deleted/old content: the Wayback Machine and archived pages
+
+Correlate across at least two sources and validate a candidate before submitting
+— an unverified single-source guess is exactly what the false-flag rules reject.
+A 404 or a rate-limit response is not progress; a confirmed entity or a matching
+record is.
+"""
+
+required_tools = ["curl", "wget", "whois", "dig", "exiftool", "jq", "python3"]
+
+signal_low = ['not found', '404', 'Not Found', '^$', 'rate limit']
+signal_high = ['flag\{', 'FLAG\{', 'GPS', 'Registrant', 'name_value']
+
+step_limit = 50
+network = "bridge"
+
+[tactic_families]
+enum = 'api\.github|curl .*http|search\?'
+dns = 'whois|dig |nslookup|crt\.sh|dns'
+wayback = 'archive\.org|wayback|web\.archive|timetravel'
+geoloc = 'GPS|GPSLatitude|nominatim|geocode'
+docmeta = 'exiftool|docProps|core\.xml|unzip .*doc'
+
+[budgets]
+per_hypothesis = 2
+per_family = 4
+# D8: forced strategy shift after N no-progress steps or M consecutive errors.
+# Unmeasured starting values (D16) — `runectl bench` is what tunes them.
+no_progress_shift = 3
+consecutive_error_shift = 3

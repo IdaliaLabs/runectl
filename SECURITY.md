@@ -40,7 +40,7 @@ machine between the container and your host.
 | `no-new-privileges` | Set as a `security_opt` |
 | Not privileged | `privileged=False`, no added capabilities, no device or socket mounts |
 | Resource caps | 2 GB memory, 2 CPUs, 512 pids |
-| Network off by default *where it can be* | `crypto` and `misc` run with `network=none`; `web` needs `bridge` to reach a target service. Set per category, overridable with `--network` |
+| Network off by default *where it can be* | `crypto` and `misc` run with `network=none`. The other six — `web` plus the five M7 categories `pwn`/`rev`/`forensics`/`osint`/`network` — default to `bridge` (2026-09-09): remote targets and live lookups want egress, and offline work is one `--network none` away. Set per category, overridable with `--network` |
 | No host mounts | Challenge files are copied in; the host filesystem is not bind-mounted into the container |
 
 **What is not done.** No seccomp or AppArmor profile beyond Docker's default.

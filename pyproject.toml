@@ -45,6 +45,10 @@ files = ["src/runectl"]
 line-length = 110
 target-version = "py312"
 src = ["src", "tests"]
+# Vendored/authored challenge inputs under bench/practice/*/files are data, not
+# project source — they are byte-for-byte upstream (or a fixture) and must not be
+# reformatted to our style.
+extend-exclude = ["bench/practice/*/files"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]

@@ -1,0 +1,13 @@
+name = "esrever"
+category = "rev"
+flag_format = 'csictf\{[a-z_]+\}'
+files = ["files/esrever.py", "files/esrever.txt"]
+
+description = """
+I encrypted my flag so that nobody can see it, but now I realize I don't know
+how to decrypt it. Can you help me?
+
+You are given the encryption program (esrever.py) and the encrypted output it
+produced (esrever.txt). The script embeds a placeholder flag and key; the real
+ones are not in the file.
+"""

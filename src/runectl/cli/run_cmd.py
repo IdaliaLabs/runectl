@@ -19,7 +19,7 @@ from runectl.categories.loader import CategoryLoadError, CategoryNotFoundError
 from runectl.categories.loader import load as load_category
 from runectl.cli.render import render_human, render_ndjson
 from runectl.config import CONTAINER_NAME_PREFIX, DEFAULT_MAX_COST_USD
-from runectl.errors import ProviderError, SandboxError, UsageError
+from runectl.errors import ProviderError, RunectlError, SandboxError, UsageError
 from runectl.flags.review import make_reviewer
 from runectl.loop.context import ContextBuilder
 from runectl.loop.runner import Runner, RunOutcome
@@ -222,7 +222,11 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
     try:
         with sandbox_session(sandbox):
             outcome = runner.run()
-    except (SandboxError, ProviderError) as exc:
+    except RunectlError as exc:
+        # Any run-ending error (sandbox/provider failure, or a UsageError such as
+        # an invalid API key surfaced mid-loop): finalize the trace as an error
+        # and close the writer before re-raising, so no half-written run is left
+        # behind. run_command/bench map the exit_code.
         writer.close()
         store.finish_run(run_id, outcome="error", exit_code=exc.exit_code)
         raise

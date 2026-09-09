@@ -68,7 +68,6 @@ uv run runectl run --challenge bench/practice/easy-01/chal.toml --model claude-s
 | Surface | Behavior today | Lands in |
 |---|---|---|
 | `evidence.added` event | Defined in the schema; nothing emits it — findings carry forward in the conversation only | later |
-| `pwn`, `rev`, `forensics`, `osint`, `network` categories | No TOML; `--category pwn` exits 6 | M7 |
 | `--approval` values | Branched on correctly, but an unrecognized value silently behaves as `gated` rather than exiting 6 | small fix, unscheduled |
 
 ## What the judge actually does
@@ -132,18 +131,27 @@ Accurate tokenization is a later refinement.
 
 **`--dry-run` from the D4 sketch doesn't exist.** No flag, no code path.
 
-**The bench suite is crypto-heavy.** Five MIT-licensed challenges are vendored
-(`bench/README.md`), but four of them are crypto — only `crypto`, `misc` and `web` ship as
-categories, and a web challenge needs a live service the offline sandbox cannot host. A
-solve rate measured today is a statement about cryptography and reasoning, not about
-`runectl` across all eight categories. Rebalance when M7 lands.
+**The bench suite spans five categories as of M7 (2026-09-09).** Ten challenges are
+vendored/authored (`bench/README.md`): the gated subset now covers crypto, misc, rev,
+forensics and network, so a solve rate is no longer only a statement about cryptography.
+Three categories still can't be measured in the gate — `web` needs a live service the
+offline sandbox can't host, and `pwn`/`osint` are present but scored *outside the gate*
+(pwn: a local flag file the agent can read directly; osint: an answer in rotted
+live-internet state). The ten-challenge suite was scored on 2026-09-09 (claude-sonnet-5,
+`bench/results/README.md`): **7/10 solved, 1 false flag, and the V1 gate MET — 6 solved,
+0 false over the 7 gated cases.** Of the new categories, forensics and network solved;
+rev was cut off mid-derivation by the per-run spend ceiling (a budget outcome, not a
+capability wall).
 
-**Three live bench scores. The gate is met on the third — read what that means.**
-`gate_met: true` on the third run (2026-09-08, `bench/results/README.md`) means **3 solved
-and 0 false flags across 4 gated cases**. The unqualified suite numbers in the same report
-are **3 of 5 solved with 1 false flag**, and they have not moved since the second run. The
-gate says the false-flag subsystem is doing its job. It does not say the solver is
-finished, and it is measured on a suite that is four-fifths cryptography.
+**Four live bench scores. The gate is met on the third and again on the fourth — read
+what that means.** The latest run (2026-09-09, `bench/results/README.md`, the M7
+ten-challenge suite) scored **7 of 10 solved with 1 false flag**, with the gate **met — 6
+solved, 0 false over 7 gated cases** spanning crypto, misc, forensics and network. The
+earlier third run (2026-09-08) met it at 3 solved / 0 false over 4 gated cases on the
+five-challenge, four-fifths-crypto suite. The gate says the false-flag subsystem is doing
+its job on the cases it can fairly judge. It does not say the solver is finished — `rev`
+went unsolved (cut off by the per-run spend ceiling mid-derivation), and the one false
+flag is still `quick-math`, below.
 
 `quick-math` is the excluded case, and it is excluded for a stated reason rather than for
 being hard: its run does the Hastad broadcast attack correctly and submits the recovered
@@ -196,7 +204,10 @@ description does not contain enough to solve it without the original repo's file
   solve rate with D16's progress-waste ratio, bounds spend per run and per suite, and
   fails outright on a finalized wrong flag. Built before M7 so the remaining categories
   can be measured as they land rather than after.
-- **M7 — the remaining five categories**, at equal depth.
+- **M7 — done (2026-09-09).** The remaining five categories (`pwn`, `rev`, `forensics`,
+  `osint`, `network`) ship as data at equal depth, the arena grew the toolset they name,
+  and the bench grew from 5 to 10 (one case per new category). Re-benched the same day:
+  7/10 solved, 1 false flag, V1 gate met over the 7 gated cases.
 - **M9 — human render polish.** Compact, foldable, width-aware, over the same event
   stream.
 

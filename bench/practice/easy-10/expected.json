@@ -1,0 +1,7 @@
+{
+  "outcome": "solved",
+  "flag": "csictf{san_francisco}",
+  "gate": false,
+  "gate_note": "Scored outside the V1 gate 2026-09-09. This OSINT challenge is not solvable from the provided file alone: its answer threads through live external state (the image traces to a specific Twitter post, then to a commenter's account and the city they list) that has since rotted and is not reproducible offline. It stays in the suite and in the headline so the osint category runs end-to-end and so a future online run can attempt it, but it cannot be a gate case — the gate must be deterministic and reproducible, and this depends on the live internet at a past moment. No offline-verifiable osint challenge existed in the MIT source; this is the honest fallback flagged in the M7 plan.",
+  "note": "For scoring only. Never referenced by solver code (REBUILD_NOTES.md req 15 / D10)."
+}

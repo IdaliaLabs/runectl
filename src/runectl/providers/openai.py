@@ -21,6 +21,8 @@ from runectl.providers.base import (
     ToolCallRequest,
     TransientProviderError,
     Usage,
+    api_error,
+    auth_error,
 )
 from runectl.tools.schema import ToolSchema, to_openai
 
@@ -85,6 +87,10 @@ class OpenAIProvider:
             )
         except _TRANSIENT_ERRORS as exc:
             raise TransientProviderError(str(exc)) from exc
+        except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
+            raise auth_error("OpenAI", exc) from exc
+        except openai.APIError as exc:
+            raise api_error("OpenAI", exc) from exc
 
         choice = response.choices[0]
         tool_calls: list[ToolCallRequest] = []

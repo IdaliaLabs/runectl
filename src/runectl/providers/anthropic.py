@@ -21,6 +21,8 @@ from runectl.providers.base import (
     ToolCallRequest,
     TransientProviderError,
     Usage,
+    api_error,
+    auth_error,
 )
 from runectl.tools.schema import ToolSchema, to_anthropic
 
@@ -109,6 +111,12 @@ class AnthropicProvider:
             )
         except _TRANSIENT_ERRORS as exc:
             raise TransientProviderError(str(exc)) from exc
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
+            raise auth_error("Anthropic", exc) from exc
+        except anthropic.APIError as exc:
+            # Any other SDK error (400/404/422, an unexpected 4xx, a connection
+            # error not in the transient set): clean ProviderError, not a traceback.
+            raise api_error("Anthropic", exc) from exc
 
         text_parts: list[str] = []
         tool_calls: list[ToolCallRequest] = []
