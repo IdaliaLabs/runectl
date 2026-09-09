@@ -2,7 +2,7 @@
 
 Last updated **2026-09-08**.
 
-M0–M6 and M8 are built, typed, and green: 149 tests passing, `mypy --strict` clean,
+M0–M6 and M8 are built, typed, and green: 174 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 
@@ -68,7 +68,6 @@ uv run runectl run --challenge bench/practice/easy-01/chal.toml --model claude-s
 | Surface | Behavior today | Lands in |
 |---|---|---|
 | `evidence.added` event | Defined in the schema; nothing emits it — findings carry forward in the conversation only | later |
-| LLM disconfirmation pass (D15 §2's last resort) | Not implemented; deterministic re-derivation covers every case reachable at V1 | later, on bench evidence |
 | `pwn`, `rev`, `forensics`, `osint`, `network` categories | No TOML; `--category pwn` exits 6 | M7 |
 | `--approval` values | Branched on correctly, but an unrecognized value silently behaves as `gated` rather than exiting 6 | small fix, unscheduled |
 
@@ -79,10 +78,16 @@ before anything that costs sandbox time:
 
 1. **Plausibility.** Placeholders (`picoCTF{flag}`), UUIDs, JSON fragments,
    capture-interface ids, multi-line strings. Rejected.
-2. **Provenance (D15 §1).** The flag must appear verbatim in a tool result this run
-   observed, that result must not have come from a command the agent wrote the flag into,
-   and the agent must cite the observation by `seq`. Every tool result reaches the model
-   with an `[observation seq=N]` header so it can. Rejected otherwise.
+2. **Provenance (D15 §1).** The flag must appear in a tool result this run observed, that
+   result must not have come from a command the agent wrote the flag into, and the agent
+   must cite the observation by `seq`. Every tool result reaches the model with an
+   `[observation seq=N]` header so it can. Rejected otherwise. **What must appear is the
+   flag's payload** — the part inside the wrapper — since the wrapper is published in the
+   challenge and nobody earns it (amended 2026-09-08). A payload sighting counts only if
+   the wrapper's prefix is attested by the description or `--flag-format` and the payload
+   is at least 8 characters; an invented prefix still requires the whole string. Anti-echo
+   is unchanged and runs on the payload, so an agent that types its own answer into a
+   command is still caught.
 3. **Decoy detection (D15 §3).** A bait-named source, a taunt next to the hit, or a token
    the author pasted into the description. Rejected.
 4. **Corroboration (D15 §4).** How many observations with *different* commands and
@@ -95,6 +100,9 @@ before anything that costs sandbox time:
    provider (~$0.002), framed to find a reason the flag is *wrong*. Runs last, so a flag
    rejected on provenance or a decoy marker never costs a token. A doubtful, unreadable,
    or failed review holds the candidate — it can only withhold a solve, never grant one.
+   It sees the description, the cited command and its output, and **not** the challenge's
+   attached files, which is a known blind spot: on the third bench it held a correct flag
+   for exactly that reason.
 
 Stages 1–3 reject under **every** `--approval` policy. Stages 5–7 decide whether a
 candidate can be finalized without a human: under `gated` all three must pass, otherwise
@@ -122,15 +130,25 @@ categories, and a web challenge needs a live service the offline sandbox cannot 
 solve rate measured today is a statement about cryptography and reasoning, not about
 `runectl` across all eight categories. Rebalance when M7 lands.
 
-**Two live bench scores, gate not met either time.** The second (after the D11 amendment)
-scores **3 of 5 solved, 1 false flag** — the review recovered three solves the old
-corroboration rule was holding. The remaining false flag is `quick-math`, and the second
-run established *why* no automated check will catch it: the reviewer validated the
-agent's derivation, which was mathematically correct, and the wrong answer is a correct
-process that stopped one step early. A fifth run's worth of mechanism will not fix that;
-a human or a self-evidently-correct answer will. There is also an unresolved tension
-between provenance/anti-echo and challenges whose flag is a *computed* value wrapped in a
-known prefix — see `bench/results/README.md`.
+**Three live bench scores. The gate is met on the third — read what that means.**
+`gate_met: true` on the third run (2026-09-08, `bench/results/README.md`) means **3 solved
+and 0 false flags across 4 gated cases**. The unqualified suite numbers in the same report
+are **3 of 5 solved with 1 false flag**, and they have not moved since the second run. The
+gate says the false-flag subsystem is doing its job. It does not say the solver is
+finished, and it is measured on a suite that is four-fifths cryptography.
+
+`quick-math` is the excluded case, and it is excluded for a stated reason rather than for
+being hard: its run does the Hastad broadcast attack correctly and submits the recovered
+value one transformation short of the flag, so provenance, decoys, re-derivation and the
+disconfirmation review all agree with it — correctly. No mechanism this subsystem could
+add would catch that. It still runs, still counts in the headline numbers, and prints its
+exclusion reason beside its result; only the pass/fail gate reads the narrower subset.
+
+**The one held candidate on the third run was holding the *correct* flag**, and the
+reviewer said why: it could not see the challenge's `code.py`, because the review prompt
+gets the description, the cited command and its output and **not** the attached files. That
+is a real blind spot, not a defect in the answer, and it is unfixed pending a decision on
+what widening the review prompt costs.
 
 **The first live bench score, for the record: 0 solved, 1 false flag**
 (`bench/results/README.md`, 2026-09-08, claude-sonnet-5, $0.38). Read the write-up rather
@@ -139,9 +157,18 @@ and held all four for approval, while the one it finalized was wrong. Both halve
 D11's corroboration rule, which on this evidence cost four solves and prevented zero false
 flags. That is one run, not a mandate to change a locked decision.
 
-**The budgets are still unmeasured.** Zero steps were blocked across the entire suite —
-runs took 5–14 steps against limits of 60–80 — so the per-family and per-hypothesis
-budgets have never actually bound anything. Nothing here justifies moving a step limit.
+**The budgets are still unmeasured.** Zero steps have been blocked across any of the three
+suites — runs take 4–16 steps against limits of 60–80 — so the per-family and
+per-hypothesis budgets have never actually bound anything. Nothing here justifies moving a
+step limit. A forced strategy shift *has* now fired on a live run
+(`20260909-011822-4c708c`, three failed commands in a row) and the run recovered and
+solved, which is the first evidence that half of D8 does anything outside a test.
+
+**A per-run spend cap was misread once, and the correction matters more than the reading.**
+The second bench blamed `machine-fix`'s failure on the $0.15 ceiling. The third solved the
+same challenge for **$0.0377** after a provenance change — a quarter of that cap. The cap
+was where a doomed search happened to stop, not the thing stopping it. Treat "it ran out of
+budget" as a hypothesis to check against a trace, not a conclusion.
 
 **`easy-01` is a known-unfair gate.** It was the first vendored challenge and its
 description does not contain enough to solve it without the original repo's file layout;
