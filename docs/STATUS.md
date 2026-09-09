@@ -2,7 +2,7 @@
 
 Last updated **2026-09-08**.
 
-M0–M6 and M8 are built, typed, and green: 174 tests passing, `mypy --strict` clean,
+M0–M6 and M8 are built, typed, and green: 175 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 
@@ -98,15 +98,23 @@ before anything that costs sandbox time:
    the same string again.
 7. **Disconfirmation review (D15 §2).** One call to the cheapest model of the same
    provider (~$0.002), framed to find a reason the flag is *wrong*. Runs last, so a flag
-   rejected on provenance or a decoy marker never costs a token. A doubtful, unreadable,
-   or failed review holds the candidate — it can only withhold a solve, never grant one.
-   It sees the description, the cited command and its output, and **not** the challenge's
-   attached files, which is a known blind spot: on the third bench it held a correct flag
-   for exactly that reason.
+   rejected on provenance or a decoy marker never costs a token. **Advisory since
+   2026-09-08** — recorded in the trace and printed, decides nothing. Its record over nine
+   live reviews was six correct clears, two wrong flags cleared, and one correct flag held;
+   it caught nothing and cost a solve. It also cannot see the challenge's attached files,
+   which is why it held that solve.
 
-Stages 1–3 reject under **every** `--approval` policy. Stages 5–7 decide whether a
-candidate can be finalized without a human: under `gated` all three must pass, otherwise
-the run ends at exit code 2 with the candidate in the trace for `runectl flag approve`.
+Stages 1–3 reject under **every** `--approval` policy. Stages 5–6 — flag format and
+re-derivation — are what decide whether a candidate can be finalized without a human:
+under `gated` both must pass, otherwise the run ends at exit code 2 with the candidate in
+the trace for `runectl flag approve`. Stages 4 and 7 are reported and decide nothing. The
+gating set is named explicitly as `_GATING_CHECKS` in `flags/judge.py` so it cannot drift
+without someone editing that line.
+
+Both mechanisms removed from the gate so far — corroboration, then the review — were forms
+of model judgement, and each was satisfiable or fooled by the model it was judging. What
+holds is the sandbox: provenance says the string came from a tool's output rather than the
+agent's own command, and re-derivation says the tool produces it again.
 
 A rejection is feedback, not failure — it goes back to the model as a tool message and the
 run continues. No flag with evidence beats a wrong flag (D15 §5).

@@ -5,10 +5,14 @@ claiming a solve, `runectl flag list` shows what was held and why, and
 `runectl flag approve` finalizes it — recording that a person, not the judge,
 made that call. All at zero spend: StubSandbox + ScriptedProvider.
 
-What holds the candidate here is the D15 §2 disconfirmation review saying it
-doubts the flag. Before 2026-09-08 this test held on corroboration instead; the
-first live bench showed that rule holding four *correct* flags, so the review is
-what the gate hangs on now (bench/results/README.md).
+What holds the candidate here is **re-derivation**: the cited command does not
+produce the flag a second time, so the sandbox cannot confirm it. This test has
+now outlived two other answers to "what holds a candidate" — corroboration until
+2026-09-08 (it held four *correct* flags on the first live bench) and the
+disconfirmation review until later the same day (nine live reviews: two wrong
+flags cleared, one correct flag held, nothing caught). Both were model or agent
+judgement. What is left is the thing neither could fool: the sandbox re-running
+the command (bench/results/README.md).
 """
 
 from __future__ import annotations
@@ -24,7 +28,6 @@ from pathlib import Path
 import pytest
 
 from runectl.categories.loader import load as load_category
-from runectl.flags.review import ReviewVerdict
 from runectl.loop.runner import Runner
 from runectl.loop.state import Challenge
 from runectl.providers.base import Completion, Message, ToolCallRequest, Usage
@@ -34,6 +37,24 @@ from runectl.sandbox.stub import StubSandbox, ok
 from runectl.trace.store import Store
 
 FLAG = "flag{h3ld_f0r_4ppr0v4l}"
+
+
+class _OnceSandbox(StubSandbox):
+    """Produces the flag the first time and never again.
+
+    A command whose output the sandbox cannot reproduce — a race, a fetch, a
+    one-shot side effect — is exactly the case re-derivation exists to hold.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(script={"cat /ctf/chal.txt": ok(FLAG)}, default=ok(""))
+        self._seen: set[str] = set()
+
+    def exec(self, argv_or_script: str, *, timeout_s: int):  # type: ignore[no-untyped-def]
+        if argv_or_script in self._seen:
+            return ok("")
+        self._seen.add(argv_or_script)
+        return super().exec(argv_or_script, timeout_s=timeout_s)
 _OBSERVATION_SEQ = re.compile(r"\[observation seq=(\d+)\]")
 
 
@@ -93,7 +114,7 @@ def _run(store: Store) -> str:
         provider=model.provider,
         config_snapshot={"challenge": challenge.model_dump(mode="json"), "approval_policy": "gated"},
     )
-    sandbox = StubSandbox(script={"cat /ctf/chal.txt": ok(FLAG)})
+    sandbox = _OnceSandbox()
     sandbox.start()
     runner = Runner(
         challenge=challenge,
@@ -102,7 +123,6 @@ def _run(store: Store) -> str:
         provider=ScriptedProvider(_script()),
         sandbox=sandbox,
         writer=writer,
-        reviewer=lambda request: ReviewVerdict(False, "no derivation shown, just a file read"),
     )
     outcome = runner.run()
     sandbox.stop()
@@ -141,8 +161,9 @@ def test_a_doubted_flag_is_held_then_approved(runectl_home: Path) -> None:
     held = [json.loads(line) for line in listed.stdout.splitlines() if line.strip()]
     assert len(held) == 1
     assert held[0]["flag"] == FLAG
-    # The reason has to be actionable: it carries the reviewer's own words.
-    assert "no derivation shown" in held[0]["held_because"]
+    # The reason has to be actionable: it names the check that could not pass.
+    assert "rederivation" in held[0]["held_because"]
+    assert "did not produce the flag again" in held[0]["held_because"]
 
     approved = subprocess.run(
         [sys.executable, "-m", "runectl", "flag", "approve", run_id],

@@ -14,15 +14,23 @@ finalizing it. Five mechanisms, in the order D15 names them:
    because the wrapper is published in the challenge and nobody earns it
    (`_payload_is_provenance`, 2026-09-08).
 2. **Verification re-derivation** — the cited command is re-run in the sandbox
-   and must produce the same string again, plus the disconfirmation pass in
-   `flags/review.py`: one cheap model call, framed to find a reason the flag is
-   wrong (D15 mechanism 2's "framed to *disconfirm* rather than confirm").
+   and must produce the same string again. The disconfirmation pass in
+   `flags/review.py` (D15 mechanism 2's "framed to *disconfirm* rather than
+   confirm") still runs on every candidate and is recorded, but is **advisory**
+   as of 2026-09-08: over nine live reviews it cleared two wrong flags, held one
+   correct one, and caught nothing. See the D11 amendment.
 3. **Decoy detection** — `flags/decoys.py`.
 4. **Independent corroboration** is still counted and reported, but **no longer
    gates** — see the 2026-09-08 D11 amendment and `bench/results/README.md`. It
    held four correct flags and finalized a wrong one, because a clean solve
    produces its answer once and a stubborn agent produces it as many times as
    the checker asks for.
+
+What actually gates a candidate under `gated`, then, is the deterministic set:
+provenance and anti-echo, decoy markers, `--flag-format`, and re-derivation in
+the sandbox. That is not a retreat — it is what the bench evidence supports.
+Both model-judgement mechanisms tried so far were satisfiable or fooled by the
+model they were judging; the sandbox is not.
 5. **No-flag-is-success** — enforced by the loop, not here: a rejection is
    feedback and the run continues; exhausting without a flag exits 3 rather
    than fabricating one. The base rules (`loop/context.py`) say so to the model.
@@ -69,6 +77,11 @@ _MIN_CORE_LEN = 4
 _MIN_PAYLOAD_LEN = 8
 
 _SEQ_IN_TEXT = re.compile(r"\d+")
+
+# The checks whose failure can hold a candidate under `gated`. Everything else
+# a verdict carries — corroboration, the disconfirmation review — is recorded
+# for whoever reads it and decides nothing (D11, amended 2026-09-08).
+_GATING_CHECKS = frozenset({"flag_format", "rederivation"})
 
 
 def _payload_of(flag: str) -> str:
@@ -239,7 +252,9 @@ class FlagJudge:
         checks.append(Check("rederivation", rederived, rederive_detail))
 
         # Run last: it is the only stage that costs tokens, so everything a
-        # deterministic check can settle is already settled by here.
+        # deterministic check can settle is already settled by here. Advisory
+        # since 2026-09-08 — its verdict is recorded and printed, and does not
+        # decide anything.
         reviewed, review_detail = self._review(flag, how_found, source)
         checks.append(Check("review", reviewed, review_detail))
 
@@ -248,7 +263,6 @@ class FlagJudge:
             corroboration=corroboration,
             format_ok=format_ok,
             rederived=rederived,
-            reviewed=reviewed,
             checks=checks,
         )
 
@@ -412,7 +426,6 @@ class FlagJudge:
         corroboration: int,
         format_ok: bool,
         rederived: bool,
-        reviewed: bool,
         checks: list[Check],
     ) -> JudgeVerdict:
         if self._policy == "auto":
@@ -432,18 +445,19 @@ class FlagJudge:
                 checks=tuple(checks),
             )
 
-        if format_ok and rederived and reviewed:
+        if format_ok and rederived:
             return JudgeVerdict(
                 decision="finalized",
                 provenance_seq=source_seq,
-                reason=(
-                    "re-derived in the sandbox, matching the expected format, and a "
-                    "disconfirmation review found no reason to doubt it"
-                ),
+                reason="re-derived in the sandbox and matching the expected format",
                 corroboration=corroboration,
                 checks=tuple(checks),
             )
-        unmet = "; ".join(f"{check.name}: {check.detail}" for check in checks if not check.passed)
+        unmet = "; ".join(
+            f"{check.name}: {check.detail}"
+            for check in checks
+            if not check.passed and check.name in _GATING_CHECKS
+        )
         return JudgeVerdict(
             decision="pending",
             provenance_seq=source_seq,

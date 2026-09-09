@@ -103,21 +103,39 @@ def test_one_sighting_is_enough_when_the_review_is_clean() -> None:
     assert verdict.corroboration == 1
 
 
-def test_a_doubtful_review_holds_the_candidate() -> None:
+def test_a_doubtful_review_is_recorded_and_does_not_hold_the_candidate() -> None:
+    """Advisory since 2026-09-08 (D11).
+
+    Over nine live reviews the pass cleared two wrong flags, held one correct
+    one, and caught nothing (`bench/results/README.md`). Its verdict is worth
+    recording for whoever reads the trace; it is not worth a solve.
+    """
     reviewer = _Reviewer(sound=False, reason="the integer is right but the encoding is not")
     verdict = _judge(reviewer=reviewer).judge(
         flag=FLAG, history=_corroborated(), fallback_seq=99, provenance="10"
     )
-    assert verdict.decision == "pending"
-    assert "encoding" in verdict.reason
+    assert verdict.decision == "finalized"
+    review = next(check for check in verdict.checks if check.name == "review")
+    assert review.passed is False
+    assert "encoding" in review.detail
 
 
-def test_no_reviewer_available_holds_rather_than_finalizes() -> None:
-    """Fail closed: a check that could not run is not a check that passed."""
+def test_no_reviewer_available_no_longer_holds() -> None:
+    """The deterministic checks are the gate, so a missing reviewer costs nothing."""
     verdict = _judge(reviewer=None).judge(
         flag=FLAG, history=_corroborated(), fallback_seq=99, provenance="10"
     )
+    assert verdict.decision == "finalized"
+
+
+def test_a_flag_that_cannot_be_re_derived_is_still_held() -> None:
+    """What the gate rests on now: the sandbox, not a second opinion."""
+    executor = _Executor({})  # the cited command produces nothing the second time
+    verdict = _judge(sandbox=executor).judge(
+        flag=FLAG, history=_corroborated(), fallback_seq=99, provenance="10"
+    )
     assert verdict.decision == "pending"
+    assert "rederivation" in verdict.reason
 
 
 def test_the_review_sees_the_evidence_and_not_the_whole_run() -> None:
