@@ -12,6 +12,15 @@ And one thing it refuses to average away: a **false flag**. The V1 gate is 2 of
 5 solved with *zero* of them, so a wrong flag confidently finalized is not
 0.8 of a solve, it is a failure of the thing the tool exists to get right.
 
+A case may set `"gate": false` in its `expected.json` to sit **outside** that
+gate while staying in the suite (added 2026-09-08 for `quick-math`, whose wrong
+answer is correct mathematics one step short — every check the tool has agrees
+with it, correctly). Excluding a challenge you fail is how benchmarks stop
+meaning anything, so the exclusion is deliberately loud rather than quiet: the
+case still runs, still appears in the report, still counts in the headline solve
+rate and false-flag count, and its `gate_note` reason is printed next to it.
+What changes is only which subset the pass/fail gate reads.
+
 D10 (no answer keys anywhere near the solver): `expected.json` is read only in
 `score()`, which takes a finished outcome and never touches the run. Nothing in
 `loop/`, `flags/` or `progress/` imports this module.
@@ -38,6 +47,8 @@ class BenchCase:
     challenge_path: Path
     category: str
     expected_flag: str
+    in_gate: bool = True
+    gate_note: str = ""
 
     @property
     def directory(self) -> Path:
@@ -59,6 +70,8 @@ class CaseResult:
     blocked_steps: int
     cost_usd: float
     detail: str = ""
+    in_gate: bool = True
+    gate_note: str = ""
 
     @property
     def progress_ratio(self) -> float:
@@ -78,6 +91,8 @@ class CaseResult:
             "progress_ratio": round(self.progress_ratio, 4),
             "cost_usd": round(self.cost_usd, 6),
             "detail": self.detail,
+            "in_gate": self.in_gate,
+            "gate_note": self.gate_note,
         }
 
 
@@ -129,9 +144,25 @@ class BenchReport:
         return sum(r.cost_usd for r in self.results)
 
     @property
+    def gate_results(self) -> tuple[CaseResult, ...]:
+        return tuple(r for r in self.results if r.in_gate)
+
+    @property
+    def gate_solved(self) -> int:
+        return sum(1 for r in self.gate_results if r.status == "solved")
+
+    @property
+    def gate_false_flags(self) -> int:
+        return sum(1 for r in self.gate_results if r.status == "false_flag")
+
+    @property
     def gate_met(self) -> bool:
-        """The V1 gate (DECISIONS.md D15, plan §10.1): 2 of 5 solved, 0 false flags."""
-        return self.solved >= 2 and self.false_flags == 0
+        """The V1 gate (DECISIONS.md D15, plan §10.1): 2 of 5 solved, 0 false flags.
+
+        Read over the gated subset only. With no case excluded — the normal
+        case — that subset is the whole suite and this is the original rule.
+        """
+        return self.gate_solved >= 2 and self.gate_false_flags == 0
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -140,6 +171,9 @@ class BenchReport:
             "total": self.total,
             "solved": self.solved,
             "false_flags": self.false_flags,
+            "gate_total": len(self.gate_results),
+            "gate_solved": self.gate_solved,
+            "gate_false_flags": self.gate_false_flags,
             "solve_rate": round(self.solve_rate, 4),
             "steps_used": self.steps_used,
             "progress_steps": self.progress_steps,
@@ -169,12 +203,24 @@ def load_suite(root: Path, *, only: Sequence[str] = ()) -> list[BenchCase]:
         flag = expected.get("flag")
         if not isinstance(flag, str) or not flag:
             raise SuiteError(f"{directory.name}/expected.json has no flag to score against")
+        in_gate = expected.get("gate", True)
+        if not isinstance(in_gate, bool):
+            raise SuiteError(f"{directory.name}/expected.json: \"gate\" must be true or false")
+        gate_note = str(expected.get("gate_note", ""))
+        if not in_gate and not gate_note:
+            raise SuiteError(
+                f"{directory.name}/expected.json sits outside the gate but gives no "
+                '"gate_note" saying why — an unexplained exclusion is how a benchmark '
+                "stops meaning anything"
+            )
         cases.append(
             BenchCase(
                 name=raw.get("name", directory.name),
                 challenge_path=challenge_path,
                 category=raw.get("category", ""),
                 expected_flag=flag,
+                in_gate=in_gate,
+                gate_note=gate_note,
             )
         )
     if only:
@@ -235,6 +281,8 @@ def score(
         blocked_steps=blocked_steps,
         cost_usd=cost_usd,
         detail=detail,
+        in_gate=case.in_gate,
+        gate_note=case.gate_note,
     )
 
 
@@ -254,8 +302,12 @@ def render_report(report: BenchReport) -> str:
             f"  {result.progress_steps}/{result.steps_used} steps"
             f"  ${result.cost_usd:.4f}"
         )
+        if not result.in_gate:
+            line += "  [outside gate]"
         if result.detail:
             line += f"\n      {result.detail}"
+        if not result.in_gate and result.gate_note:
+            line += f"\n      outside the gate: {result.gate_note}"
         lines.append(line)
     lines += [
         "",
@@ -265,6 +317,15 @@ def render_report(report: BenchReport) -> str:
         f"  blocked steps  {report.blocked_steps}",
         f"  cost           ${report.cost_usd:.4f}",
         "",
-        f"  V1 gate (2 solved, 0 false flags): {'MET' if report.gate_met else 'not met'}",
     ]
+    excluded = report.total - len(report.gate_results)
+    scope = f" over {len(report.gate_results)} gated cases, {excluded} outside" if excluded else ""
+    lines += [
+        f"  V1 gate (2 solved, 0 false flags): {'MET' if report.gate_met else 'not met'}"
+        f"{scope}",
+    ]
+    if excluded:
+        lines.append(
+            f"      gated subset: {report.gate_solved} solved, {report.gate_false_flags} false"
+        )
     return "\n".join(lines)

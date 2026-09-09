@@ -1,5 +1,7 @@
 {
   "outcome": "solved",
   "flag": "csictf{h45t4d}",
+  "gate": false,
+  "gate_note": "Scored outside the V1 gate 2026-09-08. Its failure mode is not one any mechanism in the tool can catch: the run performs the Hastad broadcast attack correctly, verifies the cube root is exact, and submits the recovered value one transformation short of the flag. Provenance, decoys, re-derivation and the disconfirmation review all agree with it, correctly - the mathematics is sound. It stays in the suite and in the headline solve rate because it is a real challenge the tool should eventually solve; it is out of the gate because leaving it in makes 'zero false flags' unmeetable for reasons unrelated to false-flag defense.",
   "note": "For scoring only. Never referenced by solver code (REBUILD_NOTES.md req 15 / D10)."
 }

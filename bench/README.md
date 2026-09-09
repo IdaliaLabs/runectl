@@ -62,3 +62,20 @@ it knows it has it.
    small inputs).
 5. **No live services.** A challenge that needs a netcat listener, a Discord bot, or a web
    server is not runnable in the offline sandbox and does not belong here yet.
+
+## Cases scored outside the gate
+
+`expected.json` may carry `"gate": false` with a `gate_note`. Such a case runs
+normally, appears in the report marked `[outside gate]` with its reason, and
+still counts in the headline solve rate and false-flag count — only the V1
+pass/fail gate (2 solved, 0 false flags) reads the narrower subset. `load_suite`
+rejects an exclusion with no `gate_note`.
+
+`easy-01` (`quick-math`) is the one case using it, as of 2026-09-08. It is not
+excluded for being hard: it is excluded because its failure is a capability
+failure that arrives shaped like a false flag. The run does the Hastad broadcast
+attack correctly and submits the recovered value one transformation short of the
+flag, so every check the tool has agrees with it — correctly. Keeping it inside
+the gate would make "0 false flags" unmeetable for a reason unrelated to
+false-flag defense. It stays in the suite because it is a challenge the solver
+should eventually get right, and the headline number keeps saying it does not.

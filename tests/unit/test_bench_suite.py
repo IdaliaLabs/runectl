@@ -100,3 +100,79 @@ def test_the_human_report_names_the_gate_and_the_waste(tmp_path: Path) -> None:
     assert "solve rate" in text
     assert "progress ratio" in text
     assert "V1 gate" in text
+
+
+# -- cases scored outside the gate (2026-09-08) -------------------------------
+
+
+def _outside_gate(tmp_path: Path, name: str, note: str = "correct math, one step short") -> BenchCase:
+    directory = tmp_path / name
+    directory.mkdir(exist_ok=True)
+    (directory / "chal.toml").write_text(f'name = "{name}"\ncategory = "crypto"\n')
+    (directory / "expected.json").write_text(
+        json.dumps({"flag": FLAG, "gate": False, "gate_note": note})
+    )
+    return BenchCase(
+        name=name,
+        challenge_path=directory / "chal.toml",
+        category="crypto",
+        expected_flag=FLAG,
+        in_gate=False,
+        gate_note=note,
+    )
+
+
+def test_a_case_outside_the_gate_still_counts_in_the_headline_numbers(tmp_path: Path) -> None:
+    """Loud exclusion: the failure stays visible, only the gate's scope changes."""
+    report = BenchReport(
+        suite="s",
+        model="m",
+        results=(
+            _scored(_case(tmp_path, "a"), "solved", FLAG),
+            _scored(_case(tmp_path, "b"), "solved", FLAG),
+            _scored(_outside_gate(tmp_path, "c"), "solved", "csictf{wrong}"),
+        ),
+    )
+    assert report.false_flags == 1
+    assert report.solved == 2
+    assert report.gate_false_flags == 0
+    assert report.gate_met is True
+
+
+def test_a_false_flag_inside_the_gate_still_fails_it(tmp_path: Path) -> None:
+    report = BenchReport(
+        suite="s",
+        model="m",
+        results=(
+            _scored(_case(tmp_path, "a"), "solved", FLAG),
+            _scored(_case(tmp_path, "b"), "solved", FLAG),
+            _scored(_case(tmp_path, "c"), "solved", "csictf{wrong}"),
+        ),
+    )
+    assert report.gate_met is False
+
+
+def test_the_report_says_which_cases_sit_outside_the_gate_and_why(tmp_path: Path) -> None:
+    report = BenchReport(
+        suite="s", model="m", results=(_scored(_outside_gate(tmp_path, "c"), "unsolved", None),)
+    )
+    rendered = render_report(report)
+    assert "[outside gate]" in rendered
+    assert "one step short" in rendered
+    assert "1 outside" in rendered
+
+
+def test_load_suite_reads_the_gate_flag(tmp_path: Path) -> None:
+    _outside_gate(tmp_path, "c")
+    (case,) = load_suite(tmp_path)
+    assert case.in_gate is False
+    assert case.gate_note
+
+
+def test_an_exclusion_without_a_reason_is_a_suite_error(tmp_path: Path) -> None:
+    directory = tmp_path / "c"
+    directory.mkdir()
+    (directory / "chal.toml").write_text('name = "c"\ncategory = "crypto"\n')
+    (directory / "expected.json").write_text(json.dumps({"flag": FLAG, "gate": False}))
+    with pytest.raises(SuiteError, match="gate_note"):
+        load_suite(tmp_path)
