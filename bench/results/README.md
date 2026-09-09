@@ -170,3 +170,102 @@ decision, but this is the first real data the decision has ever had.
   suite, so the per-family and per-hypothesis budgets were never load-bearing.
   Runs were 5–14 steps against limits of 60–80. The step limits are still
   unmeasured, and this run gives no reason to move them.
+
+---
+
+## Third run — 2026-09-08, `2026-09-08c-claude-sonnet-5.json`
+
+**3/5 solved, 1 held, 1 false flag, $0.3504. The V1 gate is met: 3 solved and
+0 false flags across the 4 gated cases.**
+
+Two changes since the second run: provenance matches the flag's *payload*
+instead of the whole string (D15 mechanism 1, amended today), and `quick-math`
+is scored outside the gate with its reason recorded.
+
+| case | result | steps | progress | cost |
+|---|---|---|---|---|
+| `quick-math` | **false flag** (outside gate) | 11 | 10/11 | $0.0760 |
+| `modern-clueless-child` | solved | 9 | 6/9 | $0.0834 |
+| `rivest-shamir-adleman` | solved | 16 | 9/16 | $0.1148 |
+| `machine-fix` | **held the correct flag** | 4 | 3/4 | $0.0377 |
+| `little-rsa` | solved | 9 | 7/9 | $0.0385 |
+
+Suite progress ratio 0.71, waste 0.29, 0 blocked steps.
+
+### Payload provenance did the thing it was built for
+
+`machine-fix` was the case. It reached the correct value at **step 2** and
+submitted at step 4, for **$0.0377** — against the previous run, where it
+reached the same value at step 13 and then died against the $0.15 spend cap at
+step 17 with no legal way to submit what it had already computed.
+
+The trace is unambiguous about which rule let it through. Observation `seq 14`
+is `785539772602034710213927792950\n` and nothing else; the string
+`csictf{785539772602034710213927792950}` appears nowhere in any tool output for
+the whole run. Under the old rule that flag was unsubmittable no matter how
+correct it was. Under the new one the payload is the evidence and the wrapper —
+which the challenge prints in its own description — is not something the agent
+has to manufacture.
+
+Worth stating plainly: the raised per-run cap ($0.15 → $0.25) was **not** what
+fixed this. The run cost $0.0377. The cap was never the binding constraint; it
+only looked that way because the agent kept spending steps hunting for a way to
+satisfy a rule that could not be satisfied.
+
+### What held it: the reviewer asked for something we never gave it
+
+`machine-fix` exited 2 with the *correct* flag pending. The reviewer's words:
+
+> The submission lacks the original code specification — without knowing what
+> the loop actually computes … there is no way to verify that the closed-form
+> formula correctly models the original computation.
+
+That is a fair objection and the reviewer is not wrong. The challenge ships
+`/ctf/code.py`; the review prompt gets the description, the cited command and
+its output, and **not the challenge's files**. The reviewer was asked to check a
+derivation against a specification it had been denied. Holding was the correct
+response to what it could see.
+
+This is the first time the review pass has withheld a solve for want of context
+rather than for a defect in the answer, and it is a cheap fix — `code.py` is
+under 1 KB. It is not made here: a change to what the reviewer sees changes what
+every future review costs and catches, and one observation is not a mandate.
+Logged as an open question instead.
+
+### `quick-math`, third time, same wall
+
+Finalized `csictf{9f1ff1d8e8}`; the answer is `csictf{h45t4d}`. The Hastad
+attack is correct and recovers m = 683435743464. The flag is those *decimal
+digits* read as hex — `68 34 35 74 34 64` → `h45t4d`. The run instead computed
+`hex(m)` = `0x9f1ff1d8e8` and wrapped that. Every check agreed with it, again,
+correctly: the mathematics is sound, the value is re-derivable, the reviewer
+validated the attack. This is what "scored outside the gate" was decided for,
+and the report prints the exclusion and its reason next to the result rather
+than hiding the case.
+
+One detail from that run to keep in view. At step 10 the agent ran
+`python3 -c "m=683435743464; h=hex(m)[2:]; print('csictf{'+h+'}')"` — assembling
+the wrapper inside a command so the whole string would appear in output. The
+judge accepted it because the payload was *computed* rather than typed, which is
+the right call: `print('csictf{'+h+'}')` and a genuine solver's final line are
+the same command when the value comes from a variable. Anti-echo can only see
+literals, and this is the boundary of what it can see. Noted, not patched — the
+flag it produced was wrong for reasons that have nothing to do with provenance.
+
+### The gate, honestly stated
+
+`gate_met: true` here means **3 solved, 0 false flags over 4 gated cases**, with
+`quick-math` excluded and printed. The unqualified suite numbers — 3/5 solved
+with 1 false flag — are still the headline in the same report and have not
+moved. The gate says the false-flag subsystem is doing its job; it does not say
+the solver is finished.
+
+### Open after this run
+
+- **The reviewer's blind spot.** It cannot see challenge files. Fixing it would
+  likely convert `machine-fix` from held to solved. Needs a decision on cost.
+- **Five categories still unbuilt** (`pwn`, `rev`, `forensics`, `osint`,
+  `network`). Four of the five bench cases are crypto; the suite currently
+  measures one category well and nothing else at all.
+- **`runectl flag approve 20260909-012150-7cc6e6`** would finalize `machine-fix`
+  by hand, which is exactly what exit 2 is for.
