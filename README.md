@@ -16,10 +16,10 @@ bounds as of a dated 2026-09-09 amendment to D13; it is a second consumer of the
 event stream, never a network surface, and every run it launches is still a plain
 non-interactive `runectl run` subprocess.
 
-> **Status: pre-alpha.** M0–M8 are built and green: the loop, trace, sandbox,
+> **Status: pre-alpha.** M0–M9 are built and green: the loop, trace, sandbox,
 > provider and replay layers, the progress/budget machinery, the false-flag subsystem,
 > `runectl bench`, and (M7, 2026-09-09) **all eight categories ship** — `crypto`, `misc`,
-> `web`, `pwn`, `rev`, `forensics`, `osint` and `network`, at equal depth. Since then:
+> `web`, `pwn`, `rev`, `forensics`, `osint` and `network`, at equal depth. M9 added
 > extended thinking (D20), `runectl config`/`models`/`runs`, and the `runectl tui`
 > interactive view (D13 amendment) — see [`docs/CLI.md`](docs/CLI.md).
 >
@@ -223,7 +223,7 @@ Override with `RUNECTL_HOME` and `RUNECTL_CONFIG_HOME` (both honor `XDG_DATA_HOM
 |---|---|
 | [`docs/CLI.md`](docs/CLI.md) | Every command and flag, exit codes, the NDJSON output contract |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map, the anatomy of one run, the seams later milestones fill |
-| [`docs/TRACE.md`](docs/TRACE.md) | The trace format: envelope, all 16 event types, `run.json`, artifacts, cassettes |
+| [`docs/TRACE.md`](docs/TRACE.md) | The trace format: envelope, all 19 event types, `run.json`, artifacts, cassettes |
 | [`docs/PROVIDERS.md`](docs/PROVIDERS.md) | Model registry, key resolution, cost accounting, record/replay |
 | [`docs/CATEGORIES.md`](docs/CATEGORIES.md) | How to write a category TOML — adding a category is never a code change |
 | [`docs/STATUS.md`](docs/STATUS.md) | What is real, what is a stub, what is a known gap |
@@ -232,6 +232,7 @@ Override with `RUNECTL_HOME` and `RUNECTL_CONFIG_HOME` (both honor `XDG_DATA_HOM
 | [`SECURITY.md`](SECURITY.md) | The sandbox threat model, what Docker is *not* protecting you from, reporting |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Dev setup, the checks, and the architectural rules a PR must not break |
 | [`DECISIONS.md`](DECISIONS.md) | The locked architecture (D1–D20). Read before changing anything structural. |
+| [`POSTMORTEM.md`](POSTMORTEM.md) | The predecessor this replaces: what it got wrong, and the decision that answers each item |
 
 ## Development
 

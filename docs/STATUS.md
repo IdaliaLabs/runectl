@@ -3,7 +3,7 @@
 Last updated **2026-09-09** (thinking capture, `config`/`models`/`runs`, and the TUI —
 see M9 below — landed the same day as the M7/M8 entries this file already described).
 
-M0–M9 are built, typed, and green: 222 tests passing, `mypy --strict` clean,
+M0–M9 are built, typed, and green: 223 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 

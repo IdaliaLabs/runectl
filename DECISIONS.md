@@ -1,6 +1,6 @@
 # DECISIONS — runectl (locked)
 
-Written 2026-09-05, updated 2026-09-05 (name, CLI-only lock, multi-provider/no-default, equal categories, D15/D16 — see "Corrections folded in below"). This closes `REBUILD_NOTES.md` §7 and `PLAN.md` "Finish the stack decision." Everything here is **locked for V1**: build to it, don't re-litigate it mid-build. Changing a decision means editing this file with a dated reason, not quietly diverging in code.
+Written 2026-09-05, updated 2026-09-05 (name, CLI-only lock, multi-provider/no-default, equal categories, D15/D16 — see "Corrections folded in below"). This closes the predecessor post-mortem's open-decisions list (`POSTMORTEM.md`) and `PLAN.md` "Finish the stack decision." Everything here is **locked for V1**: build to it, don't re-litigate it mid-build. Changing a decision means editing this file with a dated reason, not quietly diverging in code.
 
 Product, restated in one paragraph so the decisions have something to serve:
 
@@ -24,7 +24,7 @@ This file originally used the working name `idalia` and left the GUI as a later,
 
 Locked. Reasons: the CTF tooling ecosystem is Python (pwntools, angr, Crypto, scapy, binwalk wrappers); both provider SDKs are first-class; the earned heuristics we're porting as *ideas* (tactic families, fingerprinting, flag plausibility) are cheapest to re-express in the language they were reasoned in. 3.12 not 3.13 for tooling compatibility breadth.
 
-- Dependency manager: **uv**, with a committed `uv.lock`. Every dependency pinned (fixes `REBUILD_NOTES.md` §3 security hygiene).
+- Dependency manager: **uv**, with a committed `uv.lock`. Every dependency pinned (fixes `POSTMORTEM.md` §2 security hygiene).
 - Layout: `src/` layout, package name `runectl`, console script `runectl`.
 - Typed throughout; `mypy --strict` on `src/runectl/` in CI. This is the direct structural answer to "stringly-typed control flow."
 - Runtime deps, complete V1 list: `typer`, `pydantic>=2`, `docker`, `anthropic`, `openai`, `google-genai`, `keyring`, `rich`. Category data uses stdlib `tomllib` — no YAML dep. Dev: `pytest`, `pytest-cov`, `mypy`, `ruff`.
@@ -50,7 +50,7 @@ Locked. Docker-per-challenge is the mechanism we have evidence for (it worked at
 - Every command is mirrored to `/ctf/.agent_live.log` inside the container so a human can `docker exec` and tail it mid-run (preserve item 12). Interactive tools are always driven non-interactively — `run_gdb` is batch-only, no exceptions (item 11).
 - **Amended 2026-09-07** (carried back from the predecessor after re-reading `DeprecatedProject/.../routes.py:1200` and `docker_mgr.py:18`, both dropped by accident in the rewrite):
   - **The arena is pinned to `linux/amd64`**, on both `docker build` and `containers.run`, regardless of the host's own architecture. CTF challenge binaries are overwhelmingly x86-64 ELF; on an arm64 host an unpinned build yields an arm64 arena in which those binaries cannot execute, and the failure presents as a broken challenge rather than a broken arena. Docker emulates; slower is the correct trade. `arena status`/`inspect()` additionally report the built image's architecture and warn on a mismatch, so an already-built arm64 arena is diagnosed rather than silently wrong.
-  - **Containers are named `runectl-<run_id>`.** The predecessor named them `ctf-agent-<cid>` specifically so a human could `docker exec -it <name> bash` and take over mid-run — a workflow actually used at competitions (`TEARDOWN.md` line 13). A stale namesake from a crashed run is force-removed before start, as the predecessor did. `runectl run` prints the attach command on the human render.
+  - **Containers are named `runectl-<run_id>`.** The predecessor named them `ctf-agent-<cid>` specifically so a human could `docker exec -it <name> bash` and take over mid-run — a workflow actually used at competitions (`POSTMORTEM.md` §3). A stale namesake from a crashed run is force-removed before start, as the predecessor did. `runectl run` prints the attach command on the human render.
 - `put_inputs` verifies what actually landed and returns real paths; a file the user passed that didn't make it into `/ctf/` is a hard error before the first paid call, not an `[uploads verify]` notice the agent has to notice.
 
 ### D3 — Trace storage: **append-only JSONL as the source of truth, SQLite as a rebuildable index**
@@ -128,7 +128,7 @@ Locked: `run_command`, `write_file`, `run_gdb`, `search_flag`, `submit_flag` (pr
 
 ### D8 — Progress machinery: **category-parameterized from day one**
 
-Locked, and this is the crown jewel (`TEARDOWN.md` §3). Anti-loop is not "web plus seven strings of prompt text." Every category gets the same four mechanisms, tuned by data:
+Locked, and this is the crown jewel (`POSTMORTEM.md` §2, coverage). Anti-loop is not "web plus seven strings of prompt text." Every category gets the same four mechanisms, tuned by data:
 
 1. **Tactic families** — semantic classification of a command into a family (e.g. `dirfuzz`, `sqli`, `strings`, `disasm`, `decode`, `crack`, `pcap-filter`). Family regexes live in the category's data file, over a shared default set.
 2. **Output fingerprinting** — normalize volatile parts (HTTP dates/headers, timestamps, PIDs, addresses, whitespace) then hash; a repeat fingerprint is not progress.
@@ -139,7 +139,7 @@ Shared defaults apply equally to all eight categories on day one — no earner-f
 
 ### D9 — Categories as data: **one TOML per category, loaded at runtime**
 
-Locked. `src/runectl/categories/{pwn,web,crypto,forensics,rev,misc,osint,network}.toml`, each containing: execution brief, playbook text, required-tool list, tactic-family patterns, low/high-signal patterns, budgets, step limit, default network mode. Sourced from `PROMPT_ARCHIVE.md` **[DURABLE]**/**[EARNED]** material, re-edited — not pasted wholesale. Adding a category is a data file; it is never a code change. The eight `[STALE]` step limits are carried as *starting* values explicitly marked unmeasured, and `runectl bench` is what tunes them.
+Locked. `src/runectl/categories/{pwn,web,crypto,forensics,rev,misc,osint,network}.toml`, each containing: execution brief, playbook text, required-tool list, tactic-family patterns, low/high-signal patterns, budgets, step limit, default network mode. Sourced from the predecessor's prompt archive (**[DURABLE]**/**[EARNED]** material), re-edited — not pasted wholesale. Adding a category is a data file; it is never a code change. The eight `[STALE]` step limits are carried as *starting* values explicitly marked unmeasured, and `runectl bench` is what tunes them.
 
 ### D10 — Pre-LLM work: **deterministic triage only, and it never sees the challenge identity**
 
@@ -160,7 +160,7 @@ Locked. `--approval` takes three values:
 - `strict`: never auto-finalize; always exit 2 with candidates ranked.
 - `auto`: finalize the top plausible candidate. For live competition speed, at the user's own risk.
 
-`gated` is the default because the CLI is meant to be AI-driven — pure human-in-the-loop can't be the only mode — while an uncorroborated guess still never gets submitted silently. This is revisitable once the `REBUILD_NOTES.md` §4 questionnaire is answered; it is the one default here most likely to move.
+`gated` is the default because the CLI is meant to be AI-driven — pure human-in-the-loop can't be the only mode — while an uncorroborated guess still never gets submitted silently. This is revisitable once the `POSTMORTEM.md` §5 questionnaire is answered; it is the one default here most likely to move.
 
 **Amended again 2026-09-08 (same day, later) — the disconfirmation review is *advisory*, not a gate.** It still runs on every candidate, its verdict is still written to the trace and printed, and it still costs about $0.002. It no longer holds anything. Under `gated` a candidate is finalized on the deterministic set alone: plausibility, provenance and anti-echo, decoy markers, `--flag-format`, and re-derivation in the sandbox.
 
@@ -190,7 +190,7 @@ Locked, and rewritten 2026-09-05 from an earlier draft that planned a GUI as a l
 
 - **What's now allowed:** `runectl tui`, an interactive, full-screen, in-terminal application living at `src/runectl/cli/tui/` (Textual, D1). It is `cli/` code under every rule that phrase already carries — it renders, it never contains agent logic, and it is the only new thing permitted to hold a live redraw loop.
 - **What stays forbidden, permanently, and this amendment does not touch it:** `runectl serve`, any HTTP server, any network listener, any SSE tailer, any browser-rendered UI, any top-level `ui/` package. "In-terminal" is load-bearing — nothing here opens a port.
-- **Why this doesn't reopen the failure D13 was written against.** The old system's structural failure (`REBUILD_NOTES.md` §3) was the agent loop calling `socketio.emit(...)` from inside itself and being constructed directly by a Flask route — no boundary between agent and UI, so the agent couldn't run headless or be tested without the whole server. The TUI does not touch the loop process at all: it spawns `runectl run --output jsonl` as a **subprocess** and reads the same NDJSON event stream any other driving agent reads (D4's existing output contract). The loop stays synchronous, single-process, and exactly as testable as before; the TUI is just another consumer of the stream, running in a second process. Multiple runs in the TUI are multiple subprocesses, each with its own container — no threading or async was added to `loop/runner.py` to get there (D2 unchanged: one container per run).
+- **Why this doesn't reopen the failure D13 was written against.** The old system's structural failure (`POSTMORTEM.md` §2) was the agent loop calling `socketio.emit(...)` from inside itself and being constructed directly by a Flask route — no boundary between agent and UI, so the agent couldn't run headless or be tested without the whole server. The TUI does not touch the loop process at all: it spawns `runectl run --output jsonl` as a **subprocess** and reads the same NDJSON event stream any other driving agent reads (D4's existing output contract). The loop stays synchronous, single-process, and exactly as testable as before; the TUI is just another consumer of the stream, running in a second process. Multiple runs in the TUI are multiple subprocesses, each with its own container — no threading or async was added to `loop/runner.py` to get there (D2 unchanged: one container per run).
 - **D4's non-interactivity guarantee is unchanged for the thing it was written to protect: `runectl run` itself.** Every flag on `run` still has a non-interactive form and nothing about running a challenge can block on a human. The TUI is interactive *as a separate process that composes and launches non-interactive commands* — interactivity moved outside the run, it was not introduced inside it. The one pre-existing exception, `runectl arena ensure` with no flags on a TTY (D17), is untouched; the TUI itself must not use it as a loophole to auto-build the arena — see the TUI section of `docs/CLI.md`.
 - Adding `runectl tui` does not change what any other command does or how `run --output jsonl`/`--output human` behave. A user who never runs `runectl tui` sees no difference.
 
@@ -198,9 +198,9 @@ Locked, and rewritten 2026-09-05 from an earlier draft that planned a GUI as a l
 
 Locked, rewritten 2026-09-05 from an earlier draft that fixed a deepening order (web → forensics → crypto → rev → pwn → network → misc → osint). That sequencing is dropped: **no category is tuned ahead of the others.** Shared defaults (D8) and full category data (D9) for all eight ship together at V1; per-category *improvement* beyond the shared defaults is a later, uniform effort applied to every category at once, not a queue.
 
-Web's old heuristics remain the only evidence-backed starting point (`REBUILD_NOTES.md` §3, coverage problem), so they inform the *shape* of the shared defaults every category gets — that is a statement about where the starting numbers come from, not a license to keep tuning web first. Revisit only if the §4 questionnaire (question 7, "categories worth the tokens") gives a reason to cut a category for V1 entirely — that is a scope question, not a sequencing one.
+Web's old heuristics remain the only evidence-backed starting point (`POSTMORTEM.md` §2, coverage), so they inform the *shape* of the shared defaults every category gets — that is a statement about where the starting numbers come from, not a license to keep tuning web first. Revisit only if the `POSTMORTEM.md` §5 questionnaire gives a reason to cut a category for V1 entirely — that is a scope question, not a sequencing one.
 
-*Built 2026-09-09 (M7) — the remaining five categories ship as data.* `pwn`, `rev`, `forensics`, `osint` and `network` now have TOMLs alongside `web`/`crypto`/`misc`, re-edited from `PROMPT_ARCHIVE.md` §2–§3 into decision-order playbooks (not the old command walls, per D9), at equal depth from day one. `load_all()` now asserts the full `STANDARD_CATEGORIES` set is present rather than loading whatever globs. Three coupled changes landed with them:
+*Built 2026-09-09 (M7) — the remaining five categories ship as data.* `pwn`, `rev`, `forensics`, `osint` and `network` now have TOMLs alongside `web`/`crypto`/`misc`, re-edited from the predecessor's prompt archive into decision-order playbooks (not the old command walls, per D9), at equal depth from day one. `load_all()` now asserts the full `STANDARD_CATEGORIES` set is present rather than loading whatever globs. Three coupled changes landed with them:
 
 - **The arena grew a toolset (`arena/Dockerfile`).** The new playbooks name tools the image lacked, and `test_categories.py` enforces that every `required_tools` entry is installed. Added: `rizin`, `ltrace`, `strace`, `upx-ucl`, `one_gadget` (pwn/rev); `sleuthkit`, `poppler-utils`, `volatility3`, `sox`/`ffmpeg`/`multimon-ng`, `unrar` (forensics — `outguess` was dropped, absent from the Kali repo; `steghide` covers JPEG stego); `whois`, `dnsutils` (osint); `nmap`, `aircrack-ng`, `wireshark-common` for `capinfos` (network). This changes the Dockerfile fingerprint (D17), so an existing arena warns as stale until rebuilt — expected.
 - **The five default to `network = "bridge"`, not `none`.** A deliberate choice (the user's, 2026-09-09): remote-target pwn, a live osint lookup, and a network challenge that hands you a host all want egress by default, and `--network none` is one flag away for offline work. `crypto`/`misc` stay `none`; `SECURITY.md` notes the split. The trade is that these categories start with egress on — acceptable because the sandbox is containment for LLM-authored commands, not a hardened boundary (`SECURITY.md`), and the offline categories that most want isolation keep it.
@@ -214,7 +214,7 @@ Locked. False flags are the #1 product risk — a wrong flag scores worse than n
 2. **Verification double-check pass.** A cleared candidate is not submitted yet: the judge re-derives it deterministically first — re-run the cited command in the sandbox and confirm the same string reappears, independently re-decode a decode chain, check `--flag-format`. LLM verification (on the standard costed provider path, D5, framed to *disconfirm* rather than confirm) is a last resort only. Under `gated` (D11), only a re-derived candidate is eligible.
 3. **Decoy detection.** Reject or penalize a candidate whose source carries decoy markers: a path/file named `decoy`/`fake`/`honey`/`not_the_flag`, nearby text like "nice try" / "this is not the flag", or a token that appeared verbatim in the pasted challenge description (a planted lure the agent should not echo back as its own finding).
 4. **Independent corroboration ≥2** — already in D11, restated here as part of the named subsystem: two *different* tool calls with *different* fingerprints (D8) must produce the same candidate.
-5. **No-flag-is-success.** Stated plainly as a base rule the agent sees: no flag with solid, cited evidence is a correct outcome; an unsupported guess is a failure. A run exits **3** rather than fabricate. This is the explicit counterweight to "act, don't ask" (an earned rule from the predecessor, `REBUILD_NOTES.md` §2 item 4) which, alone, biases the model toward answering.
+5. **No-flag-is-success.** Stated plainly as a base rule the agent sees: no flag with solid, cited evidence is a correct outcome; an unsupported guess is a failure. A run exits **3** rather than fabricate. This is the explicit counterweight to "act, don't ask" (an earned rule from the predecessor, `POSTMORTEM.md` §3) which, alone, biases the model toward answering.
 
 *Skeleton seam:* M4 ships a minimal `submit_flag`/judge that already takes `provenance` and emits `flag.candidate` / `flag.decision` events, but does not yet implement verification, decoy detection, or corroboration counting — those are M6.
 
@@ -228,7 +228,7 @@ Locked. False flags are the #1 product risk — a wrong flag scores worse than n
 
 ### D16 — Budgets measure **step *waste*, not step count**
 
-Locked. A run is not failing because it took many steps; it is failing because it took steps that produced no new signal. Step *limits* (D9 category TOML, `PROMPT_ARCHIVE.md` §6 starting values) are a backstop, not the primary metric. The primary metric is the **progress ratio**: `progress_steps / steps_used`, with `blocked_steps` (steps rejected by a budget, D8) tracked separately and reported in `run.json`. Budgets (D8) are the mechanism that acts on step waste; this decision is the framing that says *why* they exist and what `runectl bench` (M8) should optimize toward — a high solve rate with a low waste ratio, not merely "fewer steps." As real run data comes in (`REBUILD_NOTES.md` §4), limits come down; they do not go up.
+Locked. A run is not failing because it took many steps; it is failing because it took steps that produced no new signal. Step *limits* (D9 category TOML; starting values carried from the predecessor, `POSTMORTEM.md` §5 Q6) are a backstop, not the primary metric. The primary metric is the **progress ratio**: `progress_steps / steps_used`, with `blocked_steps` (steps rejected by a budget, D8) tracked separately and reported in `run.json`. Budgets (D8) are the mechanism that acts on step waste; this decision is the framing that says *why* they exist and what `runectl bench` (M8) should optimize toward — a high solve rate with a low waste ratio, not merely "fewer steps." As real run data comes in (`POSTMORTEM.md` §5), limits come down; they do not go up.
 
 *Skeleton seam:* M4's `RunState` (D6) already carries `steps_used` as a field; `progress_steps`/`blocked_steps` are real fields but computed by a no-op progress stub (M5 fills in real scoring) so `run.json` has the shape from day one even before the numbers mean anything.
 
@@ -278,8 +278,8 @@ Added 2026-09-09. `runectl` gains a `--thinking <off|low|medium|high|xhigh|max>`
 ## Deliberately not decided yet
 
 - **License.** **Decided 2026-09-08: Apache-2.0** (`LICENSE`, `NOTICE`, declared in `pyproject.toml`). Permissive, standard for infrastructure tooling, and unlike MIT it carries an explicit patent grant — which matters for a company that intends to build commercial products next to this one. It keeps an open-core layer available later; copyleft would have blocked the adoption the project is being open-sourced to get. The practice challenges under `bench/practice/` are **not** covered by it: they are third-party MIT material, with the required copyright and license text in `bench/THIRD_PARTY_LICENSES.md` and per-challenge author credit in each `PROVENANCE.md`.
-- **Step-limit and budget numbers.** Carried from `PROMPT_ARCHIVE.md` §6 as marked-unmeasured starting values. `runectl bench` tunes them; do not treat them as tuned.
-- **Anything about hosting, accounts, or billing.** Out of scope for V1 (`REBUILD_NOTES.md` §6).
+- **Step-limit and budget numbers.** Carried from the predecessor as marked-unmeasured starting values (`POSTMORTEM.md` §5 Q6). `runectl bench` tunes them; do not treat them as tuned.
+- **Anything about hosting, accounts, or billing.** Out of scope for V1.
 
 ## Assumptions I made in the user's absence
 

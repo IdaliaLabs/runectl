@@ -54,9 +54,16 @@ caused a specific failure in the predecessor.
 code emits events; `cli/render.py` is the only thing that turns an event into characters
 on a terminal. `tests/unit/test_render_boundary.py` enforces this.
 
-**No GUI, ever.** No `serve` command, no SSE tailer, no `ui/` package — not "later," not
-"behind a flag." The event-stream/renderer split exists for testability and the
-stdout-NDJSON / stderr-human duality, not as a seam for a future front end.
+**No network surface, ever.** No `serve` command, no HTTP server, no listener, no SSE
+tailer, no browser UI, no top-level `ui/` package — not "later," not "behind a flag."
+
+`runectl tui` is the one in-terminal exception, allowed by D13's dated 2026-09-09
+amendment, and it earns that only by never running the agent loop in-process: it spawns
+`runectl run --output jsonl` as a subprocess and consumes the same NDJSON stream any
+driving agent gets. **A change that makes the TUI call `execute_run()` in a thread, or
+that puts agent logic under `cli/tui/`, breaks the decision** — the subprocess boundary is
+the whole reason the amendment was defensible. Everything under `cli/tui/` is renderer
+code and lives by every rule in this section.
 
 **Triage never sees challenge identity.** `triage()` takes `(sandbox, category)`. Don't
 add a parameter. Don't thread the name, the filenames, or the description in "just for
