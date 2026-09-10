@@ -29,7 +29,7 @@ def test_all_eight_standard_categories_ship() -> None:
 
 def test_m7_category_shape() -> None:
     """The five categories added in M7 carry their starting step limits and the
-    bridge default chosen in DECISIONS.md (D9/D14, 2026-09-08)."""
+    bridge default chosen in docs/ARCHITECTURE.md (D9/D14, 2026-09-08)."""
     expected = {
         "pwn": 120,
         "rev": 100,

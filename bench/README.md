@@ -23,7 +23,7 @@ repo's Apache-2.0 LICENSE — there was no network challenge to vendor, and its
 
 ## The gate
 
-V1 is **2 solved with 0 false flags** over the gated subset (`DECISIONS.md` D15). The report says
+V1 is **2 solved with 0 false flags** over the gated subset (`docs/ARCHITECTURE.md` D15). The report says
 whether it is met. A wrong flag that was *finalized* fails the command outright with
 exit 1; a wrong flag the judge *held* for approval does not, because holding it is the
 false-flag subsystem doing its job.
@@ -73,7 +73,7 @@ it knows it has it.
    challenge you wrote.
 2. **Vendor the sources block, never the walkthrough.** Upstream READMEs usually contain a
    full exploit. Including it measures reading comprehension, not solving, and it puts an
-   answer key inside challenge data — the same failure `DECISIONS.md` D10 forbids in
+   answer key inside challenge data — the same failure `docs/ARCHITECTURE.md` D10 forbids in
    solver code.
 3. **Re-derive the flag yourself** before writing `expected.json`, rather than copying it
    out of the README. Every flag in this suite was.

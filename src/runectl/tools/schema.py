@@ -1,11 +1,11 @@
 """The five tools, defined once; wire formats are derived per provider (D7, plan §3.1).
 
-Carried from the predecessor's proven minimal surface (`POSTMORTEM.md` §3):
+Carried from the predecessor tool's proven minimal surface:
 ``run_command`` is the workhorse, ``run_gdb`` is batch-only so it can never
 hang the loop, ``write_file`` + ``run_command`` is the
 exploit-script pattern, ``search_flag`` and ``submit_flag`` close the loop. A
 sixth tool is added only if a category demonstrably can't be served by shell
-(D7) — argued in `DECISIONS.md` first, not added quietly here.
+(D7) — argued in `docs/ARCHITECTURE.md` first, not added quietly here.
 """
 
 from __future__ import annotations

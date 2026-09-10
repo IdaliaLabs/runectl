@@ -1,37 +1,32 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/png/mark-white.png">
+  <img src="brand/png/mark-black.png" alt="runectl mark — a stem splitting in two" width="110">
+</picture>
+
 # runectl
+
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
+[![Status: v0.1.0 alpha](https://img.shields.io/badge/status-v0.1.0%20alpha-8B6FF5.svg)](CHANGELOG.md)
 
 An agentic CTF solver CLI, from [Idalia Labs](https://github.com/IdaliaLabs).
 
-You hand it a challenge — name, category, the description you were given, any provided
-files — plus your own provider API key. It runs an autonomous agent loop inside a
-per-challenge Docker sandbox, works toward a flag, and writes a complete, replayable
-trace of everything it tried.
+## What it is
 
-It is built to be driven by another AI agent as much as by a human: machine-readable
-I/O, nothing interactive, honest exit codes.
+You hand `runectl` a CTF challenge — its name, category, the description you were given,
+any provided files — plus your own AI provider API key (Anthropic, OpenAI, or Google;
+whichever model you want). It works the challenge autonomously inside a disposable Docker
+sandbox, one shell command at a time, and writes down everything it tried so the result is
+checkable afterward, not just trusted. It's a CLI, not a service — no account, no server,
+nothing running anywhere but your own machine — and it's built to be driven by another AI
+agent as easily as by a person: machine-readable output, nothing interactive, exit codes
+that tell the truth about how a run ended.
 
 **No server, no browser UI, ever** — `runectl` is CLI-only, permanently
-([`DECISIONS.md`](DECISIONS.md) D13). A local, in-terminal TUI (`runectl tui`) is in
-bounds as of a dated 2026-09-09 amendment to D13; it is a second consumer of the same
-event stream, never a network surface, and every run it launches is still a plain
-non-interactive `runectl run` subprocess.
-
-> **Status: pre-alpha.** M0–M9 are built and green: the loop, trace, sandbox,
-> provider and replay layers, the progress/budget machinery, the false-flag subsystem,
-> `runectl bench`, and (M7, 2026-09-09) **all eight categories ship** — `crypto`, `misc`,
-> `web`, `pwn`, `rev`, `forensics`, `osint` and `network`, at equal depth. M9 added
-> extended thinking (D20), `runectl config`/`models`/`runs`, and the `runectl tui`
-> interactive view (D13 amendment) — see [`docs/CLI.md`](docs/CLI.md).
->
-> It has been scored on live challenges, and those numbers are published in full. The
-> latest run (2026-09-09, claude-sonnet-5, on the ten-challenge M7 suite) scored
-> **7 of 10 solved with 1 false flag, and the V1 gate met — 6 solved, 0 false over the 7
-> gated cases** ([`bench/results/README.md`](bench/results/README.md)). The write-ups
-> lead with the failures — a `rev` challenge the per-run spend ceiling cut off
-> mid-derivation, a `crypto` challenge finalized one transformation short, and a trace
-> where the agent gamed one of our own checks. Read [`docs/STATUS.md`](docs/STATUS.md)
-> for the line-by-line breakdown of what is verified versus what merely exists before you
-> rely on anything here.
+([`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) D13). A local, in-terminal TUI
+(`runectl tui`) is in bounds as of a dated 2026-09-09 amendment to D13; it's a second
+consumer of the same event stream, never a network surface, and every run it launches is
+still a plain non-interactive `runectl run` subprocess.
 
 ---
 
@@ -45,32 +40,45 @@ live in your terminal (`runectl tui --replay`), not staged footage. Full walkthr
 | --- | --- | --- |
 | ![the agent's thinking pane populating](docs/demo/thinking.gif) | ![a sandboxed command and its result](docs/demo/toolcall.gif) | ![the flag judge re-deriving and finalizing](docs/demo/solved.gif) |
 
----
-
-## What makes it different
+## Why it's good
 
 - **Bring your own key, bring your own model.** Anthropic, OpenAI, and Google are all
-  first-class. There is no default provider and no default model — `--model` is always
-  required, and the provider is looked up in an explicit registry, never guessed from a
-  string prefix.
+  first-class, with no default provider and no default model — `--model` is always
+  required, looked up in an explicit registry, never guessed from a string prefix.
+  Different models are genuinely better at different categories; that choice stays yours.
 - **Every solve is checkable.** Each run writes an append-only JSONL event stream — every
   prompt, tool call, command result, cost update and flag decision, flushed to disk after
-  each event. That is what makes a solve rate mean something: you can read exactly how any
-  flag was reached, and a run killed mid-flight still leaves a valid, replayable prefix.
+  each event. A run killed mid-flight still leaves a valid, replayable prefix.
 - **Replay at zero spend.** `--record` captures provider responses to a cassette;
   `runectl replay <run_id> --check` re-runs the whole loop from that cassette with no
-  API calls and no Docker daemon, and asserts both the tool-call sequence **and the
-  outcome** are identical.
+  API calls and no Docker daemon, asserting the tool-call sequence *and the outcome* are
+  identical to the original.
 - **It refuses to invent a flag.** A submitted flag is only finalized if it appears
-  verbatim in tool output the run actually observed. A flag the agent cannot point to in
-  its own trace is rejected and the run keeps going.
+  verbatim in tool output the run actually observed and is re-derivable in the sandbox.
+  A flag the agent can't point to in its own trace is rejected and the run keeps going.
 - **No answer keys, structurally.** The one code path that runs before the first paid
   call — deterministic triage — never receives the challenge name, its filenames, or its
-  description, so a fast-path keyed to `logs.txt` has nowhere to live. A test enforces it.
+  description, so a fast-path keyed to a specific file has nowhere to live. A test
+  enforces it.
+
+> **Status: v0.1.0, first public alpha.** M0–M9 are built and green: the loop, trace,
+> sandbox, provider and replay layers, the progress/budget machinery, the false-flag
+> subsystem, `runectl bench`, and **all eight categories** — `crypto`, `misc`, `web`,
+> `pwn`, `rev`, `forensics`, `osint` and `network`, at equal depth. It has been scored on
+> live challenges and those numbers are published in full: the latest run
+> (2026-09-09, claude-sonnet-5, ten-challenge suite) scored **7 of 10 solved with 1 false
+> flag, and the V1 gate met — 6 solved, 0 false over the 7 gated cases**
+> ([`bench/results/README.md`](bench/results/README.md)). The write-ups lead with the
+> failures — a `rev` challenge the per-run spend ceiling cut off mid-derivation, a
+> `crypto` challenge finalized one transformation short, and a trace where the agent
+> gamed one of our own checks. Read [`docs/STATUS.md`](docs/STATUS.md) for the
+> line-by-line breakdown of what's verified versus what merely exists before you rely on
+> anything here. `0.x` means the CLI's flags and output shape can still change before
+> `1.0` — see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
-- **Python 3.12** (3.13 is not supported yet — see [`DECISIONS.md`](DECISIONS.md) D1)
+- **Python 3.12** (3.13 is not supported yet — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) D1)
 - **[uv](https://docs.astral.sh/uv/)** for dependency management
 - **Docker** — needed to build the arena image and to run real challenges. Not needed
   for the test suite or for `runectl replay`.
@@ -176,6 +184,24 @@ uv run runectl replay <run_id> --check
 # OK: 20260907-220651-62a17a reproduces 20260907-220636-9221b7's tool-call sequence at zero spend
 ```
 
+## The TUI
+
+`runectl tui` is the interactive way to watch a run, or several, without leaving your
+terminal — the same event stream `trace show` reads, live, with pending flags one
+keypress from approval. It composes and shows you the exact `runectl run` command before
+launching anything; nothing about what it does is hidden behind the interface.
+
+![the runectl TUI: a run list on the left, a labeled Timeline/Thinking/Trace/Flags tab group on the right](docs/demo/tui-screenshot.png)
+
+```bash
+uv run runectl tui                     # live: launch and watch runs, approve flags
+uv run runectl tui --replay <run_id>   # animate through a finished run's trace, zero spend
+```
+
+Press `?` inside it for a plain-English rundown of what everything does — built for
+someone who's never used a TUI or played a CTF before, not just for people who already
+know what a "trace" is.
+
 ## Exit codes
 
 `runectl run` never lies about how a run ended. This is what makes it safe to script.
@@ -234,18 +260,14 @@ Override with `RUNECTL_HOME` and `RUNECTL_CONFIG_HOME` (both honor `XDG_DATA_HOM
 
 | Document | What's in it |
 |---|---|
-| [`docs/CLI.md`](docs/CLI.md) | Every command and flag, exit codes, the NDJSON output contract |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map, the anatomy of one run, the seams later milestones fill |
-| [`docs/TRACE.md`](docs/TRACE.md) | The trace format: envelope, all 20 event types, `run.json`, artifacts, cassettes |
-| [`docs/PROVIDERS.md`](docs/PROVIDERS.md) | Model registry, key resolution, cost accounting, record/replay |
-| [`docs/CATEGORIES.md`](docs/CATEGORIES.md) | How to write a category TOML — adding a category is never a code change |
+| [`docs/CLI.md`](docs/CLI.md) | Every command and flag, exit codes, the NDJSON output contract, providers/models/keys |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map, how data moves through one run, the trace format, category files, and the full design-decision history (D1–D20) — read before changing anything structural |
 | [`docs/STATUS.md`](docs/STATUS.md) | What is real, what is a stub, what is a known gap |
 | [`bench/README.md`](bench/README.md) | The practice suite, the V1 gate, and how a case is scored |
 | [`bench/results/README.md`](bench/results/README.md) | Every live bench run, failures first, with the traces |
 | [`SECURITY.md`](SECURITY.md) | The sandbox threat model, what Docker is *not* protecting you from, reporting |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Dev setup, the checks, and the architectural rules a PR must not break |
-| [`DECISIONS.md`](DECISIONS.md) | The locked architecture (D1–D20). Read before changing anything structural. |
-| [`POSTMORTEM.md`](POSTMORTEM.md) | The predecessor this replaces: what it got wrong, and the decision that answers each item |
+| [`CHANGELOG.md`](CHANGELOG.md) | What changed release to release |
 
 ## Development
 

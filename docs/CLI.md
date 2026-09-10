@@ -1,6 +1,6 @@
 # CLI reference
 
-`runectl` is the whole product ([`DECISIONS.md`](../DECISIONS.md) D13). Everything below
+`runectl` is the whole product ([`ARCHITECTURE.md`](ARCHITECTURE.md) D13). Everything below
 is non-interactive: no command prompts, nothing that can block a run waiting on a human,
 no `--yes` flag needed because nothing asks.
 
@@ -17,6 +17,154 @@ trace format is at least detectable by a reader, even during `0.x`. See
 
 ---
 
+## Providers, models, and keys
+
+`runectl` is bring-your-own-key across three first-class providers, with **no default
+provider and no default model**. `--model` is always required. Different models are
+genuinely better at different CTF categories, so choosing one is the user's call, not a
+default `runectl` quietly makes (D5, [`ARCHITECTURE.md`](ARCHITECTURE.md)).
+
+### The model registry
+
+Provider and capability come from an explicit table in
+`src/runectl/providers/registry.py` — never from sniffing a string prefix like `claude-`.
+An unregistered model id is a hard error (exit 6), not a guess.
+
+| Model id | Provider | Context | Tools | Prompt cache | Thinking | $/1M in | $/1M out |
+|---|---|---|---|---|---|---|---|
+| `claude-opus-5` | anthropic | 1M | ✓ | ✓ | ✓ | 5.00 | 25.00 |
+| `claude-sonnet-5` | anthropic | 1M | ✓ | ✓ | ✓ | 2.00 | 10.00 |
+| `claude-haiku-4-5` | anthropic | 200K | ✓ | ✓ | ✗ (utility model only) | 1.00 | 5.00 |
+| `gpt-5` | openai | 272K | ✓ | ✓ | ✓ | 5.00 | 15.00 |
+| `gpt-5-mini` | openai | 272K | ✓ | ✓ | ✓ | 0.50 | 1.50 |
+| `gemini-2.5-pro` | google | 1M | ✓ | ✓ | ✓ | 1.25 | 10.00 |
+| `gemini-2.5-flash` | google | 1M | ✓ | ✗ | ✓ | 0.30 | 2.50 |
+
+> Pricing and availability snapshot: **2026-09-05, corrected 2026-09-09.** The original
+> snapshot recorded Opus 5 at $15/$75 and Sonnet 5 at $3/$15, both at a 200K context
+> window — all four numbers were wrong. Re-verify before relying on this for real spend —
+> pricing rots fast.
+
+### Extended thinking
+
+`--thinking <off|low|medium|high|xhigh|max>` on `runectl run` and `runectl bench run`,
+default `off`. `runectl models list` shows which registered models support it. The level
+is per-run and per-model, not a category concern — a category playbook has no opinion on
+what you're willing to spend reasoning about your own challenge.
+
+Anthropic uses adaptive thinking (`thinking: {"type": "adaptive"}`) plus
+`output_config.effort` for the level; `display: "summarized"` is always set, since the
+API's own default (`"omitted"`) returns thinking blocks with empty text. `budget_tokens`
+is rejected outright on Opus 5 and Sonnet 5. OpenAI and Google map onto their own
+reasoning-effort/thinking-budget parameters through the same `ModelInfo.thinking_style`
+field; **both are unverified against a live service** — see [`STATUS.md`](STATUS.md).
+
+Where a model can't represent the requested level, `runectl` clamps to the nearest
+supported one and records the clamp in the trace — never silently substituted. The
+resolved level is written to `run.started` and `run.json`.
+
+**Adding a model:** add a `ModelInfo` entry to `MODEL_REGISTRY`; the cost ledger, prompt
+caching, and utility-model selection all read from that row. **Adding a provider:** a
+`ProviderName` literal, a registry entry, and one adapter module implementing the
+`Provider` protocol — not a redesign.
+
+### Key resolution
+
+Precedence, highest first:
+
+1. `--api-key <value>`
+2. The environment variable — `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GOOGLE_API_KEY`
+3. The OS keyring (service name `runectl`, username the provider name)
+4. `~/.config/runectl/keys.json`, mode 0600
+
+```bash
+uv run runectl keys set anthropic sk-ant-...   # keyring, or the 0600 file as fallback
+uv run runectl keys list                       # presence only, never values
+uv run runectl keys rm anthropic               # removes from both
+```
+
+If no key is found, `runectl run` exits **6** with a message naming all four options.
+Keys are never written into a run's config snapshot, never logged, and are redacted from
+the trace by a writer-level filter before anything hits disk — see
+[`ARCHITECTURE.md`](ARCHITECTURE.md#redaction).
+
+### The single call path
+
+Every LLM call — the main loop's and internal utility calls alike — goes through
+`providers.base.complete_with_retry`. Non-streaming (there's no live UI to feed, and it
+makes retries, caching, cassettes, and replay determinism straightforward — live
+watchability comes from per-step trace events instead). Retries: 4 attempts by default,
+exponential backoff (`2^n`) plus up to 1s jitter, on 429/5xx/connection/timeout errors;
+exhausting them raises `ProviderError` → exit **5**. Prompt caching is applied to the
+stable system prefix where the registry says the model supports it.
+
+### The utility model
+
+Internal summarization (oversized tool output, history compaction) uses a separate,
+cheaper model, through the same path into the same ledger. Default: the cheapest
+registered model of **the same provider** as `--model`. Override with
+`--utility-model <id>` — if it belongs to a different provider, that provider's key is
+resolved independently. No hardcoded utility model anywhere; utility tokens show up in
+`cost.updated` events like any other.
+
+### Cost accounting
+
+`CostLedger.record()` computes
+`(input_tokens / 1e6) * price_in + (output_tokens / 1e6) * price_out` per call, keeps
+per-call entries, and maintains a running total. `cost.updated` fires after every call
+with both the call's cost and the cumulative total; the final figure lands in `run.json`.
+
+### Record and replay
+
+```bash
+uv run runectl run --model gpt-5 --challenge chal.toml --record
+uv run runectl replay <run_id> --check
+```
+
+`RecordingProvider` wraps a real provider and appends `{request_hash, response}` to
+`cassette.jsonl` for every call. `ReplayProvider` reads that file and serves the recorded
+completion back for a matching hash, with no network call. The hash covers the system
+prompt, the full message list, tool names, `max_tokens`, and the resolved thinking
+configuration — a cassette recorded with thinking off is never served to a replay
+requesting thinking on. If the loop asks something the cassette doesn't contain, the
+replay raises rather than silently improvising.
+
+`ScriptedProvider` is the test-only sibling: a fixed list of hand-written `Completion`
+objects returned in order. Together with `StubSandbox`, it's why the whole test suite
+runs with no daemon and no spend.
+
+### Writing an adapter
+
+Implement one method:
+
+```python
+class Provider(Protocol):
+    def complete(
+        self, *,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSchema],
+        max_tokens: int,
+    ) -> Completion: ...
+```
+
+`Message` is the canonical shape (`role`, `content`, `tool_call_id`, `tool_name`,
+`tool_calls`); each adapter derives its own wire format at the boundary. Tool schemas are
+derived from the single definition in `tools/schema.py` via `to_anthropic()`,
+`to_openai()`, or `to_google()` — never hand-written per provider. Map your SDK's
+rate-limit, connection, timeout, and 5xx exceptions onto `TransientProviderError` so
+`complete_with_retry` can back off; let everything else propagate. Return a `Completion`
+with `text`, `tool_calls`, `usage`, and `stop_reason`.
+
+> **Anthropic verified; OpenAI and Google not yet.** All three adapters were written and
+> type-checked against their installed SDKs. The **Anthropic** adapter has since run
+> against the live API — the 2026-09-09 ten-challenge bench and its auth/error handling (a
+> rejected key exits 6, a bad request exits 5). The **OpenAI** and **Google** adapters have
+> never talked to their real services; treat the first run on each as its smoke test. See
+> [`STATUS.md`](STATUS.md).
+
+---
+
 ## `runectl run`
 
 Solve one challenge end to end, writing a replayable trace.
@@ -30,7 +178,7 @@ uv run runectl run --model gpt-5 --name "sanity" --category web --description ".
 
 | Flag | Default | Meaning |
 |---|---|---|
-| `--model <id>` | **required** | Main model. Must be in the model registry — see [`PROVIDERS.md`](PROVIDERS.md). Never inferred. |
+| `--model <id>` | **required** | Main model. Must be in the model registry — see [`ARCHITECTURE.md`](ARCHITECTURE.md#providers-models-and-keys). Never inferred. |
 | `--challenge <path>` | — | A challenge TOML file. Supplies name/category/description/files/flag_format in one file, so an agent driving `runectl` doesn't have to shell-quote a description. |
 | `--name <str>` | — | Challenge name. Required unless `--challenge` is given. |
 | `--category <str>` | — | Category name; must match a shipped category TOML. Required unless `--challenge` is given. |
@@ -45,7 +193,7 @@ uv run runectl run --model gpt-5 --name "sanity" --category web --description ".
 | `--max-steps <int>` | the category's `step_limit` | Hard step backstop for this run. |
 | `--record` | off | Record provider request/response pairs to `cassette.jsonl` so the run can be replayed at zero spend. |
 | `--output <jsonl\|human>` | `human` on a TTY, `jsonl` otherwise | Render mode. See "Output contract" below. |
-| `--thinking <off\|low\|medium\|high\|xhigh\|max>` | the configured per-provider default (`runectl config`), or `off` | Extended thinking (D20). The *resolved* level (after any provider clamp) is written to `run.started` and `run.json`, so a run's reasoning spend is never invisible. See [`PROVIDERS.md`](PROVIDERS.md#extended-thinking-d20). |
+| `--thinking <off\|low\|medium\|high\|xhigh\|max>` | the configured per-provider default (`runectl config`), or `off` | Extended thinking (D20). The *resolved* level (after any provider clamp) is written to `run.started` and `run.json`, so a run's reasoning spend is never invisible. See "Extended thinking" above. |
 
 ### Challenge TOML
 
@@ -168,7 +316,7 @@ The outcome half was added 2026-09-10, after comparing only the sequence let a r
 hide for a milestone: an unrecorded sandbox call in the D15 judge desynchronized
 `ReplaySandbox`'s positional queue, so replays issued identical tool calls while silently
 ending `candidate` instead of `solved`, and `--check` reported OK throughout. See
-`DECISIONS.md` D3's 2026-09-10 amendment.
+[`ARCHITECTURE.md`](ARCHITECTURE.md) D3's 2026-09-10 amendment.
 
 Requires the original run to have been recorded with `--record`; exits 6 otherwise.
 
@@ -188,7 +336,7 @@ key value. `rm` removes the key from both the keyring and the file.
 
 Valid providers: `anthropic`, `openai`, `google`.
 
-See [`PROVIDERS.md`](PROVIDERS.md) for the full resolution order.
+See "Key resolution" above for the full precedence order.
 
 ---
 
@@ -257,7 +405,7 @@ daemon is unreachable.
 ## `runectl tui`
 
 An interactive, in-terminal view over runs — `runectl`'s one screen-owning surface,
-added to D13 by a dated amendment rather than by drift (see `DECISIONS.md` D13). It is a
+added to D13 by a dated amendment rather than by drift (see [`ARCHITECTURE.md`](ARCHITECTURE.md) D13). It is a
 TUI, not a GUI: no server, no port, no browser involved, and every action it takes is
 composing and launching the exact non-interactive command a human would type.
 
@@ -391,7 +539,7 @@ tail -f /ctf/.agent_live.log               # or just watch every command it runs
 `runectl run` prints the exact command when it starts on a terminal.
 
 `run` never prompts you and never silently builds the image for you. That's deliberate
-([`DECISIONS.md`](../DECISIONS.md) D2, D4, D17): a run that can block on a question isn't
+([`ARCHITECTURE.md`](ARCHITECTURE.md) D2, D4, D17): a run that can block on a question isn't
 scriptable, and a run that quietly kicks off a 30-minute build when you asked it to solve
 a challenge isn't honest.
 

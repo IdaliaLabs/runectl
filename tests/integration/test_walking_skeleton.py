@@ -3,7 +3,7 @@ end, the trace survives a restart, and `runectl replay --check` reproduces the
 tool-call sequence at zero spend.
 
 Uses StubSandbox + ScriptedProvider — the zero-daemon, zero-API-spend path
-`POSTMORTEM.md` §2 (testability) exists for. Live Docker/API-key verification
+the predecessor tool's lack of an offline test path exists for. Live Docker/API-key verification
 is out of scope here; see the M4 handoff report.
 """
 

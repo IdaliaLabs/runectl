@@ -10,7 +10,7 @@ fully non-interactive (D4's "nothing can block on a human" survives
 literally, because interactivity lives in a second process, not inside the
 run), and means several runs watched at once are just several subprocesses —
 concurrency without touching the engine. See the D13 amendment in
-`DECISIONS.md` for the full argument.
+`docs/ARCHITECTURE.md` for the full argument.
 
 Per `docs/CLI.md`'s output contract: every line of stdout except the last is
 one JSON-encoded trace event; the last line is the bare run id. A line this

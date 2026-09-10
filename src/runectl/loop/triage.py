@@ -2,7 +2,7 @@
 
 ``triage()`` takes only a sandbox and a category — never the challenge name,
 its filenames, or its description. That is the structural guarantee behind
-the honesty rule (`POSTMORTEM.md` §2): a filename- or description-gated
+the honesty rule: a filename- or description-gated
 fast-path has nowhere to live, because triage cannot see any of that. A unit
 test asserts the command set is identical across two runs differing only in
 challenge name/files (see tests/unit/test_triage.py).

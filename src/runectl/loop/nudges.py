@@ -1,7 +1,7 @@
 """Earned nudges as pure functions (plan §5.5).
 
-Carried from the predecessor's proven anti-failure patches (`POSTMORTEM.md`
-§3), re-expressed as pure functions instead of branches scattered through the
+Carried from the predecessor tool's proven anti-failure patches, re-expressed
+as pure functions instead of branches scattered through the
 loop, so each is unit-testable with no model
 and no sandbox.
 """
