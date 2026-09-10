@@ -15,7 +15,7 @@ from runectl.categories.schema import Category
 
 _CATEGORY_DIR = Path(__file__).resolve().parent
 
-# The full standard set (`REBUILD_NOTES.md` §6). All eight ship as data as of M7;
+# The full standard set (`DECISIONS.md` D14). All eight ship as data as of M7;
 # `load_all()` asserts this set is present.
 STANDARD_CATEGORIES = ("pwn", "web", "crypto", "forensics", "rev", "misc", "osint", "network")
 

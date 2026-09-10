@@ -228,7 +228,7 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
     writer.set_on_emit(render_ndjson if resolved_output == "jsonl" else render_human)
     if resolved_output == "human":
         # The predecessor's take-over workflow: attach to the live container
-        # while the agent is still working (TEARDOWN.md item 12).
+        # while the agent is still working (`POSTMORTEM.md` §3).
         typer.echo(
             f"run {run_id} — attach with: "
             f"docker exec -it {CONTAINER_NAME_PREFIX}{run_id} bash",

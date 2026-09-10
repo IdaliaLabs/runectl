@@ -3,7 +3,7 @@ end, the trace survives a restart, and `runectl replay --check` reproduces the
 tool-call sequence at zero spend.
 
 Uses StubSandbox + ScriptedProvider — the zero-daemon, zero-API-spend path
-`REBUILD_NOTES.md` requirement 4 exists for. Live Docker/API-key verification
+`POSTMORTEM.md` §2 (testability) exists for. Live Docker/API-key verification
 is out of scope here; see the M4 handoff report.
 """
 

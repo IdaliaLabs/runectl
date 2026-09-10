@@ -1,7 +1,7 @@
 """One explicit run state, no mixins (D6, plan §5.1).
 
 The predecessor's coupling failure was ~30 instance attributes shared
-implicitly across six mixins (`REBUILD_NOTES.md` §3). Here there is exactly
+implicitly across six mixins (`POSTMORTEM.md` §2, structural). Here there is exactly
 one ``RunState``, owned by the loop; collaborators (:mod:`~runectl.tools.dispatch`,
 :mod:`~runectl.flags.judge`, :mod:`~runectl.loop.context`) are plain objects
 that take what they need and return values the loop applies — none of them

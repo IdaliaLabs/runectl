@@ -4,7 +4,7 @@ Non-streaming request/response in the core (D5): this is what makes retries,
 cassettes, and replay determinism straightforward. Every LLM call — the main
 loop and internal utility calls (summarization, retry summaries) alike — goes
 through :func:`complete_with_retry`, so nothing silently no-ops and every
-token is costed (`REBUILD_NOTES.md` §3, "silent provider no-ops").
+token is costed (`POSTMORTEM.md` §2, reliability).
 """
 
 from __future__ import annotations

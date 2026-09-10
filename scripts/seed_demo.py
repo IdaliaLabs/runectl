@@ -3,7 +3,7 @@
 Builds one complete, solved run — with realistic thinking text — using
 `StubSandbox` + `ScriptedProvider`, the same zero-daemon, zero-spend path
 `tests/integration/test_walking_skeleton.py` uses to verify the loop end to
-end (`REBUILD_NOTES.md` requirement 4). No Docker daemon, no API key, and no
+end (`POSTMORTEM.md` §2, testability). No Docker daemon, no API key, and no
 real provider call happens anywhere in this script.
 
 Prints the new run id to stdout and nothing else, so a shell wrapper (the

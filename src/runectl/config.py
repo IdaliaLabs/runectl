@@ -1,6 +1,6 @@
 """Paths and tunable defaults (D3, D5, D12).
 
-Every constant here is a *starting* value carried from `PROMPT_ARCHIVE.md` §6 or
+Every constant here is a *starting* value carried from `POSTMORTEM.md` §5 Q6 or
 chosen for the skeleton, explicitly marked unmeasured (D16) — `runectl bench` (M8)
 is what tunes them, not this file.
 """
@@ -95,7 +95,7 @@ SANDBOX_ENV: dict[str, str] = {"TERM": "xterm-256color"}
 # (`docker exec -it runectl-<run_id> bash`) the way the predecessor allowed.
 CONTAINER_NAME_PREFIX = "runectl-"
 
-# PROMPT_ARCHIVE.md §6 — [STALE], unmeasured starting values. Do not treat as tuned.
+# POSTMORTEM.md §5 Q6 — unmeasured starting values carried from the predecessor. Do not treat as tuned.
 DEFAULT_STEP_LIMITS: dict[str, int] = {
     "pwn": 120,
     "rev": 100,

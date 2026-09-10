@@ -1,8 +1,8 @@
 """Earned nudges as pure functions (plan §5.5).
 
-Carried from the predecessor's proven anti-failure patches (`REBUILD_NOTES.md`
-§2 items 3-4, `PROMPT_ARCHIVE.md` §4), re-expressed as pure functions instead
-of branches scattered through the loop, so each is unit-testable with no model
+Carried from the predecessor's proven anti-failure patches (`POSTMORTEM.md`
+§3), re-expressed as pure functions instead of branches scattered through the
+loop, so each is unit-testable with no model
 and no sandbox.
 """
 
