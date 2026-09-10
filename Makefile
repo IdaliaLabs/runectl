@@ -1,4 +1,4 @@
-.PHONY: demo check test
+.PHONY: demo demo-frames check test
 
 DEMO_HOME := $(CURDIR)/.demo-home
 
@@ -15,6 +15,17 @@ demo:
 	@RUNECTL_HOME=$(DEMO_HOME) uv run python scripts/seed_demo.py > $(DEMO_HOME)/.run_id
 	@RUNECTL_HOME=$(DEMO_HOME) uv run runectl index rebuild >/dev/null
 	RUNECTL_HOME=$(DEMO_HOME) uv run runectl tui --replay "$$(cat $(DEMO_HOME)/.run_id)"
+
+# Phase 5's demo as still frames, captured headlessly through Textual's test
+# harness — no TTY, no recording tool, no spend. SVG because it is text: it
+# diffs, it scales, and it keeps binaries out of the repo.
+demo-frames:
+	@rm -rf $(DEMO_HOME)
+	@mkdir -p $(DEMO_HOME)
+	@RUNECTL_HOME=$(DEMO_HOME) uv run python scripts/seed_demo.py > $(DEMO_HOME)/.run_id
+	@RUNECTL_HOME=$(DEMO_HOME) uv run runectl index rebuild >/dev/null
+	RUNECTL_HOME=$(DEMO_HOME) uv run python scripts/capture_demo.py \
+	  "$$(cat $(DEMO_HOME)/.run_id)" docs/demo
 
 # The three checks CI runs (CONTRIBUTING.md), as one target for local use.
 check:
