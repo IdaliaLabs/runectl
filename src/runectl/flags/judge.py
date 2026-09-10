@@ -52,6 +52,12 @@ from runectl.progress.fingerprint import fingerprint
 
 Decision = Literal["finalized", "pending", "rejected"]
 
+# The closed set of `--approval` policies (D11). Declared here, beside the judge
+# that is the authority on what each one means, so the CLI and the TUI validate
+# against the same vocabulary rather than each keeping their own copy.
+ApprovalPolicy = Literal["gated", "strict", "auto"]
+APPROVAL_POLICIES: tuple[ApprovalPolicy, ...] = ("gated", "strict", "auto")
+
 # Still counted and reported; no longer part of the auto-finalize bar (D11,
 # amended 2026-09-08). Kept because "how many independent sightings" is real
 # information for whoever reads a held candidate.
@@ -205,7 +211,7 @@ class FlagJudge:
     def __init__(
         self,
         *,
-        approval_policy: str = "gated",
+        approval_policy: ApprovalPolicy = "gated",
         flag_format: str | None = None,
         description: str = "",
         sandbox: _Executor | None = None,

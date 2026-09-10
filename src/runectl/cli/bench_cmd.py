@@ -26,7 +26,13 @@ from runectl.bench.suite import (
     render_report,
     score,
 )
-from runectl.cli.run_cmd import RunRequest, challenge_from_file, execute_run, parse_thinking
+from runectl.cli.run_cmd import (
+    RunRequest,
+    challenge_from_file,
+    execute_run,
+    parse_approval,
+    parse_thinking,
+)
 from runectl.config import DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, RunectlError, SandboxError, UsageError
 
@@ -39,7 +45,9 @@ def bench_run(
     model: str = typer.Option(..., "--model"),
     utility_model: str | None = typer.Option(None, "--utility-model"),
     api_key: str | None = typer.Option(None, "--api-key"),
-    approval: str = typer.Option("gated", "--approval"),
+    approval: str = typer.Option(
+        "gated", "--approval", help="gated|strict|auto — what a cleared candidate becomes (D11)"
+    ),
     only: list[str] = typer.Option([], "--only", help="Challenge name or directory; repeatable"),
     max_steps: int | None = typer.Option(None, "--max-steps"),
     max_cost: float = typer.Option(DEFAULT_MAX_COST_USD, "--max-cost", help="USD ceiling per run"),
@@ -58,8 +66,12 @@ def bench_run(
     ),
 ) -> None:
     """Run every challenge in the suite and score it. Exits 1 on any false flag."""
+    # Both flags validate before the first container starts: a suite is
+    # unattended and long, and finding a typo after three challenges have run
+    # costs real money.
     try:
         resolved_thinking = parse_thinking(thinking)
+        policy = parse_approval(approval)
     except UsageError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=6) from exc
@@ -90,7 +102,7 @@ def bench_run(
             model=model,
             utility_model=utility_model,
             api_key=api_key,
-            approval=approval,
+            approval=policy,
             max_steps=max_steps,
             # Never let one run overshoot what is left of the suite ceiling.
             max_cost=min(max_cost, max_total_cost - spent) if max_total_cost > 0 else max_cost,

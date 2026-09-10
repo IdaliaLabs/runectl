@@ -15,10 +15,9 @@ from textual.widgets import Button, Input, Label, Select, Static
 
 from runectl.categories.loader import available_categories
 from runectl.config import DEFAULT_MAX_COST_USD
+from runectl.flags.judge import APPROVAL_POLICIES
 from runectl.providers.registry import MODEL_REGISTRY, THINKING_LEVELS
 from runectl.user_config import default_model, default_thinking
-
-_APPROVAL_LEVELS = ("gated", "strict", "auto")
 
 
 class LauncherScreen(ModalScreen[list[str] | None]):
@@ -74,7 +73,7 @@ class LauncherScreen(ModalScreen[list[str] | None]):
             )
             yield Label("Approval")
             yield Select(
-                [(a, a) for a in _APPROVAL_LEVELS], value="gated", id="approval", allow_blank=False
+                [(a, a) for a in APPROVAL_POLICIES], value="gated", id="approval", allow_blank=False
             )
             yield Label("Max cost (USD, 0 disables)")
             yield Input(value=str(DEFAULT_MAX_COST_USD), id="max_cost")

@@ -1,10 +1,10 @@
 # Status
 
-Last updated **2026-09-10** (the replay-fidelity fix below). The M9 entries — thinking
-capture, `config`/`models`/`runs`, and the TUI — landed 2026-09-09, the same day as the
-M7/M8 entries this file already described.
+Last updated **2026-09-10** (the replay-fidelity fix below, and `--approval`
+validation). The M9 entries — thinking capture, `config`/`models`/`runs`, and the TUI —
+landed 2026-09-09, the same day as the M7/M8 entries this file already described.
 
-M0–M9 are built, typed, and green: 228 tests passing, `mypy --strict` clean,
+M0–M9 are built, typed, and green: 240 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 
@@ -127,7 +127,6 @@ which fails on four separate assertions if the event is removed.
 | Surface | Behavior today | Lands in |
 |---|---|---|
 | `evidence.added` event | Defined in the schema; nothing emits it — findings carry forward in the conversation only | later |
-| `--approval` values | Branched on correctly, but an unrecognized value silently behaves as `gated` rather than exiting 6 | small fix, unscheduled |
 
 ## What the judge actually does
 

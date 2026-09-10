@@ -181,8 +181,8 @@ answer to the predecessor's six mixins sharing ~30 implicit attributes.
 `StubSandbox` (in-process fake filesystem plus a scripted command table) and
 `ScriptedProvider` (a fixed list of completions) together let the entire loop run with no
 container runtime and no API spend. That's not a testing convenience bolted on afterward —
-it's the reason both types exist, and the great majority of the test suite (228 tests as
-of the 2026-09-10 replay-fidelity fix; 223 at M9) runs on it.
+it's the reason both types exist, and the great majority of the test suite (240 tests as
+of 2026-09-10; 223 at M9) runs on it.
 
 `ReplaySandbox` + `ReplayProvider` are the same idea pointed at a *recorded* run, which
 is what `runectl replay` uses.

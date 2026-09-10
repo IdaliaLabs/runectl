@@ -140,7 +140,13 @@ def replay_command(run_id: str, check: bool = typer.Option(False, "--check")) ->
     provider = ReplayProvider(cassette_path)
     exec_results = exec_results_from_trace(store.trace_path(run_id), store.artifacts_dir(run_id))
     sandbox = ReplaySandbox(exec_results)
-    approval_policy = str(manifest.config_snapshot.get("approval_policy", "gated"))
+    # Validated rather than cast: runectl itself only ever writes one of the
+    # three, so a bad value here means a hand-edited or corrupt manifest, and
+    # replaying it under a silently-substituted `gated` would be a replay that
+    # does not reproduce the run (exit 6 instead).
+    approval_policy = run_cmd.parse_approval(
+        str(manifest.config_snapshot.get("approval_policy", "gated"))
+    )
     # D20 — the *requested* level, read back from the config snapshot the
     # original run wrote (see run_cmd.execute_run). Runner re-resolves it
     # against `model_info` deterministically, so a replay reproduces the same

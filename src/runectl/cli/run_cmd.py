@@ -20,6 +20,7 @@ from runectl.categories.loader import load as load_category
 from runectl.cli.render import render_human, render_ndjson
 from runectl.config import CONTAINER_NAME_PREFIX, DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, RunectlError, SandboxError, UsageError
+from runectl.flags.judge import APPROVAL_POLICIES, ApprovalPolicy
 from runectl.flags.review import make_reviewer
 from runectl.loop.context import ContextBuilder
 from runectl.loop.runner import Runner, RunOutcome
@@ -51,17 +52,36 @@ def parse_thinking(value: str | None) -> ThinkingLevel | None:
 
     Returns ``None`` when nothing was passed, so callers can distinguish "not
     given, use the configured/off default" from an explicit ``off``. Raises
-    ``UsageError`` (exit 6) on a bad value — this flag never silently falls
-    back to a default the way `--approval`'s unvalidated string does today
-    (docs/STATUS.md's documented, unscheduled gap); D20 asks for loud
-    degradation, and letting a typo pass silently would undercut that on its
-    very first flag.
+    ``UsageError`` (exit 6) on a bad value — D20 asks for loud degradation, and
+    letting a typo pass silently would undercut that on its very first flag.
+    `--approval` validates the same way as of 2026-09-10 (`parse_approval`
+    below); it used to be the exception this docstring warned about.
     """
     if value is None:
         return None
     if value not in THINKING_LEVELS:
         raise UsageError(f"--thinking {value!r} is not one of {', '.join(THINKING_LEVELS)}")
     return value  # narrowed to ThinkingLevel by the membership check above
+
+
+def parse_approval(value: str) -> ApprovalPolicy:
+    """Validate a raw --approval string against D11's closed set.
+
+    Raises ``UsageError`` (exit 6) on anything else. Before 2026-09-10 the
+    string went through unvalidated, and `FlagJudge` branched on `auto` and
+    `strict` with everything else falling through to `gated` — so `--approval
+    strcit` ran the whole challenge under a policy the user did not ask for and
+    was never told about.
+
+    That direction matters more than the typo does. `gated` is the *weakest* of
+    the three from the false-flag subsystem's point of view: it is the only one
+    that can auto-finalize on the deterministic checks, where `strict` finalizes
+    nothing. Silently substituting it for a stricter request is a safety policy
+    quietly downgraded, which is the wrong way for a flag to fail.
+    """
+    if value not in APPROVAL_POLICIES:
+        raise UsageError(f"--approval {value!r} is not one of {', '.join(APPROVAL_POLICIES)}")
+    return value  # narrowed to ApprovalPolicy by the membership check above
 
 
 @dataclass(frozen=True)
@@ -150,7 +170,7 @@ class RunRequest:
     model: str
     utility_model: str | None = None
     api_key: str | None = None
-    approval: str = "gated"
+    approval: ApprovalPolicy = "gated"
     network: str | None = None
     max_steps: int | None = None
     max_cost: float = DEFAULT_MAX_COST_USD
@@ -300,7 +320,9 @@ def run_command(
     model: str = typer.Option(..., "--model"),
     utility_model: str | None = typer.Option(None, "--utility-model"),
     api_key: str | None = typer.Option(None, "--api-key"),
-    approval: str = typer.Option("gated", "--approval"),
+    approval: str = typer.Option(
+        "gated", "--approval", help="gated|strict|auto — what a cleared candidate becomes (D11)"
+    ),
     network: str | None = typer.Option(None, "--network"),
     max_steps: int | None = typer.Option(None, "--max-steps"),
     max_cost: float = typer.Option(
@@ -326,7 +348,7 @@ def run_command(
                 model=model,
                 utility_model=utility_model,
                 api_key=api_key,
-                approval=approval,
+                approval=parse_approval(approval),
                 network=network,
                 max_steps=max_steps,
                 max_cost=max_cost,

@@ -19,7 +19,7 @@ from typing import Literal
 from runectl.categories.schema import Category
 from runectl.config import DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, SandboxError
-from runectl.flags.judge import FlagJudge, ToolObservation
+from runectl.flags.judge import ApprovalPolicy, FlagJudge, ToolObservation
 from runectl.flags.review import Reviewer
 from runectl.loop import nudges
 from runectl.loop.context import ContextBuilder, build_system_prompt
@@ -118,7 +118,7 @@ class Runner:
         provider: Provider,
         sandbox: Sandbox,
         writer: TraceWriter,
-        approval_policy: str = "gated",
+        approval_policy: ApprovalPolicy = "gated",
         max_cost_usd: float = DEFAULT_MAX_COST_USD,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         triage_override: TriageResult | None = None,
