@@ -189,18 +189,7 @@ def replay_command(run_id: str, check: bool = typer.Option(False, "--check")) ->
     )
     with sandbox_session(sandbox):
         outcome = runner.run()
-    writer.close()
-    store.finish_run(
-        replay_run_id,
-        outcome=outcome.outcome,
-        exit_code=outcome.exit_code,
-        flag=outcome.flag,
-        cost_usd=outcome.cost_usd,
-        steps_used=outcome.steps_used,
-        progress_steps=outcome.progress_steps,
-        blocked_steps=outcome.blocked_steps,
-        thinking_level=outcome.thinking_level,
-    )
+    run_cmd.finish(store, writer, replay_run_id, outcome)
 
     typer.echo(replay_run_id)
     if check:

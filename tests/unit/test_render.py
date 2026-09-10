@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from runectl.cli.render import _line, _tool_arg_summary
+from runectl.cli.render import _tool_arg_summary, event_line
 from runectl.trace.events import RunFinished, ToolCall, ToolResultEvent
 
 
@@ -14,7 +14,7 @@ def test_a_huge_command_is_clipped_to_one_line() -> None:
         arguments={"command": "python3 -c '" + "x = 1\n" * 500 + "'"},
     )
 
-    line = _line(payload, width=100)
+    line = event_line(payload, width=100)
 
     assert line is not None
     assert "\n" not in line
@@ -23,10 +23,8 @@ def test_a_huge_command_is_clipped_to_one_line() -> None:
 
 
 def test_the_summary_picks_the_argument_that_says_what_happened() -> None:
-    assert "gobuster" in _tool_arg_summary("run_command", {"command": "gobuster dir -u x"}, 80)
-    assert "exploit.py" in _tool_arg_summary(
-        "write_file", {"filename": "exploit.py", "content": "..."}, 80
-    )
+    assert "gobuster" in _tool_arg_summary({"command": "gobuster dir -u x"}, 80)
+    assert "exploit.py" in _tool_arg_summary({"filename": "exploit.py", "content": "..."}, 80)
 
 
 def test_output_is_flattened_not_dumped() -> None:
@@ -36,7 +34,7 @@ def test_output_is_flattened_not_dumped() -> None:
         duration_s=0.5, truncated=False,
     )
 
-    line = _line(payload, width=100)
+    line = event_line(payload, width=100)
 
     assert line is not None
     assert "\n" not in line
@@ -49,7 +47,7 @@ def test_the_final_line_reports_the_progress_ratio() -> None:
         blocked_steps=1, cost_usd=0.0724, duration_s=66.0, exit_code=0,
     )
 
-    line = _line(payload, width=100)
+    line = event_line(payload, width=100)
 
     assert line is not None
     assert "solved" in line and "ctf{x}" in line
@@ -68,4 +66,4 @@ def test_uninteresting_events_render_nothing() -> None:
         input_tokens=1, output_tokens=1, cost_usd=0.0,
     )
 
-    assert _line(payload, width=100) is None
+    assert event_line(payload, width=100) is None

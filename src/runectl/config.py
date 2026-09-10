@@ -35,14 +35,6 @@ def runectl_config_dir() -> Path:
     return base / "runectl"
 
 
-def runs_dir() -> Path:
-    return runectl_home() / "runs"
-
-
-def index_db_path() -> Path:
-    return runectl_home() / "index.db"
-
-
 def keys_file_path() -> Path:
     return runectl_config_dir() / "keys.json"
 
@@ -94,15 +86,3 @@ SANDBOX_ENV: dict[str, str] = {"TERM": "xterm-256color"}
 # Container naming: predictable, so a human can attach to a live run
 # (`docker exec -it runectl-<run_id> bash`) the way the predecessor allowed.
 CONTAINER_NAME_PREFIX = "runectl-"
-
-# POSTMORTEM.md §5 Q6 — unmeasured starting values carried from the predecessor. Do not treat as tuned.
-DEFAULT_STEP_LIMITS: dict[str, int] = {
-    "pwn": 120,
-    "rev": 100,
-    "web": 80,
-    "crypto": 80,
-    "forensics": 70,
-    "misc": 60,
-    "osint": 50,
-    "network": 60,
-}

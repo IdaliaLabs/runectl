@@ -133,7 +133,6 @@ class ToolResultEvent(EventPayload):
     exit_code: int | None = None
     duration_s: float
     truncated: bool
-    artifact_ref: str | None = None
 
 
 class ProgressScored(EventPayload):
@@ -164,15 +163,6 @@ class StrategyShift(EventPayload):
     evidence_summary: str
 
 
-class EvidenceAdded(EventPayload):
-    event_type: ClassVar[str] = "evidence.added"
-
-    step: int
-    kind: str
-    summary: str
-    source_seq: int | None = None
-
-
 class FlagCandidate(EventPayload):
     """Carries ``provenance`` (D15 §1) from the skeleton onward, even though the
     M4 judge is minimal — this is the seam M6's judge is built against."""
@@ -183,7 +173,6 @@ class FlagCandidate(EventPayload):
     flag: str
     how_found: str
     provenance_seq: int
-    provenance_artifact: str | None = None
 
 
 class FlagReviewed(EventPayload):
@@ -303,7 +292,6 @@ _ALL_PAYLOADS: tuple[type[EventPayload], ...] = (
     ProgressScored,
     BudgetBlocked,
     StrategyShift,
-    EvidenceAdded,
     FlagCandidate,
     FlagReviewed,
     FlagRederived,
@@ -328,16 +316,6 @@ class Event(BaseModel):
     ts: float
     type: str
     data: dict[str, Any]
-
-    @classmethod
-    def from_payload(cls, *, run_id: str, seq: int, ts: float, payload: EventPayload) -> Event:
-        return cls(
-            run_id=run_id,
-            seq=seq,
-            ts=ts,
-            type=type(payload).event_type,
-            data=payload.model_dump(mode="json"),
-        )
 
     def payload(self) -> EventPayload:
         """Validate ``data`` back into its typed payload model."""

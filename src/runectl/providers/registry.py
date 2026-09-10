@@ -1,7 +1,7 @@
 """Model registry: provider/capability metadata, never string-prefix sniffing (D5, plan §3.2).
 
-``--model`` is required; the provider and every capability (tool support, prompt
-caching, context window, price, thinking support) come from this table. Adding a
+``--model`` is required; the provider and every capability (prompt caching,
+context window, price, thinking support) come from this table. Adding a
 fourth provider is a registry entry plus an adapter, not a redesign (D5's
 "assumptions" note).
 
@@ -13,8 +13,9 @@ earlier 2026-09-05 figures were wrong: Opus 5 was listed at 15/75 (actually
 them before trusting a cost report for those providers.
 
 Cache multipliers (D18): a cache *write* bills at 1.25x `price_in`, a cache
-*read* at 0.10x. Both are provider-standard for Anthropic today and are applied
-in `cost.py`, not stored per-model.
+*read* at 0.10x. Both are provider-standard for Anthropic today, so they live as
+constants in `cost.py` rather than as per-model fields — make them fields again
+the day a provider actually differs.
 
 Thinking (D20, added 2026-09-09): ``claude-haiku-4-5-20251001`` is renamed to
 ``claude-haiku-4-5`` here — current Anthropic model ids carry no date suffix,
@@ -49,15 +50,9 @@ class ModelInfo(BaseModel):
     id: str
     provider: ProviderName
     context_window: int
-    supports_tools: bool
     supports_prompt_cache: bool
     price_in: float  # USD per 1M input tokens
     price_out: float  # USD per 1M output tokens
-
-    # D18 — how much of `price_in` a cached token costs. Anthropic-standard
-    # today; if a provider ever differs these become per-model fields.
-    cache_write_multiplier: float = 1.25
-    cache_read_multiplier: float = 0.10
 
     # D20 — extended thinking. `thinking_style` selects how an adapter maps
     # the shared `ThinkingLevel` vocabulary onto that provider's own API;
@@ -73,32 +68,32 @@ class ModelInfo(BaseModel):
 MODEL_REGISTRY: dict[str, ModelInfo] = {
     "claude-opus-5": ModelInfo(
         id="claude-opus-5", provider="anthropic", context_window=1_000_000,
-        supports_tools=True, supports_prompt_cache=True, price_in=5.0, price_out=25.0,
+        supports_prompt_cache=True, price_in=5.0, price_out=25.0,
         supports_thinking=True, thinking_style="anthropic_adaptive", max_thinking_level="max",
     ),
     "claude-sonnet-5": ModelInfo(
         id="claude-sonnet-5", provider="anthropic", context_window=1_000_000,
-        supports_tools=True, supports_prompt_cache=True, price_in=2.0, price_out=10.0,
+        supports_prompt_cache=True, price_in=2.0, price_out=10.0,
         supports_thinking=True, thinking_style="anthropic_adaptive", max_thinking_level="max",
     ),
     "claude-haiku-4-5": ModelInfo(
         id="claude-haiku-4-5", provider="anthropic", context_window=200_000,
-        supports_tools=True, supports_prompt_cache=True, price_in=1.0, price_out=5.0,
+        supports_prompt_cache=True, price_in=1.0, price_out=5.0,
         supports_thinking=False, thinking_style="none", max_thinking_level="off",
     ),
     "gpt-5": ModelInfo(
         id="gpt-5", provider="openai", context_window=272_000,
-        supports_tools=True, supports_prompt_cache=True, price_in=5.0, price_out=15.0,
+        supports_prompt_cache=True, price_in=5.0, price_out=15.0,
         supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
     ),
     "gpt-5-mini": ModelInfo(
         id="gpt-5-mini", provider="openai", context_window=272_000,
-        supports_tools=True, supports_prompt_cache=True, price_in=0.5, price_out=1.5,
+        supports_prompt_cache=True, price_in=0.5, price_out=1.5,
         supports_thinking=True, thinking_style="openai_effort", max_thinking_level="high",
     ),
     "gemini-2.5-pro": ModelInfo(
         id="gemini-2.5-pro", provider="google", context_window=1_000_000,
-        supports_tools=True, supports_prompt_cache=True, price_in=1.25, price_out=10.0,
+        supports_prompt_cache=True, price_in=1.25, price_out=10.0,
         # google-genai's ThinkingLevel enum tops out at HIGH (LOW/MEDIUM/HIGH,
         # no xhigh/max) — requests above "high" are clamped by
         # resolve_thinking_level() rather than sent to an enum value that
@@ -107,7 +102,7 @@ MODEL_REGISTRY: dict[str, ModelInfo] = {
     ),
     "gemini-2.5-flash": ModelInfo(
         id="gemini-2.5-flash", provider="google", context_window=1_000_000,
-        supports_tools=True, supports_prompt_cache=False, price_in=0.3, price_out=2.5,
+        supports_prompt_cache=False, price_in=0.3, price_out=2.5,
         supports_thinking=True, thinking_style="google_budget", max_thinking_level="high",
     ),
 }

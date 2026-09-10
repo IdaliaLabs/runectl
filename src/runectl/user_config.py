@@ -3,18 +3,20 @@
 Distinct from ``config.py`` (fixed paths and unmeasured engine tunables) and
 from ``providers/keys.py`` (secrets — the keyring or a 0600 file, never here).
 This file stores *preferences* only: a default model and thinking level per
-provider, plus a couple of run-wide defaults (``approval``, ``max_cost``). It
-is plain text, non-secret, and safe to check into dotfiles.
+provider. It is plain text, non-secret, and safe to check into dotfiles.
 
 This does **not** relax D5. ``runectl run`` still requires ``--model`` on
 every invocation — nothing here is read by the run path to silently choose a
 model. What reads this file is discovery/convenience surfaces only:
 ``runectl models list`` (to show what's configured) and the TUI's launcher (to
 *prefill* a field the user still sees and can change before it composes an
-explicit ``--model``/``--thinking`` command line). ``approval``/``max_cost``
-defaults *are* read by ``runectl run``/``bench run`` when the corresponding
-flag is omitted, exactly the way an env var overrides a hardcoded default
-elsewhere in this codebase — the flag, when given, always wins.
+explicit ``--model``/``--thinking`` command line).
+
+Only ``model`` and ``thinking`` are read by anything. ``runectl config`` will
+happily store other keys, and readers for ``approval``/``max_cost`` existed
+here for a while without ever being wired into the run path — removed
+2026-09-09 rather than left standing as an unkept promise. Setting those keys
+today does nothing.
 """
 
 from __future__ import annotations
@@ -52,7 +54,7 @@ def _reject_key_shaped(section: str, key: str, value: str) -> None:
         )
 
 
-def _load_raw() -> dict[str, Any]:
+def load() -> dict[str, Any]:
     path = config_path()
     if not path.exists():
         return {}
@@ -66,13 +68,8 @@ def _load_raw() -> dict[str, Any]:
     return data
 
 
-def load() -> dict[str, Any]:
-    """The whole file as a plain dict — used by `runectl config list`."""
-    return _load_raw()
-
-
 def get(section: str, key: str) -> str | None:
-    data = _load_raw()
+    data = load()
     values = data.get(section)
     if not isinstance(values, dict):
         return None
@@ -82,7 +79,7 @@ def get(section: str, key: str) -> str | None:
 
 def set_value(section: str, key: str, value: str) -> None:
     _reject_key_shaped(section, key, value)
-    data = _load_raw()
+    data = load()
     section_data = data.get(section)
     if section_data is None:
         section_data = {}
@@ -134,17 +131,3 @@ def default_thinking(provider: ProviderName) -> ThinkingLevel:
             f"{', '.join(THINKING_LEVELS)}"
         )
     return raw
-
-
-def default_approval() -> str | None:
-    return get("defaults", "approval")
-
-
-def default_max_cost() -> float | None:
-    raw = get("defaults", "max_cost")
-    if raw is None:
-        return None
-    try:
-        return float(raw)
-    except ValueError as exc:
-        raise UsageError(f"{config_path()}: [defaults] max_cost = {raw!r} is not a number") from exc

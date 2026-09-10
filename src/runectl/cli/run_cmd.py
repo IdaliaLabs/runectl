@@ -44,6 +44,7 @@ from runectl.sandbox import arena_build
 from runectl.sandbox.base import sandbox_session
 from runectl.sandbox.docker import DockerSandbox
 from runectl.trace.store import Store
+from runectl.trace.writer import TraceWriter
 from runectl.user_config import default_thinking as configured_default_thinking
 
 
@@ -82,6 +83,27 @@ def parse_approval(value: str) -> ApprovalPolicy:
     if value not in APPROVAL_POLICIES:
         raise UsageError(f"--approval {value!r} is not one of {', '.join(APPROVAL_POLICIES)}")
     return value  # narrowed to ApprovalPolicy by the membership check above
+
+
+def finish(store: Store, writer: TraceWriter, run_id: str, outcome: RunOutcome) -> None:
+    """Close the trace and write the run's terminal manifest.
+
+    One place, so a new field on `RunOutcome` cannot reach `run.json` for
+    `runectl run` but not for `runectl replay` — these two had already drifted
+    once by the time this was factored out.
+    """
+    writer.close()
+    store.finish_run(
+        run_id,
+        outcome=outcome.outcome,
+        exit_code=outcome.exit_code,
+        flag=outcome.flag,
+        cost_usd=outcome.cost_usd,
+        steps_used=outcome.steps_used,
+        progress_steps=outcome.progress_steps,
+        blocked_steps=outcome.blocked_steps,
+        thinking_level=outcome.thinking_level,
+    )
 
 
 @dataclass(frozen=True)
@@ -294,18 +316,7 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
         store.finish_run(run_id, outcome="error", exit_code=exc.exit_code)
         raise
 
-    writer.close()
-    store.finish_run(
-        run_id,
-        outcome=outcome.outcome,
-        exit_code=outcome.exit_code,
-        flag=outcome.flag,
-        cost_usd=outcome.cost_usd,
-        steps_used=outcome.steps_used,
-        progress_steps=outcome.progress_steps,
-        blocked_steps=outcome.blocked_steps,
-        thinking_level=outcome.thinking_level,
-    )
+    finish(store, writer, run_id, outcome)
     return RunResult(run_id=run_id, outcome=outcome)
 
 

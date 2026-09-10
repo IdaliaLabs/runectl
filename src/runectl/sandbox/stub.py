@@ -19,14 +19,14 @@ def ok(stdout: str = "", *, stderr: str = "", exit_code: int = 0, duration_s: fl
     """Convenience constructor for a successful scripted :class:`ExecResult`."""
     return ExecResult(
         ok=True, stdout=stdout, stderr=stderr, exit_code=exit_code,
-        duration_s=duration_s, timed_out=False,
+        duration_s=duration_s,
     )
 
 
 def failed(stderr: str = "", *, exit_code: int = 1, duration_s: float = 0.01) -> ExecResult:
     return ExecResult(
         ok=False, stdout="", stderr=stderr, exit_code=exit_code,
-        duration_s=duration_s, timed_out=False,
+        duration_s=duration_s,
     )
 
 
@@ -61,13 +61,6 @@ class StubSandbox:
     def write_file(self, rel_path: str, content: bytes) -> None:
         self._require_started()
         self._fs[rel_path] = content
-
-    def read_file(self, rel_path: str) -> bytes:
-        self._require_started()
-        try:
-            return self._fs[rel_path]
-        except KeyError as exc:
-            raise FileNotFoundError(rel_path) from exc
 
     def put_inputs(self, files: Sequence[Path]) -> list[str]:
         self._require_started()

@@ -50,7 +50,6 @@ def exec_results_from_trace(trace_path: Path, artifacts_dir: Path) -> list[ExecR
                     stderr=payload.stderr,
                     exit_code=payload.exit_code,
                     duration_s=payload.duration_s,
-                    timed_out=False,
                     truncated=payload.truncated,
                 )
             )
@@ -66,7 +65,6 @@ def exec_results_from_trace(trace_path: Path, artifacts_dir: Path) -> list[ExecR
                     stderr=payload.stderr,
                     exit_code=payload.exit_code,
                     duration_s=payload.duration_s,
-                    timed_out=False,
                     truncated=payload.truncated,
                 )
             )
@@ -93,9 +91,6 @@ class ReplaySandbox:
 
     def write_file(self, rel_path: str, content: bytes) -> None:
         pass
-
-    def read_file(self, rel_path: str) -> bytes:
-        raise SandboxError("ReplaySandbox does not support read_file")
 
     def put_inputs(self, files: Sequence[Path]) -> list[str]:
         return [f"{SANDBOX_WORKDIR}/{f.name}" for f in files]

@@ -94,8 +94,7 @@ class TraceWriter:
     def emit(self, payload: EventPayload) -> Event:
         self._seq += 1
         data = payload.model_dump(mode="json")
-        data = _walk(data, _redact_str)
-        data = _walk(data, lambda s: _spill_str(s, self._artifacts_dir))
+        data = _walk(data, lambda s: _spill_str(_redact_str(s), self._artifacts_dir))
         event = Event(
             run_id=self._run_id,
             seq=self._seq,

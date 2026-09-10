@@ -47,11 +47,6 @@ class Usage(BaseModel):
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
 
-    @property
-    def total_input_tokens(self) -> int:
-        return self.input_tokens + self.cache_read_tokens + self.cache_write_tokens
-
-
 class Message(BaseModel):
     """One canonical chat message; each adapter derives its own wire shape."""
 

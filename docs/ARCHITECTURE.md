@@ -193,7 +193,7 @@ Each of these is shaped now so the milestone that fills it doesn't need an API c
 
 | Seam | Where | Fills in |
 |---|---|---|
-| Evidence store | `evidence.added` is defined in the trace schema but nothing emits it — findings carry forward in the conversation only | later |
+| Evidence store | Findings carry forward in the conversation only. The unemitted `evidence.added` schema entry was removed 2026-09-09 (D3 amendment) rather than left standing as a promise | later |
 
 **M9 (done, 2026-09-09)** filled the human-render-polish seam and then grew past it — see
 [`STATUS.md`](STATUS.md)'s Milestones section and `cli/tui/`'s module docstrings for what

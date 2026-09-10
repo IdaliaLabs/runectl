@@ -37,10 +37,6 @@ class TraceReader:
                     return
                 yield event
 
-    def resolve_artifact(self, digest: str) -> bytes:
-        return (self._artifacts_dir / f"{digest}.txt").read_bytes()
-
-
 def load_run(run_id: str, *, store: Store | None = None) -> tuple[RunManifest, Iterator[Event]]:
     """Return ``(manifest, events)`` for a run, ordered by ``seq``."""
     store = store or Store()

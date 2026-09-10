@@ -21,7 +21,6 @@ class ExecResult(BaseModel):
     stderr: str
     exit_code: int | None
     duration_s: float
-    timed_out: bool
     truncated: bool = False
 
 
@@ -32,8 +31,6 @@ class Sandbox(Protocol):
     def exec(self, argv_or_script: str, *, timeout_s: int) -> ExecResult: ...
 
     def write_file(self, rel_path: str, content: bytes) -> None: ...
-
-    def read_file(self, rel_path: str) -> bytes: ...
 
     def put_inputs(self, files: Sequence[Path]) -> list[str]:
         """Copy files into the sandbox; return their verified in-sandbox paths."""

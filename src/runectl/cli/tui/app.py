@@ -21,6 +21,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Footer, Header, ListItem, ListView, RichLog, Static
 
+from runectl.cli.render import event_line
 from runectl.cli.tui import data as tui_data
 from runectl.cli.tui.actions import approve_flag
 from runectl.cli.tui.launcher import LauncherScreen
@@ -47,22 +48,6 @@ _COLUMNS: tuple[tuple[str, str], ...] = (
     ("cost", "cost"),
     ("steps", "steps"),
 )
-
-
-def _timeline_line(event: Event) -> str | None:
-    """A thin, TUI-local rendering, deliberately not reusing `cli/render.py`'s
-    `_line` (that one renders one `EventPayload`, not raw `Event.data`, and
-    coupling this live view to its exact signature would make the two harder
-    to evolve independently — this is a display concern, not a shared one)."""
-    payload = event.payload()
-    if isinstance(payload, RunStarted):
-        return f"▶ {payload.challenge_name} [{payload.category}]  {payload.model}"
-    if isinstance(payload, RunFinished):
-        flag = f" — {payload.flag}" if payload.flag else ""
-        return f"■ {payload.outcome}{flag}  (exit {payload.exit_code})"
-    from runectl.cli.render import _line
-
-    return _line(payload, width=100)
 
 
 @dataclass
@@ -196,7 +181,7 @@ class RunectlTUI(App[None]):
                 self._live_runs[event.run_id] = live
                 self._rekey_row(slot_id, event.run_id)
             if live.run_id == self._selected_run_id or slot_id == self._selected_run_id:
-                self._append_live_event(event)
+                self._write_event(event)
             self._update_row(event.run_id, event)
 
         handle = await run_streaming(argv, on_event)
@@ -234,20 +219,6 @@ class RunectlTUI(App[None]):
             table.update_cell(run_id, "cost", f"${payload.cost_usd:.4f}")
             table.update_cell(run_id, "steps", str(payload.steps_used))
 
-    def _append_live_event(self, event: Event) -> None:
-        payload = event.payload()
-        timeline = self.query_one("#timeline-log", RichLog)
-        line = _timeline_line(event)
-        if line:
-            timeline.write(line)
-        if isinstance(payload, LlmThinking):
-            thinking_log = self.query_one("#thinking-log", RichLog)
-            thinking_log.write(f"[step {payload.step}] {payload.text}")
-        trace_log = self.query_one("#trace-log", RichLog)
-        trace_log.write(event.model_dump_json())
-        if isinstance(payload, (FlagCandidate, FlagDecision)):
-            self._refresh_flag_list(event.run_id)
-
     def _refresh_flag_list(self, run_id: str) -> None:
         flag_list = self.query_one("#flag-list", ListView)
         flag_list.clear()
@@ -260,17 +231,17 @@ class RunectlTUI(App[None]):
         run_id = str(event.row_key.value)
         self._select_run(run_id)
 
-    def _write_event_to_logs(self, event: Event) -> None:
+    def _write_event(self, event: Event) -> None:
+        """The one path an event takes to the panes — live, browsed, or replayed."""
         payload = event.payload()
-        timeline = self.query_one("#timeline-log", RichLog)
-        thinking_log = self.query_one("#thinking-log", RichLog)
-        trace_log = self.query_one("#trace-log", RichLog)
-        line = _timeline_line(event)
+        line = event_line(event.payload(), width=100)
         if line:
-            timeline.write(line)
+            self.query_one("#timeline-log", RichLog).write(line)
         if isinstance(payload, LlmThinking):
-            thinking_log.write(f"[step {payload.step}] {payload.text}")
-        trace_log.write(event.model_dump_json())
+            self.query_one("#thinking-log", RichLog).write(f"[step {payload.step}] {payload.text}")
+        self.query_one("#trace-log", RichLog).write(event.model_dump_json())
+        if isinstance(payload, (FlagCandidate, FlagDecision)):
+            self._refresh_flag_list(event.run_id)
 
     def _select_run(self, run_id: str) -> None:
         """Instant load — the whole trace, all at once. Used for browsing a
@@ -284,7 +255,7 @@ class RunectlTUI(App[None]):
         live = self._live_runs.get(run_id)
         events = live.events if live is not None else tui_data.read_events(self._store, run_id)
         for event in events:
-            self._write_event_to_logs(event)
+            self._write_event(event)
         self._refresh_flag_list(run_id)
 
     async def _playback_run(self, run_id: str) -> None:
@@ -304,10 +275,7 @@ class RunectlTUI(App[None]):
         if run_id in table.rows:
             table.move_cursor(row=table.get_row_index(run_id))
         for event in events:
-            self._write_event_to_logs(event)
-            payload = event.payload()
-            if isinstance(payload, (FlagCandidate, FlagDecision)):
-                self._refresh_flag_list(run_id)
+            self._write_event(event)
             await asyncio.sleep(self._playback_delay_s)
         if manifest is not None:
             self.notify(
@@ -332,11 +300,3 @@ class RunectlTUI(App[None]):
             self.notify(output or f"exit {exit_code}", severity="error")
         self._refresh_flag_list(run_id)
         self.action_refresh_runs()
-
-
-def main() -> None:
-    RunectlTUI().run()
-
-
-if __name__ == "__main__":
-    main()

@@ -79,7 +79,7 @@ into run config or logged.
 A closed set for V1 — see `CONTRIBUTING.md`'s "Adding an event type" for the four-step
 process to add one. (This section's original count of sixteen is stale: `flag.reviewed`
 shipped with M6, `budget.exhausted` with D19, `llm.thinking` with D20 (2026-09-09), and
-`flag.rederived` with D3's 2026-09-10 amendment — twenty as of that last one.
+`flag.rederived` with D3's 2026-09-10 amendment, and `evidence.added` removed on 2026-09-09 for never having been emitted — **nineteen** as of that last change.
 `trace/events.py`'s `_ALL_PAYLOADS` tuple is the authoritative count.)
 
 ### `run.started`
@@ -126,8 +126,7 @@ The single tool call being executed this step.
 
 ### `tool.result`
 The structured result. `kind` is `output`, `error`, or `blocked`.
-`step`, `tool`, `ok`, `kind`, `stdout`, `stderr`, `exit_code`, `duration_s`, `truncated`,
-`artifact_ref`
+`step`, `tool`, `ok`, `kind`, `stdout`, `stderr`, `exit_code`, `duration_s`, `truncated`
 
 ### `progress.scored`
 Per-step progress signal, emitted after every executed tool call. `delta` is what the step
@@ -145,17 +144,12 @@ A forced change of approach after a no-progress threshold, with the evidence sum
 injected into context.
 `step`, `reason`, `evidence_summary`
 
-### `evidence.added`
-A durable finding worth carrying forward. **Defined but not emitted** — findings currently
-carry forward in the conversation only.
-`step`, `kind`, `summary`, `source_seq`
-
 ### `flag.candidate`
 A `submit_flag` call. `provenance_seq` points at the `seq` of the `tool.result` where the
 flag was actually observed — the anti-invention mechanism (D15 §1). The agent cites it
 itself: every tool result reaches the model with an `[observation seq=N]` header, and the
 judge re-reads and re-runs what that number names.
-`step`, `flag`, `how_found`, `provenance_seq`, `provenance_artifact`
+`step`, `flag`, `how_found`, `provenance_seq`
 
 ### `flag.reviewed`
 The disconfirmation pass's verdict on one candidate (D15 §2) — its own event rather than a

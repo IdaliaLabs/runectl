@@ -12,7 +12,6 @@ import contextlib
 import json
 import os
 import stat
-from pathlib import Path
 
 import keyring
 import keyring.errors
@@ -107,7 +106,3 @@ def list_keys() -> dict[str, bool]:
         provider: bool(os.environ.get(env_var) or _try_keyring_get(provider) or keys.get(provider))
         for provider, env_var in _ENV_VAR.items()
     }
-
-
-def keys_path() -> Path:
-    return keys_file_path()

@@ -107,8 +107,10 @@ The starting values, for reference:
 The five M7 categories default to `network = "bridge"` (a 2026-09-09 decision, `DECISIONS.md`
 D14): remote-target pwn, live osint lookups, and network challenges that give a host all
 want egress by default, and `--network none` is one flag away for offline work. `crypto`
-and `misc` stay `none`. `DEFAULT_STEP_LIMITS` in `config.py` still carries the same
-starting step limits; they remain unmeasured until `runectl bench` tunes them.
+and `misc` stay `none`. Each category's `step_limit` lives in its own TOML and is the only
+source for it — `config.py` used to carry a parallel `DEFAULT_STEP_LIMITS` table that
+nothing read, removed 2026-09-09. The limits remain unmeasured until `runectl bench` tunes
+them.
 
 ## Writing a good playbook
 

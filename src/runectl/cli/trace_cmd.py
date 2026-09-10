@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import typer
 
-from runectl.cli.render import _line, _width
+from runectl.cli.render import _width, event_line
 from runectl.trace.reader import load_run
 from runectl.trace.store import Store
 
@@ -33,6 +33,6 @@ def show(
     # exactly what you would have watched happen.
     typer.echo(f"run {manifest.run_id}")
     for event in events:
-        line = _line(event.payload(), _width())
+        line = event_line(event.payload(), _width())
         if line is not None:
             typer.echo(line)

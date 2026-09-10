@@ -165,7 +165,6 @@ class DockerSandbox:
             stderr=(stderr_raw or b"").decode("utf-8", "replace"),
             exit_code=exit_code,
             duration_s=duration,
-            timed_out=exit_code == 124,
         )
 
     def exec(self, argv_or_script: str, *, timeout_s: int) -> ExecResult:
@@ -195,7 +194,6 @@ class DockerSandbox:
             stderr=(stderr_raw or b"").decode("utf-8", "replace"),
             exit_code=exit_code,
             duration_s=duration,
-            timed_out=exit_code == 124,
         )
 
     def write_file(self, rel_path: str, content: bytes) -> None:
@@ -208,25 +206,6 @@ class DockerSandbox:
             tar.addfile(info, io.BytesIO(content))
         if not container.put_archive(SANDBOX_WORKDIR, tar_buf.getvalue()):
             raise SandboxError(f"failed to write file into sandbox: {rel_path}")
-
-    def read_file(self, rel_path: str) -> bytes:
-        container = self._require_container()
-        try:
-            stream, _stat = container.get_archive(f"{SANDBOX_WORKDIR}/{rel_path}")
-        except APIError as exc:
-            raise FileNotFoundError(rel_path) from exc
-        buf = io.BytesIO()
-        for chunk in stream:
-            buf.write(chunk)
-        buf.seek(0)
-        with tarfile.open(fileobj=buf, mode="r") as tar:
-            members = tar.getmembers()
-            if not members:
-                raise FileNotFoundError(rel_path)
-            extracted = tar.extractfile(members[0])
-            if extracted is None:
-                raise FileNotFoundError(rel_path)
-            return extracted.read()
 
     def put_inputs(self, files: Sequence[Path]) -> list[str]:
         container = self._require_container()

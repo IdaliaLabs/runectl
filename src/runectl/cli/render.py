@@ -54,7 +54,7 @@ def _flat(text: str, limit: int) -> str:
     return single[: limit - 1] + "…"
 
 
-def _tool_arg_summary(tool: str, arguments: dict[str, object], limit: int) -> str:
+def _tool_arg_summary(arguments: dict[str, object], limit: int) -> str:
     """Show the argument that actually says what the step is doing."""
     for key in ("command", "flag_pattern", "filename", "binary_path", "flag"):
         value = arguments.get(key)
@@ -63,7 +63,7 @@ def _tool_arg_summary(tool: str, arguments: dict[str, object], limit: int) -> st
     return _flat(str(arguments), limit)
 
 
-def _line(payload: EventPayload, width: int) -> str | None:
+def event_line(payload: EventPayload, width: int) -> str | None:
     """One display line for an event, or None for events not worth showing live."""
     budget = width - 22
 
@@ -84,7 +84,7 @@ def _line(payload: EventPayload, width: int) -> str | None:
     if isinstance(payload, TriageResult):
         return f"    triage: {len(payload.commands)} command(s)"
     if isinstance(payload, ToolCall):
-        summary = _tool_arg_summary(payload.tool, payload.arguments, budget)
+        summary = _tool_arg_summary(payload.arguments, budget)
         return f"{payload.step:>3} → {payload.tool:<12} {summary}"
     if isinstance(payload, ToolResultEvent):
         mark = "ok " if payload.ok else ("blocked" if payload.kind == "blocked" else "err")
@@ -148,6 +148,6 @@ def _line(payload: EventPayload, width: int) -> str | None:
 
 
 def render_human(event: Event) -> None:
-    line = _line(event.payload(), _width())
+    line = event_line(event.payload(), _width())
     if line is not None:
         print(line, file=sys.stderr, flush=True)

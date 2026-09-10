@@ -47,17 +47,19 @@ DELTA_ERROR = -0.25
 
 
 @lru_cache(maxsize=512)
-def _compiled(pattern: str) -> re.Pattern[str] | None:
+def compiled(pattern: str) -> re.Pattern[str] | None:
+    """Case-insensitive, cached, and ``None`` rather than a raise on a malformed
+    category regex — bad data in a category TOML must not take a run down."""
     try:
         return re.compile(pattern, re.IGNORECASE)
     except re.error:
-        return None  # bad category regex must not kill a run
+        return None
 
 
 def _matches_any(text: str, patterns: tuple[str, ...]) -> bool:
     for pattern in patterns:
-        compiled = _compiled(pattern)
-        if compiled is not None and compiled.search(text):
+        pattern_re = compiled(pattern)
+        if pattern_re is not None and pattern_re.search(text):
             return True
     return False
 

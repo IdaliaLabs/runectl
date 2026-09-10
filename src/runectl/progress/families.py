@@ -14,8 +14,7 @@ ship as defaults everyone gets, not as a special case for web.
 
 from __future__ import annotations
 
-import re
-from functools import lru_cache
+from runectl.progress.signal import compiled
 
 UNCLASSIFIED = "other"
 
@@ -35,26 +34,14 @@ DEFAULT_FAMILIES: tuple[tuple[str, str], ...] = (
 )
 
 
-@lru_cache(maxsize=512)
-def _compiled(pattern: str) -> re.Pattern[str]:
-    return re.compile(pattern, re.IGNORECASE)
-
-
 def classify(command: str, *, overrides: dict[str, str] | None = None) -> str:
     """Return the tactic family for a command.
 
     Category overrides are checked first so a category can claim a command the
     shared defaults would have classified more generically.
     """
-    for name, pattern in (overrides or {}).items():
-        try:
-            if _compiled(pattern).search(command):
-                return name
-        except re.error:
-            # A malformed regex in category data must not take a run down; the
-            # loader validates shape, not regex compilability.
-            continue
-    for name, pattern in DEFAULT_FAMILIES:
-        if _compiled(pattern).search(command):
+    for name, pattern in list((overrides or {}).items()) + list(DEFAULT_FAMILIES):
+        pattern_re = compiled(pattern)
+        if pattern_re is not None and pattern_re.search(command):
             return name
     return UNCLASSIFIED

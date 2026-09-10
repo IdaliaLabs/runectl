@@ -185,7 +185,7 @@ See [`PROVIDERS.md`](PROVIDERS.md) for the full resolution order.
 
 ## `runectl config`
 
-Per-provider preferences and run-wide defaults, in `~/.config/runectl/config.toml`
+Per-provider preferences, in `~/.config/runectl/config.toml`
 (overridable with `RUNECTL_CONFIG_HOME`). This is a discovery/convenience surface only —
 it does **not** relax D5. `--model` is still required on every `runectl run`; nothing
 here is read by the run path to silently choose a model. What it *does* prefill: the

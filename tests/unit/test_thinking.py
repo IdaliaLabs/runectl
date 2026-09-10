@@ -13,7 +13,7 @@ from collections.abc import Sequence
 import pytest
 
 from runectl.categories.loader import load as load_category
-from runectl.cli.render import _line
+from runectl.cli.render import event_line
 from runectl.loop.runner import Runner
 from runectl.loop.state import Challenge
 from runectl.providers.base import Completion, Message, Usage
@@ -177,7 +177,7 @@ def _read_events(trace_path, artifacts_dir):  # type: ignore[no-untyped-def]
 
 def test_render_line_for_llm_thinking_is_clipped_and_marks_truncation() -> None:
     payload = LlmThinking(step=4, text="x" * 500, level="high", truncated=True)
-    line = _line(payload, width=100)
+    line = event_line(payload, width=100)
     assert line is not None
     assert line.endswith("…")
     assert "\n" not in line
@@ -189,7 +189,7 @@ def test_render_line_for_run_started_shows_thinking_when_on() -> None:
         approval_policy="gated", max_steps=10, network="none",
         thinking_level="high", thinking_clamped_from="max",
     )
-    line = _line(payload, width=100)
+    line = event_line(payload, width=100)
     assert line is not None
     assert "thinking=high" in line
     assert "clamped from max" in line
@@ -200,7 +200,7 @@ def test_render_line_for_run_started_omits_thinking_when_off() -> None:
         challenge_name="c", category="misc", model="claude-sonnet-5", provider="anthropic",
         approval_policy="gated", max_steps=10, network="none",
     )
-    line = _line(payload, width=100)
+    line = event_line(payload, width=100)
     assert line is not None
     assert "thinking" not in line
 

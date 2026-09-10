@@ -126,7 +126,7 @@ which fails on four separate assertions if the event is removed.
 
 | Surface | Behavior today | Lands in |
 |---|---|---|
-| `evidence.added` event | Defined in the schema; nothing emits it — findings carry forward in the conversation only | later |
+| Evidence store | No durable finding record; findings carry forward in the conversation only. The unemitted `evidence.added` event was removed from the schema 2026-09-09 (D3 amendment) | later |
 
 ## What the judge actually does
 

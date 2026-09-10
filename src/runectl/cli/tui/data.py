@@ -1,6 +1,6 @@
 """Read-only data access for the TUI: runs, traces, pending flags.
 
-Everything here reads through the same `Store`/`TraceReader`/`IndexDB` any
+Everything here reads through the same `Store`/`TraceReader` any
 other `cli/` command uses (`runs_cmd.py`, `flag_cmd.py`) — no engine coupling,
 no new storage format. The TUI never mutates a run directly; approving a flag
 or launching a run goes through a subprocess (`runner_proc.py`,
@@ -10,11 +10,9 @@ or launching a run goes through a subprocess (`runner_proc.py`,
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from runectl.cli.flag_cmd import PendingCandidate, pending_candidates
 from runectl.trace.events import Event
-from runectl.trace.index import IndexDB
 from runectl.trace.reader import TraceReader
 from runectl.trace.store import RunManifest, Store
 
@@ -29,25 +27,6 @@ class RunSummary:
     cost_usd: float
     steps_used: int
     thinking_level: str
-
-
-def list_runs(store: Store, *, limit: int = 200) -> list[RunSummary]:
-    """Via the derived SQLite index — fast, but only as fresh as the last
-    `runectl index rebuild`. This is what `runectl runs list` uses."""
-    rows: list[dict[str, Any]] = IndexDB(store.home / "index.db").list_runs()
-    return [
-        RunSummary(
-            run_id=row["run_id"],
-            challenge_name=row.get("challenge_name") or "",
-            category=row.get("category") or "",
-            model=row.get("model") or "",
-            outcome=row.get("outcome"),
-            cost_usd=row.get("cost_usd") or 0.0,
-            steps_used=row.get("steps_used") or 0,
-            thinking_level=row.get("thinking_level") or "off",
-        )
-        for row in rows[:limit]
-    ]
 
 
 def list_runs_fresh(store: Store, *, limit: int = 100) -> list[RunSummary]:

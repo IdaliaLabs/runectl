@@ -6,6 +6,12 @@ from dataclasses import dataclass, field
 
 from runectl.providers.registry import ModelInfo
 
+# D18 — how much of `price_in` a cached token costs. Provider-standard for
+# Anthropic today and identical across every registered model, so they are
+# constants here rather than per-model fields (see registry.py's docstring).
+CACHE_WRITE_MULTIPLIER = 1.25
+CACHE_READ_MULTIPLIER = 0.10
+
 
 @dataclass
 class CostEntry:
@@ -42,8 +48,8 @@ class CostLedger:
         per_million = 1_000_000
         cost = (
             (input_tokens / per_million) * model.price_in
-            + (cache_write_tokens / per_million) * model.price_in * model.cache_write_multiplier
-            + (cache_read_tokens / per_million) * model.price_in * model.cache_read_multiplier
+            + (cache_write_tokens / per_million) * model.price_in * CACHE_WRITE_MULTIPLIER
+            + (cache_read_tokens / per_million) * model.price_in * CACHE_READ_MULTIPLIER
             + (output_tokens / per_million) * model.price_out
         )
         self.entries.append(
@@ -62,7 +68,3 @@ class CostLedger:
     @property
     def total_usd(self) -> float:
         return self._total_usd
-
-    @property
-    def cache_read_tokens(self) -> int:
-        return sum(e.cache_read_tokens for e in self.entries)

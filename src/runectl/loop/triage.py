@@ -26,9 +26,6 @@ _CATEGORY_COMMANDS: dict[str, tuple[str, ...]] = {
     "rev": ("checksec --file=/ctf/* 2>/dev/null",),
     "forensics": ("exiftool -a -u -g1 /ctf/* 2>/dev/null",),
     "misc": ("strings -a -n 8 /ctf/* 2>/dev/null | head -60",),
-    "web": (),
-    "crypto": (),
-    "osint": (),
     "network": ("capinfos /ctf/* 2>/dev/null",),
 }
 
