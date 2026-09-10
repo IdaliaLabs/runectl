@@ -35,6 +35,18 @@ non-interactive `runectl run` subprocess.
 
 ---
 
+## See it solve one
+
+Every frame below is a real, replayable run — the fixture `make demo` also plays back
+live in your terminal (`runectl tui --replay`), not staged footage. Full walkthrough:
+[`docs/demo/runectl-demo.mp4`](docs/demo/runectl-demo.mp4).
+
+| Reasoning, live | A command and its output | Judged and finalized |
+| --- | --- | --- |
+| ![the agent's thinking pane populating](docs/demo/thinking.gif) | ![a sandboxed command and its result](docs/demo/toolcall.gif) | ![the flag judge re-deriving and finalizing](docs/demo/solved.gif) |
+
+---
+
 ## What makes it different
 
 - **Bring your own key, bring your own model.** Anthropic, OpenAI, and Google are all

@@ -16,3 +16,5 @@ keys.json
 *.log
 .DS_Store
 .demo-home/
+docs/demo/session.cast
+docs/demo/runectl-demo.gif
