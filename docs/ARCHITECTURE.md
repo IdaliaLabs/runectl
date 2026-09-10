@@ -70,8 +70,7 @@ src/runectl/
 
     flags/
         judge.py        the D15 pipeline: plausibility -> provenance -> decoy ->
-                        corroboration -> flag format -> re-derivation -> review
-        review.py       the disconfirmation pass — advisory, decides nothing
+                        corroboration -> flag format -> re-derivation
         plausibility.py decoys.py
 
     categories/         category data, loaded at runtime

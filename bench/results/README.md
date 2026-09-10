@@ -7,6 +7,39 @@ These are kept in the repo on purpose. D16 says step limits and budgets come
 down as real data arrives and never go up, which is only checkable if the data
 that justified a change is still here to read.
 
+## 2026-09-10 — claude-sonnet-5 — the disconfirmation review removed (D11/D15)
+
+Two back-to-back live runs of the full M7 suite, same model, no other change between
+them: `2026-09-10-baseline-with-review.json` (`flags/review.py` still in the pipeline)
+and `2026-09-10-no-review.json` (removed — see `DECISIONS.md`'s 2026-09-10 amendment).
+
+| | with review | without review |
+|---|---|---|
+| solve rate | 8/10 | 8/10 |
+| false flags | 1 (`quick-math`, unfixable — see its `gate_note`) | 1 (same case) |
+| gate | MET — 7/7 gated | MET — 6/7 gated |
+| cost | $0.9427 | $1.2768 |
+
+Same solve rate, same false-flag count and case. The one gate-count difference is
+`rivest-shamir-adleman`, solved with review and unsolved without it — but that run's own
+record (`run_id 20260910-134811-20b7a5`) shows it never submitted a candidate: it hit the
+$0.50 spend ceiling and exited `exhausted` (D19), the same budget-outcome pattern
+`esrever` showed on 2026-09-09 below. The review pass runs only after a candidate is
+submitted, so this run never reached it — the regression is live-model step variance
+between two separately-sampled runs, not a consequence of the removal, and the code
+already established why structurally: `_apply_policy` never read the review's verdict in
+the first place (D11's 2026-09-08 amendment made it advisory; this date removed it
+outright). Cost moved the other way from what removing a $0.002-per-candidate call would
+predict, for the same reason — the budget-exhausted run alone spent $0.55 more than its
+counterpart, which swamps eight candidates' worth of review calls (~$0.016) many times
+over. Read the per-case cost delta, not the suite total, if comparing the review call's
+actual price.
+
+Fixed in the same branch, found while verifying `flag.reviewed` events in old runs would
+stay readable after the removal: `EventPayload`'s `extra="forbid"` was silently
+truncating `runectl trace show`/`replay` on every run recorded before the prior session's
+dead-code pass dropped a handful of now-unused fields. See `DECISIONS.md`.
+
 ## 2026-09-09 — claude-sonnet-5 — the M7 ten-challenge suite
 
 The first bench on the suite M7 grew to ten (all eight categories now ship). It

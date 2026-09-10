@@ -21,7 +21,6 @@ from runectl.cli.render import render_human, render_ndjson
 from runectl.config import CONTAINER_NAME_PREFIX, DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, RunectlError, SandboxError, UsageError
 from runectl.flags.judge import APPROVAL_POLICIES, ApprovalPolicy
-from runectl.flags.review import make_reviewer
 from runectl.loop.context import ContextBuilder
 from runectl.loop.runner import Runner, RunOutcome
 from runectl.loop.state import Challenge
@@ -287,8 +286,6 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
     ledger = CostLedger()
     summarizer = make_utility_summarizer(utility_provider, utility_model_info, ledger)
     context = ContextBuilder(llm_summarize=summarizer)
-    # D15 §2's disconfirmation pass, on the cheap model and the shared ledger.
-    reviewer = make_reviewer(utility_provider, utility_model_info, ledger)
 
     runner = Runner(
         challenge=challenge,
@@ -301,7 +298,6 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
         max_cost_usd=request.max_cost,
         ledger=ledger,
         context=context,
-        reviewer=reviewer,
         thinking=thinking,
     )
     try:

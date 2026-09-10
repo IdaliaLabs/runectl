@@ -14,11 +14,10 @@ finalizing it. Five mechanisms, in the order D15 names them:
    because the wrapper is published in the challenge and nobody earns it
    (`_payload_is_provenance`, 2026-09-08).
 2. **Verification re-derivation** — the cited command is re-run in the sandbox
-   and must produce the same string again. The disconfirmation pass in
-   `flags/review.py` (D15 mechanism 2's "framed to *disconfirm* rather than
-   confirm") still runs on every candidate and is recorded, but is **advisory**
-   as of 2026-09-08: over nine live reviews it cleared two wrong flags, held one
-   correct one, and caught nothing. See the D11 amendment.
+   and must produce the same string again. A model-judgement disconfirmation
+   pass ran here too, from 2026-09-08; it was advisory (D11) by the same day,
+   and removed outright 2026-09-10 for costing a call on every candidate
+   without ever changing a verdict — see the D11 amendment.
 3. **Decoy detection** — `flags/decoys.py`.
 4. **Independent corroboration** is still counted and reported, but **no longer
    gates** — see the 2026-09-08 D11 amendment and `bench/results/README.md`. It
@@ -47,7 +46,6 @@ from dataclasses import dataclass, field
 from typing import Literal, Protocol
 
 from runectl.flags import decoys, plausibility
-from runectl.flags.review import Reviewer, ReviewRequest
 from runectl.progress.fingerprint import fingerprint
 
 Decision = Literal["finalized", "pending", "rejected"]
@@ -85,8 +83,8 @@ _MIN_PAYLOAD_LEN = 8
 _SEQ_IN_TEXT = re.compile(r"\d+")
 
 # The checks whose failure can hold a candidate under `gated`. Everything else
-# a verdict carries — corroboration, the disconfirmation review — is recorded
-# for whoever reads it and decides nothing (D11, amended 2026-09-08).
+# a verdict carries — corroboration — is recorded for whoever reads it and
+# decides nothing (D11, amended 2026-09-08).
 _GATING_CHECKS = frozenset({"flag_format", "rederivation"})
 
 
@@ -215,7 +213,6 @@ class FlagJudge:
         flag_format: str | None = None,
         description: str = "",
         sandbox: _Executor | None = None,
-        reviewer: Reviewer | None = None,
         require_provenance: bool = True,
         min_corroboration: int = MIN_CORROBORATION,
     ) -> None:
@@ -223,7 +220,6 @@ class FlagJudge:
         self._flag_format = flag_format
         self._description = description
         self._sandbox = sandbox
-        self._reviewer = reviewer
         self._require_provenance = require_provenance
         self._min_corroboration = min_corroboration
 
@@ -234,7 +230,6 @@ class FlagJudge:
         history: Sequence[ToolObservation],
         fallback_seq: int,
         provenance: str = "",
-        how_found: str = "",
     ) -> JudgeVerdict:
         checks: list[Check] = []
 
@@ -280,13 +275,6 @@ class FlagJudge:
 
         rederived, rederive_detail, rederivation = self._rederive(flag, source)
         checks.append(Check("rederivation", rederived, rederive_detail))
-
-        # Run last: it is the only stage that costs tokens, so everything a
-        # deterministic check can settle is already settled by here. Advisory
-        # since 2026-09-08 — its verdict is recorded and printed, and does not
-        # decide anything.
-        reviewed, review_detail = self._review(flag, how_found, source)
-        checks.append(Check("review", reviewed, review_detail))
 
         return self._apply_policy(
             source_seq=source.seq,
@@ -418,21 +406,6 @@ class FlagJudge:
         if pattern.search(flag):
             return True, f"matches {self._flag_format}"
         return False, f"does not match {self._flag_format}"
-
-    def _review(self, flag: str, how_found: str, source: ToolObservation) -> tuple[bool, str]:
-        """Ask a cheap model to find a reason this flag is wrong (D15 §2)."""
-        if self._reviewer is None:
-            return False, "no reviewer available to check this candidate"
-        verdict = self._reviewer(
-            ReviewRequest(
-                flag=flag,
-                how_found=how_found,
-                description=self._description,
-                source_command=source.shell_command or source.command,
-                source_output=source.text,
-            )
-        )
-        return verdict.sound, verdict.detail
 
     def _rederive(
         self, flag: str, source: ToolObservation

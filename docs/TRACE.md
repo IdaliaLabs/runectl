@@ -79,8 +79,11 @@ into run config or logged.
 A closed set for V1 — see `CONTRIBUTING.md`'s "Adding an event type" for the four-step
 process to add one. (This section's original count of sixteen is stale: `flag.reviewed`
 shipped with M6, `budget.exhausted` with D19, `llm.thinking` with D20 (2026-09-09), and
-`flag.rederived` with D3's 2026-09-10 amendment, and `evidence.added` removed on 2026-09-09 for never having been emitted — **nineteen** as of that last change.
-`trace/events.py`'s `_ALL_PAYLOADS` tuple is the authoritative count.)
+`flag.rederived` with D3's 2026-09-10 amendment, and `evidence.added` removed on 2026-09-09 for never having been emitted — **nineteen** as of that change.
+`flag.reviewed` stopped being emitted on 2026-09-10 (the disconfirmation pass was removed
+outright, D11/D15) but stays a valid, readable type — **eighteen emitted, nineteen
+readable** as of that change. `trace/events.py`'s `_ALL_PAYLOADS` tuple is the
+authoritative count.)
 
 ### `run.started`
 The run's parameters as actually resolved.
@@ -151,11 +154,12 @@ itself: every tool result reaches the model with an `[observation seq=N]` header
 judge re-reads and re-runs what that number names.
 `step`, `flag`, `how_found`, `provenance_seq`
 
-### `flag.reviewed`
-The disconfirmation pass's verdict on one candidate (D15 §2) — its own event rather than a
-line in `flag.decision`'s reason, because reading *why* a model doubted a flag is the
-point of the pass. **Advisory since 2026-09-08**: this event is the whole output of the
-pass, and a `sound: false` verdict no longer holds anything (D11).
+### `flag.reviewed` (legacy — no longer emitted)
+The disconfirmation pass's verdict on one candidate (D15 §2, removed 2026-09-10). Advisory
+since 2026-09-08 and gone outright as of 2026-09-10: `_apply_policy` never read this
+verdict, so the pass cost a provider call per candidate without ever moving a decision.
+Kept as a readable payload type only, so `runectl trace show`/`replay` still work on the
+19 runs recorded before this date that contain it.
 `step`, `flag`, `sound`, `reason`
 
 ### `flag.rederived`

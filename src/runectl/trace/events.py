@@ -20,7 +20,17 @@ class EventPayload(BaseModel):
     this docstring used to say "sixteen," which stopped being true as of M6's
     `flag.reviewed` and D19's `budget.exhausted`)."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    # `extra="ignore"`, not "forbid" (bug found and fixed 2026-09-10): a field
+    # removed from a payload class is exactly as valid in an *old* trace as a
+    # field that was always there — TraceReader.payload() re-validates every
+    # stored line against the *current* schema, and "forbid" turned every past
+    # schema change into silent, undated data loss: any run recorded before a
+    # field was dropped (artifact_ref, provenance_artifact, timed_out, ...)
+    # stopped being readable past its first use of that field, with no error,
+    # because TraceReader's own contract is "an unparseable line ends the read
+    # silently" (that contract exists for real corruption, e.g. a SIGKILL mid
+    # write — it was never meant to fire on an intentional schema edit).
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     event_type: ClassVar[str] = ""
 

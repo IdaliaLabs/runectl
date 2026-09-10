@@ -9,7 +9,6 @@ from __future__ import annotations
 import pytest
 
 from runectl.flags.judge import FlagJudge, ToolObservation
-from runectl.flags.review import ReviewRequest, ReviewVerdict
 from runectl.sandbox.base import ExecResult
 
 FLAG = "csictf{you_are_a_basic_person}"
@@ -58,24 +57,10 @@ def _corroborated() -> list[ToolObservation]:
     ]
 
 
-class _Reviewer:
-    """A scripted disconfirmation pass. Records what it was asked to judge."""
-
-    def __init__(self, sound: bool = True, reason: str = "") -> None:
-        self.sound = sound
-        self.reason = reason
-        self.requests: list[ReviewRequest] = []
-
-    def __call__(self, request: ReviewRequest) -> ReviewVerdict:
-        self.requests.append(request)
-        return ReviewVerdict(self.sound, self.reason)
-
-
 def _judge(**kwargs: object) -> FlagJudge:
     defaults: dict[str, object] = {
         "approval_policy": "gated",
         "sandbox": _Executor({"python3 solve.py": f"decoded: {FLAG}"}),
-        "reviewer": _Reviewer(),
     }
     defaults.update(kwargs)
     return FlagJudge(**defaults)  # type: ignore[arg-type]
@@ -103,31 +88,6 @@ def test_one_sighting_is_enough_when_the_review_is_clean() -> None:
     assert verdict.corroboration == 1
 
 
-def test_a_doubtful_review_is_recorded_and_does_not_hold_the_candidate() -> None:
-    """Advisory since 2026-09-08 (D11).
-
-    Over nine live reviews the pass cleared two wrong flags, held one correct
-    one, and caught nothing (`bench/results/README.md`). Its verdict is worth
-    recording for whoever reads the trace; it is not worth a solve.
-    """
-    reviewer = _Reviewer(sound=False, reason="the integer is right but the encoding is not")
-    verdict = _judge(reviewer=reviewer).judge(
-        flag=FLAG, history=_corroborated(), fallback_seq=99, provenance="10"
-    )
-    assert verdict.decision == "finalized"
-    review = next(check for check in verdict.checks if check.name == "review")
-    assert review.passed is False
-    assert "encoding" in review.detail
-
-
-def test_no_reviewer_available_no_longer_holds() -> None:
-    """The deterministic checks are the gate, so a missing reviewer costs nothing."""
-    verdict = _judge(reviewer=None).judge(
-        flag=FLAG, history=_corroborated(), fallback_seq=99, provenance="10"
-    )
-    assert verdict.decision == "finalized"
-
-
 def test_a_flag_that_cannot_be_re_derived_is_still_held() -> None:
     """What the gate rests on now: the sandbox, not a second opinion."""
     executor = _Executor({})  # the cited command produces nothing the second time
@@ -136,28 +96,6 @@ def test_a_flag_that_cannot_be_re_derived_is_still_held() -> None:
     )
     assert verdict.decision == "pending"
     assert "rederivation" in verdict.reason
-
-
-def test_the_review_sees_the_evidence_and_not_the_whole_run() -> None:
-    reviewer = _Reviewer()
-    _judge(reviewer=reviewer, description="a crypto challenge").judge(
-        flag=FLAG, history=_corroborated(), fallback_seq=99, provenance="10",
-        how_found="decoded the ciphertext",
-    )
-    assert len(reviewer.requests) == 1
-    request = reviewer.requests[0]
-    assert request.flag == FLAG
-    assert request.how_found == "decoded the ciphertext"
-    assert request.source_command == "python3 solve.py"
-    assert FLAG in request.source_output
-
-
-def test_the_review_runs_last_so_a_rejection_never_costs_tokens() -> None:
-    reviewer = _Reviewer()
-    _judge(reviewer=reviewer).judge(
-        flag=FLAG, history=[_observation(10, "nothing here")], fallback_seq=99, provenance="10"
-    )
-    assert reviewer.requests == []
 
 
 def test_provenance_is_mandatory() -> None:
@@ -285,7 +223,7 @@ def test_a_verdict_records_every_check_it_ran() -> None:
     names = [check.name for check in verdict.checks]
     assert names == [
         "plausibility", "provenance", "decoy", "corroboration", "flag_format",
-        "rederivation", "review",
+        "rederivation",
     ]
 
 
@@ -306,7 +244,6 @@ def _payload_judge(**kwargs: object) -> FlagJudge:
         "description": _STATED,
         "flag_format": r"csictf\{[\w]{3,60}\}",
         "sandbox": executor,
-        "reviewer": lambda request: ReviewVerdict(True, "derivation checks out"),
     }
     defaults.update(kwargs)
     return FlagJudge(**defaults)  # type: ignore[arg-type]

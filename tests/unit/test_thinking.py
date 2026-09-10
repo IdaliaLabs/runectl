@@ -1,9 +1,9 @@
 """D20 — extended thinking: resolution/clamping, round-trip, trace, and render.
 
-Together with test_provider_retry.py's fakes (now thinking-aware) and
-test_flags_review.py's, this is the zero-spend coverage for a feature whose
-real adapters (providers/anthropic.py, openai.py, google.py) can't be
-exercised here at all (no daemon, no key — CONTRIBUTING.md).
+Together with test_provider_retry.py's fakes (now thinking-aware), this is
+the zero-spend coverage for a feature whose real adapters
+(providers/anthropic.py, openai.py, google.py) can't be exercised here at
+all (no daemon, no key — CONTRIBUTING.md).
 """
 
 from __future__ import annotations

@@ -27,7 +27,6 @@ from pathlib import Path
 import pytest
 
 from runectl.categories.loader import load as load_category
-from runectl.flags.review import ReviewVerdict
 from runectl.loop.runner import Runner
 from runectl.loop.state import Challenge
 from runectl.providers.base import Completion, Message, ToolCallRequest, Usage
@@ -142,7 +141,6 @@ def _solve(store: Store, *, record: bool) -> tuple[str, object]:
         provider=scripted,  # type: ignore[arg-type]
         sandbox=sandbox,
         writer=writer,
-        reviewer=lambda request: ReviewVerdict(True, "derived from the challenge data"),
     )
     outcome = runner.run()
     sandbox.stop()

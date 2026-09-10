@@ -45,6 +45,33 @@ def test_sigkill_leaves_valid_prefix(tmp_path: Path) -> None:
     assert len(events) == 5
 
 
+def test_a_field_dropped_from_the_schema_does_not_truncate_an_old_trace(tmp_path: Path) -> None:
+    """extra="ignore", not "forbid" (bug found and fixed 2026-09-10).
+
+    A line from a run recorded before a payload class shed a field is not
+    corrupt — it is exactly as valid as it always was. Treating it the same
+    as a SIGKILL-truncated line (test above) silently threw away every event
+    after the first one, on every run recorded before any field was ever
+    removed from any event.
+    """
+    trace_path = tmp_path / "trace.jsonl"
+    artifacts_dir = tmp_path / "artifacts"
+    with trace_path.open("w", encoding="utf-8") as fh:
+        fh.write(
+            '{"v":1,"run_id":"run-1","seq":1,"ts":1.0,"type":"tool.call",'
+            '"data":{"step":0,"tool":"run_command","arguments":{},'
+            '"a_field_no_longer_in_the_schema":"junk"}}\n'
+        )
+        fh.write(
+            '{"v":1,"run_id":"run-1","seq":2,"ts":2.0,"type":"tool.call",'
+            '"data":{"step":1,"tool":"run_command","arguments":{}}}\n'
+        )
+
+    events = list(TraceReader(trace_path, artifacts_dir))
+    assert len(events) == 2
+    assert [e.seq for e in events] == [1, 2]
+
+
 def test_secrets_are_redacted(tmp_path: Path) -> None:
     trace_path = tmp_path / "trace.jsonl"
     artifacts_dir = tmp_path / "artifacts"

@@ -20,7 +20,6 @@ from runectl.categories.schema import Category
 from runectl.config import DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, SandboxError
 from runectl.flags.judge import ApprovalPolicy, FlagJudge, ToolObservation
-from runectl.flags.review import Reviewer
 from runectl.loop import nudges
 from runectl.loop.context import ContextBuilder, build_system_prompt
 from runectl.loop.state import Challenge, RunState
@@ -41,7 +40,6 @@ from runectl.trace.events import (
     FlagCandidate,
     FlagDecision,
     FlagRederived,
-    FlagReviewed,
     LlmRequest,
     LlmResponse,
     LlmThinking,
@@ -124,7 +122,6 @@ class Runner:
         triage_override: TriageResult | None = None,
         ledger: CostLedger | None = None,
         context: ContextBuilder | None = None,
-        reviewer: Reviewer | None = None,
         thinking: ThinkingLevel = "off",
     ) -> None:
         self._provider = provider
@@ -150,7 +147,6 @@ class Runner:
             flag_format=challenge.flag_format,
             description=challenge.description,
             sandbox=sandbox,
-            reviewer=reviewer,
         )
         # D8: the four progress mechanisms. A plain collaborator (D6) — the loop
         # applies what it returns; it never touches RunState itself.
@@ -470,16 +466,10 @@ class Runner:
             history=state.tool_observations,
             fallback_seq=fallback_seq,
             provenance=provenance,
-            how_found=how_found,
         )
         self._writer.emit(
             FlagCandidate(step=step, flag=flag, how_found=how_found, provenance_seq=verdict.provenance_seq)
         )
-        for check in verdict.checks:
-            if check.name == "review":
-                self._writer.emit(
-                    FlagReviewed(step=step, flag=flag, sound=check.passed, reason=check.detail)
-                )
         # D15 mechanism 2 runs a command in the sandbox. Recording it is what
         # keeps the trace complete — and, because `ReplaySandbox` serves
         # recorded exec results strictly in order, it is also what stops a

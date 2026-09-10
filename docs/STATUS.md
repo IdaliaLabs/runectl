@@ -153,18 +153,20 @@ before anything that costs sandbox time:
 5. **Flag format.** Matched against `--flag-format` when one was given.
 6. **Re-derivation (D15 §2).** The cited command is re-run in the sandbox and must produce
    the same string again.
-7. **Disconfirmation review (D15 §2).** One call to the cheapest model of the same
-   provider (~$0.002), framed to find a reason the flag is *wrong*. Runs last, so a flag
-   rejected on provenance or a decoy marker never costs a token. **Advisory since
-   2026-09-08** — recorded in the trace and printed, decides nothing. Its record over nine
-   live reviews was six correct clears, two wrong flags cleared, and one correct flag held;
-   it caught nothing and cost a solve. It also cannot see the challenge's attached files,
-   which is why it held that solve.
+7. ~~**Disconfirmation review (D15 §2).**~~ **Removed 2026-09-10.** A call to the cheapest
+   model of the same provider (~$0.002), framed to find a reason the flag is *wrong*, ran
+   last on every candidate from 2026-09-08. It was advisory the same day it shipped —
+   recorded in the trace and printed, decided nothing — and stayed that way for its whole
+   life: `_apply_policy` never read its verdict. Its record over nine live reviews was six
+   correct clears, two wrong flags cleared, one correct flag held (it cannot see a
+   challenge's attached files, which is why it held that one), and zero caught. Deleted
+   outright rather than left advisory: an unread verdict printed next to every candidate
+   read as a judgment call it never was. See the D11/D15 amendments in `DECISIONS.md`.
 
 Stages 1–3 reject under **every** `--approval` policy. Stages 5–6 — flag format and
 re-derivation — are what decide whether a candidate can be finalized without a human:
 under `gated` both must pass, otherwise the run ends at exit code 2 with the candidate in
-the trace for `runectl flag approve`. Stages 4 and 7 are reported and decide nothing. The
+the trace for `runectl flag approve`. Stage 4 is reported and decides nothing. The
 gating set is named explicitly as `_GATING_CHECKS` in `flags/judge.py` so it cannot drift
 without someone editing that line.
 
