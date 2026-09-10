@@ -26,7 +26,7 @@ from runectl.bench.suite import (
     render_report,
     score,
 )
-from runectl.cli.run_cmd import RunRequest, challenge_from_file, execute_run
+from runectl.cli.run_cmd import RunRequest, challenge_from_file, execute_run, parse_thinking
 from runectl.config import DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, RunectlError, SandboxError, UsageError
 
@@ -50,8 +50,20 @@ def bench_run(
     report_path: str | None = typer.Option(None, "--report", help="Write the JSON report here too"),
     output: str = typer.Option("human", "--output", help="human | json"),
     dry_run: bool = typer.Option(False, "--dry-run", help="List what would run, spend nothing"),
+    thinking: str = typer.Option(
+        "off",
+        "--thinking",
+        help="off|low|medium|high|xhigh|max (D20). Defaults to off, not the "
+        "configured per-provider default — a suite runs unattended and repeatably.",
+    ),
 ) -> None:
     """Run every challenge in the suite and score it. Exits 1 on any false flag."""
+    try:
+        resolved_thinking = parse_thinking(thinking)
+    except UsageError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=6) from exc
+
     try:
         cases = load_suite(Path(suite), only=only)
     except SuiteError as exc:
@@ -84,6 +96,7 @@ def bench_run(
             max_cost=min(max_cost, max_total_cost - spent) if max_total_cost > 0 else max_cost,
             record=record,
             output="jsonl" if output == "json" else "human",
+            thinking=resolved_thinking,
         )
         try:
             result = execute_run(challenge, request)

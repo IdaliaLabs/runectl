@@ -5,6 +5,20 @@ NOTE for reviewers: this adapter's shape was verified against the installed
 signature, exception hierarchy) but was never exercised against the live API —
 no OpenAI key was available in the build environment. See the M4 handoff
 report before trusting it for a real run.
+
+Extended thinking (D20, added 2026-09-09): **request-side only, unverified
+against a live service, same as the rest of this adapter.** The installed SDK
+(3.8.0) exposes a top-level `reasoning_effort` parameter on
+`chat.completions.create` accepting `none`/`minimal`/`low`/`medium`/`high`/
+`xhigh`/`max`, which `low`/`medium`/`high`/`xhigh`/`max` here map onto
+directly (`off` sends nothing, leaving the model's own default). **This API
+surface never returns reasoning content** — `ChatCompletionMessage` has no
+`reasoning`/`thinking` field, unlike the Responses API's encrypted reasoning
+items. `Completion.thinking_text` is therefore always empty for this adapter
+even when a level was requested and honored server-side; a switch to the
+Responses API would be required to render OpenAI's reasoning, which is out of
+scope here (D5 didn't require it, and Chat Completions is what the rest of
+this adapter already uses).
 """
 
 from __future__ import annotations
@@ -24,6 +38,7 @@ from runectl.providers.base import (
     api_error,
     auth_error,
 )
+from runectl.providers.registry import ThinkingLevel
 from runectl.tools.schema import ToolSchema, to_openai
 
 _TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
@@ -75,7 +90,9 @@ class OpenAIProvider:
         messages: Sequence[Message],
         tools: Sequence[ToolSchema],
         max_tokens: int,
+        thinking: ThinkingLevel = "off",
     ) -> Completion:
+        extra: dict[str, Any] = {"reasoning_effort": thinking} if thinking != "off" else {}
         try:
             response = self._client.chat.completions.create(
                 model=self._model_id,
@@ -84,6 +101,7 @@ class OpenAIProvider:
                 messages=cast(Any, _to_openai_messages(system, messages)),
                 tools=cast(Any, to_openai(tools)),
                 max_completion_tokens=max_tokens,
+                **extra,
             )
         except _TRANSIENT_ERRORS as exc:
             raise TransientProviderError(str(exc)) from exc

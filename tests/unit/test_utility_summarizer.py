@@ -12,7 +12,7 @@ from runectl.providers.scripted import ScriptedProvider
 
 def test_utility_summarizer_costs_land_in_shared_ledger() -> None:
     ledger = CostLedger()
-    model = resolve_model("claude-haiku-4-5-20251001")
+    model = resolve_model("claude-haiku-4-5")
     utility_provider = ScriptedProvider(
         [
             Completion(

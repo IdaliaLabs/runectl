@@ -23,7 +23,7 @@ from runectl.trace.writer import TraceWriter
 app = typer.Typer(add_completion=False, help="Review and finalize flag candidates (D11, D15).")
 
 
-class _Pending:
+class PendingCandidate:
     """One candidate the judge held back, with the context to decide on it."""
 
     def __init__(self, *, step: int, flag: str, how_found: str, provenance_seq: int, reason: str) -> None:
@@ -54,7 +54,7 @@ def _read(run_id: str) -> tuple[Store, list[Event]]:
     return store, events
 
 
-def _pending(events: list[Event]) -> list[_Pending]:
+def pending_candidates(events: list[Event]) -> list[PendingCandidate]:
     """Candidates whose last recorded decision was `pending`.
 
     Walks the whole trace rather than stopping at the first hit: a run can hold
@@ -70,13 +70,13 @@ def _pending(events: list[Event]) -> list[_Pending]:
         elif isinstance(payload, FlagDecision):
             decisions[payload.flag] = (payload.step, payload.decision, payload.reason)
 
-    held: list[_Pending] = []
+    held: list[PendingCandidate] = []
     for flag, (step, decision, reason) in decisions.items():
         if decision != "pending":
             continue
         candidate = candidates.get(flag)
         held.append(
-            _Pending(
+            PendingCandidate(
                 step=step,
                 flag=flag,
                 how_found=candidate.how_found if candidate else "",
@@ -91,7 +91,7 @@ def _pending(events: list[Event]) -> list[_Pending]:
 def list_candidates(run_id: str) -> None:
     """Print this run's pending candidates as JSON lines (exit 3 if there are none)."""
     _, events = _read(run_id)
-    held = _pending(events)
+    held = pending_candidates(events)
     for candidate in held:
         typer.echo(json.dumps(candidate.as_dict()))
     if not held:
@@ -106,7 +106,7 @@ def approve(
 ) -> None:
     """Finalize a pending candidate, recording that a human — not the judge — did it."""
     store, events = _read(run_id)
-    held = _pending(events)
+    held = pending_candidates(events)
     if not held:
         typer.echo(
             f"run {run_id} has no pending flag candidates to approve "

@@ -1,0 +1,147 @@
+"""The new-run launcher modal (Phase 4).
+
+Composes the exact `runectl run` argv a human would type and shows it before
+launching — the TUI is meant to teach the flags, not hide them (D4: the CLI
+is still the API). Confirming dismisses the modal with that argv list; the
+caller (`app.py`) is the one that actually spawns it.
+"""
+
+from __future__ import annotations
+
+from textual.app import ComposeResult
+from textual.containers import Horizontal, VerticalScroll
+from textual.screen import ModalScreen
+from textual.widgets import Button, Input, Label, Select, Static
+
+from runectl.categories.loader import available_categories
+from runectl.config import DEFAULT_MAX_COST_USD
+from runectl.providers.registry import MODEL_REGISTRY, THINKING_LEVELS
+from runectl.user_config import default_model, default_thinking
+
+_APPROVAL_LEVELS = ("gated", "strict", "auto")
+
+
+class LauncherScreen(ModalScreen[list[str] | None]):
+    """Returns the composed argv (everything after `runectl run`) or None on cancel."""
+
+    DEFAULT_CSS = """
+    LauncherScreen {
+        align: center middle;
+    }
+    #launcher-box {
+        width: 76;
+        height: auto;
+        max-height: 90%;
+        border: round $accent;
+        padding: 1 2;
+        background: $surface;
+    }
+    #launcher-preview {
+        margin-top: 1;
+        color: $text-muted;
+    }
+    #launcher-error {
+        color: $error;
+    }
+    """
+
+    def compose(self) -> ComposeResult:
+        model_options = [(f"{m.id}  ({m.provider})", m.id) for m in sorted(
+            MODEL_REGISTRY.values(), key=lambda m: (m.provider, m.id)
+        )]
+        preferred_model = default_model("anthropic") or (model_options[0][1] if model_options else None)
+
+        with VerticalScroll(id="launcher-box"):
+            yield Static("[b]New run[/b] — composes and previews the command before launching")
+            yield Label("Challenge TOML (optional — overrides name/category/description below)")
+            yield Input(placeholder="bench/practice/easy-02/chal.toml", id="challenge")
+            yield Label("Name")
+            yield Input(placeholder="quick-math", id="name")
+            yield Label("Category")
+            yield Select(
+                [(c, c) for c in available_categories()], id="category", allow_blank=True
+            )
+            yield Label("Description")
+            yield Input(placeholder="the challenge prompt", id="description")
+            yield Label("Model")
+            yield Select(model_options, value=preferred_model, id="model", allow_blank=False)
+            yield Label("Thinking")
+            yield Select(
+                [(level, level) for level in THINKING_LEVELS],
+                value=default_thinking("anthropic"),
+                id="thinking",
+                allow_blank=False,
+            )
+            yield Label("Approval")
+            yield Select(
+                [(a, a) for a in _APPROVAL_LEVELS], value="gated", id="approval", allow_blank=False
+            )
+            yield Label("Max cost (USD, 0 disables)")
+            yield Input(value=str(DEFAULT_MAX_COST_USD), id="max_cost")
+            yield Static("", id="launcher-error")
+            yield Static("", id="launcher-preview")
+            with Horizontal():
+                yield Button("Launch", id="launch", variant="primary")
+                yield Button("Cancel", id="cancel")
+
+    def on_mount(self) -> None:
+        self._update_preview()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        self._update_preview()
+
+    def on_select_changed(self, event: Select.Changed) -> None:
+        self._update_preview()
+
+    def _build_argv(self) -> list[str] | str:
+        """Returns the argv, or an error string if the form is incomplete."""
+        challenge = self.query_one("#challenge", Input).value.strip()
+        model = self.query_one("#model", Select).value
+        thinking = self.query_one("#thinking", Select).value
+        approval = self.query_one("#approval", Select).value
+        max_cost = self.query_one("#max_cost", Input).value.strip()
+
+        if not model:
+            return "a model is required"
+
+        argv = ["run", "--model", str(model), "--output", "jsonl"]
+        if challenge:
+            argv += ["--challenge", challenge]
+        else:
+            name = self.query_one("#name", Input).value.strip()
+            category = self.query_one("#category", Select).value
+            if not name or not category:
+                return "either a challenge TOML, or both name and category, are required"
+            description = self.query_one("#description", Input).value.strip()
+            argv += ["--name", name, "--category", str(category)]
+            if description:
+                argv += ["--description", description]
+
+        if thinking and thinking != "off":
+            argv += ["--thinking", str(thinking)]
+        if approval and approval != "gated":
+            argv += ["--approval", str(approval)]
+        if max_cost:
+            argv += ["--max-cost", max_cost]
+        return argv
+
+    def _update_preview(self) -> None:
+        result = self._build_argv()
+        error = self.query_one("#launcher-error", Static)
+        preview = self.query_one("#launcher-preview", Static)
+        if isinstance(result, str):
+            error.update(result)
+            preview.update("")
+        else:
+            error.update("")
+            preview.update("runectl " + " ".join(result))
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.dismiss(None)
+            return
+        result = self._build_argv()
+        if isinstance(result, str):
+            self.query_one("#launcher-error", Static).update(result)
+            return
+        self.dismiss(result)

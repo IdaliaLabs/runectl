@@ -17,17 +17,27 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict
 
 from runectl.providers.base import Completion, Message, Provider
+from runectl.providers.registry import ThinkingLevel
 from runectl.tools.schema import ToolSchema
 
 
 def request_hash(
-    system: str, messages: Sequence[Message], tools: Sequence[ToolSchema], max_tokens: int
+    system: str,
+    messages: Sequence[Message],
+    tools: Sequence[ToolSchema],
+    max_tokens: int,
+    thinking: ThinkingLevel = "off",
 ) -> str:
+    # D20 — thinking is part of the request identity: a cassette recorded with
+    # thinking off must never be served to a replay that asks for thinking on,
+    # since that would silently claim to reproduce a run whose model was never
+    # actually asked to reason.
     payload = {
         "system": system,
         "messages": [m.model_dump(mode="json") for m in messages],
         "tools": sorted(t.name for t in tools),
         "max_tokens": max_tokens,
+        "thinking": thinking,
     }
     encoded = json.dumps(payload, sort_keys=True).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -55,12 +65,13 @@ class RecordingProvider:
         messages: Sequence[Message],
         tools: Sequence[ToolSchema],
         max_tokens: int,
+        thinking: ThinkingLevel = "off",
     ) -> Completion:
         completion = self._inner.complete(
-            system=system, messages=messages, tools=tools, max_tokens=max_tokens
+            system=system, messages=messages, tools=tools, max_tokens=max_tokens, thinking=thinking
         )
         entry = CassetteEntry(
-            request_hash=request_hash(system, messages, tools, max_tokens),
+            request_hash=request_hash(system, messages, tools, max_tokens, thinking),
             response=completion.model_dump(mode="json"),
         )
         with self._cassette_path.open("a", encoding="utf-8") as fh:
@@ -90,8 +101,9 @@ class ReplayProvider:
         messages: Sequence[Message],
         tools: Sequence[ToolSchema],
         max_tokens: int,
+        thinking: ThinkingLevel = "off",
     ) -> Completion:
-        key = request_hash(system, messages, tools, max_tokens)
+        key = request_hash(system, messages, tools, max_tokens, thinking)
         candidates = self._by_hash.get(key)
         if not candidates:
             raise KeyError(f"ReplayProvider: no recorded response for request hash {key}")

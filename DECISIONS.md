@@ -4,7 +4,7 @@ Written 2026-09-05, updated 2026-09-05 (name, CLI-only lock, multi-provider/no-d
 
 Product, restated in one paragraph so the decisions have something to serve:
 
-> A local, BYO-API-key CLI named **`runectl`**. The user hands it a challenge — name, category, the prompt/description they were given, and any provided files — plus their own provider key (Anthropic, OpenAI, or Google, whichever model they want). It runs an autonomous agent loop inside a per-challenge Docker sandbox, works toward a flag, and writes a complete, replayable trace of everything it tried. It is built to be driven by another AI agent (machine-readable I/O, non-interactive, honest exit codes). **It is CLI-only, permanently — there is no GUI, no `serve` command, no `ui/` package, ever.**
+> A local, BYO-API-key CLI named **`runectl`**. The user hands it a challenge — name, category, the prompt/description they were given, and any provided files — plus their own provider key (Anthropic, OpenAI, or Google, whichever model they want). It runs an autonomous agent loop inside a per-challenge Docker sandbox, works toward a flag, and writes a complete, replayable trace of everything it tried. It is built to be driven by another AI agent (machine-readable I/O, non-interactive, honest exit codes). **It is CLI-only, permanently — there is no server, no HTTP surface, no browser UI, ever** (an in-terminal TUI is allowed as of the 2026-09-09 amendment to D13 — see that section).
 
 ## Corrections folded in 2026-09-05
 
@@ -28,6 +28,7 @@ Locked. Reasons: the CTF tooling ecosystem is Python (pwntools, angr, Crypto, sc
 - Layout: `src/` layout, package name `runectl`, console script `runectl`.
 - Typed throughout; `mypy --strict` on `src/runectl/` in CI. This is the direct structural answer to "stringly-typed control flow."
 - Runtime deps, complete V1 list: `typer`, `pydantic>=2`, `docker`, `anthropic`, `openai`, `google-genai`, `keyring`, `rich`. Category data uses stdlib `tomllib` — no YAML dep. Dev: `pytest`, `pytest-cov`, `mypy`, `ruff`.
+- **Amended 2026-09-09:** add `textual` for the `runectl tui` command (D13 amendment). `rich` has been a declared-but-unimported dependency since M0 — the human renderer in `cli/render.py` is hand-rolled string formatting, not `rich`'s console API — and Textual is built on `rich`, so this is the point that dependency actually gets used. Nothing else about the runtime dependency list changes.
 
 ### D2 — Sandbox: **Docker, one container per run, behind a `Sandbox` protocol**
 
@@ -66,7 +67,8 @@ Locked. Files win on debuggability, greppability, zero infra, and "it survives a
 ```
 
 - Event envelope, version 1: `{"v":1,"run_id":str,"seq":int,"ts":float,"type":str,"data":{...}}`. `seq` is monotonic per run and is the replay ordering key.
-- Event types (closed set for V1): `run.started`, `challenge.loaded`, `triage.result`, `llm.request`, `llm.response`, `tool.call`, `tool.result`, `progress.scored`, `budget.blocked`, `strategy.shift`, `evidence.added`, `flag.candidate`, `flag.decision`, `cost.updated`, `error`, `run.finished`.
+- Event types (closed set for V1): `run.started`, `challenge.loaded`, `triage.result`, `llm.request`, `llm.response`, `tool.call`, `tool.result`, `progress.scored`, `budget.blocked`, `strategy.shift`, `evidence.added`, `flag.candidate`, `flag.decision`, `cost.updated`, `error`, `run.finished`. (`flag.reviewed` shipped with M6 and `budget.exhausted` with D19 — the shipped set is 18, not 16; `docs/TRACE.md` is the current inventory.)
+- **Amended 2026-09-09: `llm.thinking` added**, following the four-step process in `CONTRIBUTING.md` ("Adding an event type"). Carries `step`, `text`, `level`, `truncated`. A separate event rather than a field on `llm.response` because thinking text is long and unbounded — keeping it as its own event lets the writer's 8 KB artifact-spill rule (below) apply to it independently, so a long thinking block doesn't bloat every `llm.response` line in `trace.jsonl`. See D20.
 - The writer flushes after every event. A run killed with SIGKILL still leaves a valid, replayable prefix.
 - Any value over 8 KB is written to `artifacts/` and referenced by digest in the event, so `trace.jsonl` stays greppable.
 - **The trace is written before any agent logic exists** (build order M1). Everything else emits into it.
@@ -110,6 +112,7 @@ Locked. Updated 2026-09-05: Google (Gemini) is a first-class third provider, not
 - **Every** LLM call goes through this path — including summarization and retry-summary generation. No hardcoded `gpt-4o-mini`, no silent no-op when a provider is absent. Utility calls use a configurable `--utility-model` that defaults to the cheapest model of the *same provider as the main model*, and their tokens land in the same cost ledger.
 - Prompt caching on the stable system prefix where the provider supports it (registry flag), so category playbooks aren't re-billed every step.
 - `ReplayProvider` reads `cassette.jsonl` and serves responses by request hash. `ScriptedProvider` returns hand-written responses for unit tests. Together these are requirement 4: the loop is fully testable with zero spend.
+- **Amended 2026-09-09 — explicitly not changed by the `runectl config`/`runectl tui` work.** `--model` stays required on `runectl run`; nothing is inferred by default. `runectl config` (below, alongside the D13 amendment) stores per-provider *preferences* — a default model and thinking level — that prefill flags in `runectl models list` and the TUI's launcher. They are read only where the user explicitly set them, they never silently choose a model for a `run` invocation, and the TUI always composes and shows an explicit `--model` before launching. See D20 for the parallel statement about thinking defaults.
 
 ### D6 — Run state: **one explicit object, no mixins**
 
@@ -175,13 +178,21 @@ Note what this leaves standing. Both mechanisms that have been tried as the gate
 
 Locked. One configurable `context.tool_output_limit` (default 6000 chars) with no second dead constant. Over the limit, the output is written to `artifacts/` and an extractive summarizer (deterministic first: head + tail + regex-salient lines; LLM summarization only if still over) produces what enters context. Identical tool output is deduplicated to a back-reference by digest (preserve item 9). History compaction runs on a token-budget trigger, not "every 15 steps," and goes through the standard provider path (D5).
 
-### D13 — CLI-only, permanently: **no GUI, no `serve`, no `ui/`, ever**
+### D13 — CLI-only, permanently: **no server, no browser UI, ever — an in-terminal TUI is in bounds**
 
 Locked, and rewritten 2026-09-05 from an earlier draft that planned a GUI as a later consumer. There is no GUI in this product's future — the CLI is the whole product, permanently. This is a stronger statement than "no GUI yet": it forecloses `idalia serve`/`runectl serve`, an SSE tailer, and a separate `ui/` package as things to ever build.
 
 - The event-stream/renderer split (D4) is kept anyway, but purely for testability and for the stdout-NDJSON / stderr-human duality — not as a seam for a future front end.
 - The one retained boundary: only `cli/` renders. Core code (`trace/`, `sandbox/`, `providers/`, `loop/`, `tools/`, `progress/`, `flags/`, `categories/`) emits structured events and never prints — this keeps the loop testable and scriptable, which is a CLI concern in its own right, not a GUI-readiness concern.
 - No import-linter GUI boundary is needed because there is nothing on the other side of it to protect against.
+
+**Amended 2026-09-09 — a local, in-terminal TUI is in bounds; the lock on a server or a browser UI is unchanged and is not what this amendment relaxes.** The user asked for an interactive way to watch and manage runs — multiple in flight, thinking visible, flags approvable — and a one-line-per-event stderr stream (however well polished by M9) cannot serve that; something stateful, navigable, and redrawing has to own the terminal. That is a TUI, not a GUI, and this amendment says so explicitly rather than letting it happen by drift.
+
+- **What's now allowed:** `runectl tui`, an interactive, full-screen, in-terminal application living at `src/runectl/cli/tui/` (Textual, D1). It is `cli/` code under every rule that phrase already carries — it renders, it never contains agent logic, and it is the only new thing permitted to hold a live redraw loop.
+- **What stays forbidden, permanently, and this amendment does not touch it:** `runectl serve`, any HTTP server, any network listener, any SSE tailer, any browser-rendered UI, any top-level `ui/` package. "In-terminal" is load-bearing — nothing here opens a port.
+- **Why this doesn't reopen the failure D13 was written against.** The old system's structural failure (`REBUILD_NOTES.md` §3) was the agent loop calling `socketio.emit(...)` from inside itself and being constructed directly by a Flask route — no boundary between agent and UI, so the agent couldn't run headless or be tested without the whole server. The TUI does not touch the loop process at all: it spawns `runectl run --output jsonl` as a **subprocess** and reads the same NDJSON event stream any other driving agent reads (D4's existing output contract). The loop stays synchronous, single-process, and exactly as testable as before; the TUI is just another consumer of the stream, running in a second process. Multiple runs in the TUI are multiple subprocesses, each with its own container — no threading or async was added to `loop/runner.py` to get there (D2 unchanged: one container per run).
+- **D4's non-interactivity guarantee is unchanged for the thing it was written to protect: `runectl run` itself.** Every flag on `run` still has a non-interactive form and nothing about running a challenge can block on a human. The TUI is interactive *as a separate process that composes and launches non-interactive commands* — interactivity moved outside the run, it was not introduced inside it. The one pre-existing exception, `runectl arena ensure` with no flags on a TTY (D17), is untouched; the TUI itself must not use it as a loophole to auto-build the arena — see the TUI section of `docs/CLI.md`.
+- Adding `runectl tui` does not change what any other command does or how `run --output jsonl`/`--output human` behave. A user who never runs `runectl tui` sees no difference.
 
 ### D14 — Category depth: **all eight equal, no earner-first order**
 
@@ -251,6 +262,17 @@ Added 2026-09-07. `runectl` spends the user's own prepaid balance, and an agent 
 - Crossing the ceiling is a normal outcome, not an error: the run emits `budget.exhausted`, finishes as `exhausted`, and exits **3**. The trace records the limit and the actual spend.
 - This is a *ceiling*, not an estimate. It cannot prevent a single very expensive call from overshooting it; it prevents the *next* one.
 
+### D20 — Extended thinking: **opt-in, explicit, and always recorded**
+
+Added 2026-09-09. `runectl` gains a `--thinking <off|low|medium|high|xhigh|max>` flag on `run` and `bench run`, and the model's reasoning becomes a first-class part of the trace (`llm.thinking`, D3) instead of being discarded after only its length was recorded. This is what makes `PLAN.md`'s stated demo — "show the thought, show the command, show the output, show the next move" — buildable at all; before this decision the thought was the one thing no trace contained.
+
+- **Default is `off`.** Thinking is not free — on Anthropic it is billed as output tokens against the same ledger and the same D19 spend ceiling — so a run that didn't ask for it doesn't pay for it. `off` is also the safe default for `bench run`, where a suite is run unattended and repeatably.
+- **The resolved level is always written to `run.started` and `run.json`**, never only implied by a flag the user might not remember passing. A run's reasoning spend is never invisible after the fact, matching the spirit of D19 ("every run has a hard spend ceiling" — the ceiling means nothing if what fed it isn't visible).
+- **One shared CLI vocabulary across three different provider APIs.** Anthropic exposes adaptive thinking plus an `output_config.effort` level; OpenAI exposes `reasoning.effort`; Google exposes a thinking-token budget. `runectl` presents one 6-value scale (`off` through `max`) and maps it per provider in the model registry (`ModelInfo.thinking_style`). Where a provider or model can't represent a requested level (e.g. a model with no thinking support, or a narrower effort range), **the CLI clamps and records the clamp in the trace — it never silently substitutes a different level without saying so.** This is the same "loud, not silent" posture as D11's approval gating and D15's decoy detection.
+- **Thinking blocks round-trip.** A provider that returns thinking content as structured blocks (not just prose) must have those blocks replayed back unchanged on the next request in the same run, per that provider's own API contract — dropping them or reordering them relative to text/tool-call content is a protocol violation for that provider, not a rendering choice. `ScriptedProvider` and `ReplayProvider` (D5) are extended to carry thinking blocks so this is testable without spend.
+- **`--record`'s cassette hashing (D5's `ReplayProvider`) must include the resolved thinking configuration.** A cassette recorded with thinking off must not be served to a replay requesting thinking on, or `replay --check` would compare a thinking-augmented run against a cassette that never asked the model to think, which is not the regression test D4's replay contract promises.
+- **Not a category concern.** Thinking level is a per-run, per-model choice like `--model` itself, not something a category TOML declares (D9 untouched) — a category's playbook doesn't know what the user is willing to spend on reasoning for their own challenge.
+
 ---
 
 ## Deliberately not decided yet
@@ -264,6 +286,6 @@ Added 2026-09-07. `runectl` spends the user's own prepaid balance, and an agent 
 Recorded so they're cheap to overturn:
 
 1. ~~Anthropic is the primary provider and OpenAI the secondary~~ — superseded 2026-09-05: Anthropic, OpenAI, and Google all ship in V1 with no primary; the product promise is BYO-any-key, equally. A fourth provider is a registry entry plus an adapter, not a redesign.
-2. Runs are single-challenge and single-threaded. Parallelism is a V2 concern and no V1 decision blocks it.
+2. Runs are single-challenge and single-threaded. Parallelism is a V2 concern and no V1 decision blocks it. **Note 2026-09-09:** the `runectl tui` amendment to D13 introduces *process-level* concurrency (multiple `runectl run` subprocesses watched at once) without touching this assumption — `Runner.run()` itself is still a single synchronous loop per process; nothing in `loop/` gained a thread or an event loop.
 3. The target machine is the founder's laptop with Docker Desktop. No remote/cloud sandbox in V1.
 4. `gated` (D11) is the right default; the §4 questionnaire may move it to `auto` for live comps.

@@ -20,6 +20,7 @@ from runectl.providers.base import (
     complete_with_retry,
 )
 from runectl.providers.cost import CostLedger
+from runectl.providers.registry import ThinkingLevel
 from runectl.providers.registry import resolve as resolve_model
 from runectl.tools.schema import ToolSchema
 
@@ -37,7 +38,8 @@ class _FlakyProvider:
         self.calls = 0
 
     def complete(
-        self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema], max_tokens: int
+        self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema], max_tokens: int,
+        thinking: ThinkingLevel = "off",
     ) -> Completion:
         self.calls += 1
         if self.calls <= self.fail_times:
@@ -50,7 +52,8 @@ class _AlwaysFlakyProvider:
         self.calls = 0
 
     def complete(
-        self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema], max_tokens: int
+        self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema], max_tokens: int,
+        thinking: ThinkingLevel = "off",
     ) -> Completion:
         self.calls += 1
         raise TransientProviderError("simulated 429 storm")
@@ -95,7 +98,8 @@ class _AuthFailingProvider:
         self.calls = 0
 
     def complete(
-        self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema], max_tokens: int
+        self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema], max_tokens: int,
+        thinking: ThinkingLevel = "off",
     ) -> Completion:
         self.calls += 1
         raise auth_error("Anthropic", RuntimeError("401 invalid x-api-key"))

@@ -31,7 +31,7 @@ class _Provider:
         self.error = error
         self.calls: list[str] = []
 
-    def complete(self, *, system: str, messages, tools, max_tokens: int) -> Completion:  # type: ignore[no-untyped-def]
+    def complete(self, *, system: str, messages, tools, max_tokens: int, thinking="off") -> Completion:  # type: ignore[no-untyped-def]
         if self.error:
             raise ProviderError("upstream is down")
         self.calls.append(system)
@@ -67,7 +67,7 @@ def test_hedging_toward_doubtful_wins() -> None:
 
 
 def test_a_failed_review_call_holds_the_candidate() -> None:
-    reviewer = make_reviewer(_Provider(error=True), resolve_model("claude-haiku-4-5-20251001"), CostLedger())
+    reviewer = make_reviewer(_Provider(error=True), resolve_model("claude-haiku-4-5"), CostLedger())
     verdict = reviewer(REQUEST)
     assert verdict.sound is False
     assert "review call failed" in verdict.reason
@@ -76,7 +76,7 @@ def test_a_failed_review_call_holds_the_candidate() -> None:
 def test_the_review_is_costed_on_the_shared_ledger() -> None:
     """D5: no untracked tokens, including the cheap ones."""
     ledger = CostLedger()
-    model = resolve_model("claude-haiku-4-5-20251001")
+    model = resolve_model("claude-haiku-4-5")
     reviewer = make_reviewer(_Provider("VERDICT: SOUND\nWHY: fine."), model, ledger)
     reviewer(REQUEST)
     assert ledger.total_usd > 0

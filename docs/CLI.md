@@ -36,6 +36,7 @@ uv run runectl run --model gpt-5 --name "sanity" --category web --description ".
 | `--max-steps <int>` | the category's `step_limit` | Hard step backstop for this run. |
 | `--record` | off | Record provider request/response pairs to `cassette.jsonl` so the run can be replayed at zero spend. |
 | `--output <jsonl\|human>` | `human` on a TTY, `jsonl` otherwise | Render mode. See "Output contract" below. |
+| `--thinking <off\|low\|medium\|high\|xhigh\|max>` | the configured per-provider default (`runectl config`), or `off` | Extended thinking (D20). The *resolved* level (after any provider clamp) is written to `run.started` and `run.json`, so a run's reasoning spend is never invisible. See [`PROVIDERS.md`](PROVIDERS.md#extended-thinking-d20). |
 
 ### Challenge TOML
 
@@ -51,8 +52,12 @@ Ben has encrypted a message with the same value of 'e' for 3 public moduli...
 ```
 
 `name` and `category` are required; `description` defaults to empty, `files` to none,
-`flag_format` to unset. Paths in `files` are resolved relative to your current working
-directory, not to the TOML file.
+`flag_format` to unset. Paths in `files` are resolved relative to **the TOML file's own
+directory** (an absolute path is left alone) — not your current working directory. A
+challenge directory is a unit that gets moved and vendored as a whole:
+`runectl run --challenge bench/practice/easy-03/chal.toml` from the repo root finds
+`easy-03/files/enc.txt` even though you ran the command from elsewhere. See
+`challenge_from_file` in `src/runectl/cli/run_cmd.py`.
 
 ### Output contract
 
@@ -168,6 +173,106 @@ key value. `rm` removes the key from both the keyring and the file.
 Valid providers: `anthropic`, `openai`, `google`.
 
 See [`PROVIDERS.md`](PROVIDERS.md) for the full resolution order.
+
+---
+
+## `runectl config`
+
+Per-provider preferences and run-wide defaults, in `~/.config/runectl/config.toml`
+(overridable with `RUNECTL_CONFIG_HOME`). This is a discovery/convenience surface only —
+it does **not** relax D5. `--model` is still required on every `runectl run`; nothing
+here is read by the run path to silently choose a model. What it *does* prefill: the
+default level `--thinking` resolves to when omitted, and (for the TUI's launcher) a
+default model per provider.
+
+```bash
+uv run runectl config set anthropic.model claude-sonnet-5
+uv run runectl config set anthropic.thinking high
+uv run runectl config get anthropic.thinking
+uv run runectl config list
+uv run runectl config path
+```
+
+An API key pasted into `SECTION.KEY` is rejected outright — `config.toml` is plain text,
+not the keyring; use `runectl keys set` instead. `config get` on an unset key prints
+nothing and exits 1, not an error.
+
+---
+
+## `runectl models list`
+
+The model registry, joined with which providers have a key present on this machine and
+each model's thinking support — the discoverability answer to `--model` always being
+required (D5).
+
+```bash
+uv run runectl models list
+```
+
+```
+claude-opus-5   provider=anthropic  key=yes  thinking=yes (max max)  ctx=1000000  $5.00/$25.00 per 1M
+claude-sonnet-5 provider=anthropic  key=yes  thinking=yes (max max)  ctx=1000000  $2.00/$10.00 per 1M [configured default]
+gpt-5           provider=openai     key=no   thinking=yes (max max) ctx=272000   $5.00/$15.00 per 1M
+```
+
+---
+
+## `runectl runs`
+
+Discover, inspect, and attach to runs — read-only, on purpose (there is no `runs rm`;
+deleting a run's directory deletes the record, and the record is the product, D3).
+
+```bash
+uv run runectl runs list [--limit N] [--category C] [--outcome O] [--json]
+uv run runectl runs show <run_id> [--json]
+uv run runectl runs ps                       # live runectl-<run_id> containers
+uv run runectl runs attach <run_id> [--exec] # prints (or runs) docker exec -it ...
+```
+
+`runs list` reads the derived SQLite index (`runectl index rebuild` regenerates it —
+D3, the index is never authoritative, so a stale or missing index just means an empty
+list, not an error). `runs ps` is the multi-instance visibility a Docker-per-run design
+otherwise lacks: it lists live `runectl-<run_id>` containers by filtering `docker ps` on
+the name prefix, exits 4 (with the same distinct message as `arena status`) if the
+daemon is unreachable.
+
+---
+
+## `runectl tui`
+
+An interactive, in-terminal view over runs — `runectl`'s one screen-owning surface,
+added to D13 by a dated amendment rather than by drift (see `DECISIONS.md` D13). It is a
+TUI, not a GUI: no server, no port, no browser involved, and every action it takes is
+composing and launching the exact non-interactive command a human would type.
+
+```bash
+uv run runectl tui                       # live: launch and watch runs, approve flags
+uv run runectl tui --replay <run_id>     # demo: animate through a finished run's trace
+```
+
+**The one architectural idea**: the TUI never runs the agent loop in-process. Launching
+a run from its modal spawns `runectl run --output jsonl ...` as a subprocess and reads
+the same stdout-NDJSON stream any other driving agent reads (the "Output contract"
+above). `loop/runner.py` gained no threading or async to make this work; several runs
+watched at once are just several subprocesses, each with its own container (D2
+unchanged — still one container per run). The run itself stays exactly as
+non-interactive as it is when driven from a shell.
+
+**`--replay <run_id>`** is Phase 5's demo mode: it animates straight through a finished
+run's already-recorded `trace.jsonl` at a readable pace (`--playback-delay`, default
+0.6s between events) — "show the thought, show the command, show the output, show the
+next move" (`PLAN.md`'s stated demo). This is deliberately **not** `runectl replay`,
+which re-executes the loop against `ReplayProvider`/`ReplaySandbox` to prove the
+tool-call sequence still matches; playback only reads what already happened, so it needs
+no sandbox, no provider, and spends nothing regardless of whether the original run did.
+
+`make demo` seeds a scratch run store with one solved, zero-spend fixture run (via
+`StubSandbox`/`ScriptedProvider` — no Docker, no key) and opens straight into its
+playback, so the demo works on a clean checkout.
+
+Arena preflight on startup only reports a missing image (pointing at `arena ensure`); it
+never builds one — D17's rule that a run must never kick off a 30-minute build behind
+your back applies to the TUI too.
 
 ---
 
@@ -338,6 +443,7 @@ runectl bench run --suite bench/practice --model claude-sonnet-5 --max-total-cos
 | `--max-cost <usd>` | `0.50` | Ceiling for **one** run. |
 | `--max-total-cost <usd>` | `0` (off) | Ceiling for the **whole suite**. It stops cleanly between challenges, and never lets one run overshoot what is left. |
 | `--max-steps`, `--approval`, `--utility-model`, `--api-key`, `--record` | as `runectl run` | Passed through to every run. |
+| `--thinking <level>` | `off` | As for `runectl run` (D20) — **defaults to `off` here, not the configured per-provider default**: a suite runs unattended and repeatably, and a reasoning-cost surprise across ten challenges is a worse place to discover a config default than one run. |
 | `--report <path>` | — | Also write the JSON report to a file. |
 | `--output <human\|json>` | `human` | `json` prints the report object on stdout. |
 | `--dry-run` | off | List what would run and exit. Spends nothing. |

@@ -42,7 +42,7 @@ Every line of `trace.jsonl` is one of these:
 | `run_id` | The owning run. |
 | `seq` | Monotonic per run, starting at 1. **This is the replay ordering key**, and what `provenance_seq` points at. |
 | `ts` | Unix timestamp, float seconds. |
-| `type` | One of the sixteen types below. Closed set. |
+| `type` | One of the types below. Closed set. |
 | `data` | The typed payload for that type. |
 
 A payload is a pydantic model with `extra="forbid"`, so a malformed event is a
@@ -75,11 +75,17 @@ into run config or logged.
 
 ## Event types
 
-Sixteen types, closed for V1.
+A closed set for V1 — see `CONTRIBUTING.md`'s "Adding an event type" for the four-step
+process to add one. (This section's original count of sixteen is stale: `flag.reviewed`
+shipped with M6 and `budget.exhausted` with D19; `llm.thinking` is the latest addition,
+D20, 2026-09-09. `trace/events.py`'s `_ALL_PAYLOADS` tuple is the authoritative count.)
 
 ### `run.started`
 The run's parameters as actually resolved.
-`challenge_name`, `category`, `model`, `provider`, `approval_policy`, `max_steps`, `network`
+`challenge_name`, `category`, `model`, `provider`, `approval_policy`, `max_steps`,
+`network`, `thinking_level` (D20 — the *resolved* level, `"off"` if not requested),
+`thinking_clamped_from` (D20 — set only when the requested level was clamped down for
+the model; null otherwise)
 
 ### `challenge.loaded`
 The challenge as accepted. Note it carries the description's *length*, not the description
@@ -98,6 +104,19 @@ Emitted before each provider call.
 ### `llm.response`
 `step`, `model`, `provider`, `stop_reason`, `text_chars`, `tool_call` (name + arguments, or
 null), `input_tokens`, `output_tokens`, `cost_usd`
+
+### `llm.thinking`
+Added 2026-09-09 (D20). The model's reasoning for one step, when `--thinking` was
+requested and the provider actually returned readable thinking text — an empty result
+(e.g. OpenAI's Chat Completions surface, which never returns reasoning content at all;
+see `providers/openai.py`) emits nothing rather than an empty event. A separate event
+from `llm.response` rather than a field on it, so a long thinking block doesn't bloat
+every response line. `text` is capped at 8,000 characters by the loop itself
+(`loop/runner.py`'s `_MAX_THINKING_CHARS`) rather than relying on the writer's generic
+>8 KB artifact-spill path below — that path replaces an oversized string with an
+`{"$artifact": ...}` dict, which would fail to re-validate against this event's
+plain-`str` `text` field on read-back.
+`step`, `text`, `level`, `truncated`
 
 ### `tool.call`
 The single tool call being executed this step.
@@ -154,6 +173,11 @@ A run can carry two decisions for the same flag: `pending` from the judge, then
 Emitted after every provider call, including utility calls.
 `step`, `provider`, `model`, `input_tokens`, `output_tokens`, `cost_usd`,
 `cumulative_cost_usd`
+
+### `budget.exhausted`
+D19's hard spend ceiling. A normal outcome, not an error — the run finishes as
+`exhausted` and exits 3, same as running out of steps with no candidate.
+`step`, `limit_usd`, `spent_usd`
 
 ### `error`
 `step`, `kind`, `message`, `recoverable`

@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict
 from runectl.config import DEFAULT_RETRY_ATTEMPTS
 from runectl.errors import ProviderError, UsageError
 from runectl.providers.cost import CostLedger
-from runectl.providers.registry import ModelInfo
+from runectl.providers.registry import ModelInfo, ThinkingLevel
 from runectl.tools.schema import ToolSchema
 
 
@@ -63,6 +63,12 @@ class Message(BaseModel):
     # set when role == "tool" — Google's FunctionResponse needs the name, not just an id
     tool_name: str | None = None
     tool_calls: tuple[ToolCallRequest, ...] = ()  # set when role == "assistant" and it called a tool
+    # D20 — opaque provider-native thinking blocks from a prior assistant turn.
+    # Replayed back verbatim, in the position each provider's own API requires
+    # (e.g. Anthropic wants them first in the assistant content list, before
+    # text and tool_use). Never inspected or modified by core code — only the
+    # adapter that produced them knows their shape.
+    thinking_blocks: tuple[dict[str, Any], ...] = ()
 
 
 class Completion(BaseModel):
@@ -72,6 +78,11 @@ class Completion(BaseModel):
     tool_calls: tuple[ToolCallRequest, ...]
     usage: Usage
     stop_reason: str
+    # D20 — the human-readable thinking summary (empty if thinking was off, or
+    # if a provider's display setting withheld it) and the opaque blocks to
+    # replay back on the next turn (see Message.thinking_blocks).
+    thinking_text: str = ""
+    thinking_blocks: tuple[dict[str, Any], ...] = ()
 
 
 class TransientProviderError(Exception):
@@ -111,6 +122,7 @@ class Provider(Protocol):
         messages: Sequence[Message],
         tools: Sequence[ToolSchema],
         max_tokens: int,
+        thinking: ThinkingLevel = "off",
     ) -> Completion: ...
 
 
@@ -123,6 +135,7 @@ def complete_with_retry(
     messages: Sequence[Message],
     tools: Sequence[ToolSchema],
     max_tokens: int,
+    thinking: ThinkingLevel = "off",
     attempts: int = DEFAULT_RETRY_ATTEMPTS,
     sleep: Callable[[float], None] = time.sleep,
 ) -> Completion:
@@ -130,7 +143,11 @@ def complete_with_retry(
     for attempt in range(attempts):
         try:
             completion = provider.complete(
-                system=system, messages=messages, tools=tools, max_tokens=max_tokens
+                system=system,
+                messages=messages,
+                tools=tools,
+                max_tokens=max_tokens,
+                thinking=thinking,
             )
         except TransientProviderError as exc:
             last_error = exc

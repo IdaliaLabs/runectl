@@ -30,13 +30,38 @@ from runectl.providers.cost import CostLedger
 from runectl.providers.google import GoogleProvider
 from runectl.providers.keys import resolve_key
 from runectl.providers.openai import OpenAIProvider
-from runectl.providers.registry import ModelInfo, UnknownModelError, cheapest_model_for
+from runectl.providers.registry import (
+    THINKING_LEVELS,
+    ModelInfo,
+    ThinkingLevel,
+    UnknownModelError,
+    cheapest_model_for,
+)
 from runectl.providers.registry import resolve as resolve_model
 from runectl.providers.replay import RecordingProvider
 from runectl.sandbox import arena_build
 from runectl.sandbox.base import sandbox_session
 from runectl.sandbox.docker import DockerSandbox
 from runectl.trace.store import Store
+from runectl.user_config import default_thinking as configured_default_thinking
+
+
+def parse_thinking(value: str | None) -> ThinkingLevel | None:
+    """Validate a raw --thinking string against the shared vocabulary (D20).
+
+    Returns ``None`` when nothing was passed, so callers can distinguish "not
+    given, use the configured/off default" from an explicit ``off``. Raises
+    ``UsageError`` (exit 6) on a bad value — this flag never silently falls
+    back to a default the way `--approval`'s unvalidated string does today
+    (docs/STATUS.md's documented, unscheduled gap); D20 asks for loud
+    degradation, and letting a typo pass silently would undercut that on its
+    very first flag.
+    """
+    if value is None:
+        return None
+    if value not in THINKING_LEVELS:
+        raise UsageError(f"--thinking {value!r} is not one of {', '.join(THINKING_LEVELS)}")
+    return value  # narrowed to ThinkingLevel by the membership check above
 
 
 @dataclass(frozen=True)
@@ -131,6 +156,14 @@ class RunRequest:
     max_cost: float = DEFAULT_MAX_COST_USD
     record: bool = False
     output: str | None = None
+    # D20 — the *requested* level, or None to mean "use the configured
+    # per-provider default, or off if none is set" (resolved in execute_run,
+    # once the model's provider is known). Runner then resolves the
+    # requested-or-defaulted level again against the model's real thinking
+    # ceiling and records any clamp — two different resolutions, for two
+    # different reasons: this one picks *what the user asked for*, Runner's
+    # picks *what the model can actually do*.
+    thinking: ThinkingLevel | None = None
 
 
 def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | None = None) -> RunResult:
@@ -145,6 +178,14 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
         model_info = resolve_model(request.model)
     except UnknownModelError as exc:
         raise UsageError(str(exc)) from exc
+
+    # D20 — an explicit --thinking always wins; otherwise fall back to the
+    # provider's configured default (runectl config, Phase 2), or "off" if
+    # nothing was ever set. `--model` itself is never defaulted (D5 intact) —
+    # this only resolves the separate, optional thinking preference.
+    thinking = (
+        request.thinking if request.thinking is not None else configured_default_thinking(model_info.provider)
+    )
 
     _preflight_arena()
 
@@ -175,6 +216,7 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
         config_snapshot={
             "challenge": challenge.model_dump(mode="json"),
             "approval_policy": request.approval,
+            "thinking_requested": thinking,
         },
     )
 
@@ -218,6 +260,7 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
         ledger=ledger,
         context=context,
         reviewer=reviewer,
+        thinking=thinking,
     )
     try:
         with sandbox_session(sandbox):
@@ -241,6 +284,7 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
         steps_used=outcome.steps_used,
         progress_steps=outcome.progress_steps,
         blocked_steps=outcome.blocked_steps,
+        thinking_level=outcome.thinking_level,
     )
     return RunResult(run_id=run_id, outcome=outcome)
 
@@ -266,6 +310,12 @@ def run_command(
     ),
     record: bool = typer.Option(False, "--record"),
     output: str | None = typer.Option(None, "--output", help="jsonl | human"),
+    thinking: str | None = typer.Option(
+        None,
+        "--thinking",
+        help="off|low|medium|high|xhigh|max — default is the configured provider "
+        "default, or off (D20)",
+    ),
 ) -> None:
     """Solve one challenge end-to-end, writing a replayable trace (D3, D4)."""
     try:
@@ -282,6 +332,7 @@ def run_command(
                 max_cost=max_cost,
                 record=record,
                 output=output,
+                thinking=parse_thinking(thinking),
             ),
         )
     except (SandboxError, ProviderError) as exc:

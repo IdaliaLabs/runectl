@@ -90,9 +90,11 @@ code path that requires the index to exist.
 
 ## Changing a locked decision
 
-D1–D16 in [`DECISIONS.md`](DECISIONS.md) are locked for V1. Changing one means **editing
-that file with a dated reason**, in the same change that alters the code. Quietly
-diverging in code is the failure mode the file exists to prevent.
+D1–D20 in [`DECISIONS.md`](DECISIONS.md) are locked for V1. Changing one means **editing
+that file with a dated reason**, in the same change that alters the code — an amendment
+(see D13's 2026-09-09 entry, which allows `runectl tui` without reopening the rest of
+the lock) is that same discipline applied to widening a decision, not an exception to
+it. Quietly diverging in code is the failure mode the file exists to prevent.
 
 ## Adding an event type
 

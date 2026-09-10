@@ -28,7 +28,7 @@ from runectl.loop.triage import triage as run_triage
 from runectl.progress.tracker import ProgressTracker
 from runectl.providers.base import Message, Provider, ToolCallRequest, complete_with_retry
 from runectl.providers.cost import CostLedger
-from runectl.providers.registry import ModelInfo
+from runectl.providers.registry import ModelInfo, ThinkingLevel, resolve_thinking_level
 from runectl.sandbox.base import Sandbox
 from runectl.tools.dispatch import ToolDispatcher
 from runectl.tools.schema import TOOLS
@@ -43,6 +43,7 @@ from runectl.trace.events import (
     FlagReviewed,
     LlmRequest,
     LlmResponse,
+    LlmThinking,
     ProgressScored,
     RunFinished,
     RunStarted,
@@ -55,6 +56,18 @@ from runectl.trace.events import (
 from runectl.trace.writer import TraceWriter
 
 DEFAULT_MAX_TOKENS = 4096
+
+# D20 — a display cap, independent of the writer's generic >8KB artifact spill
+# (trace/writer.py). That mechanism spills any oversized *string* to an
+# artifact file and replaces it in the JSON with an `{"$artifact": ...}` dict —
+# which is exactly what's already written for `tool.result.stdout`/`stderr`
+# today, both of which are declared as plain `str` fields on their payload
+# class. Re-reading such an event through `Event.payload()` (which
+# `model_validate`s the raw dict back against that `str`-typed field) would
+# raise a pydantic validation error, not silently succeed. `LlmThinking.text`
+# is capped here instead of relying on that path, so a long `xhigh`/`max`
+# thinking block can never produce an unreadable trace line.
+_MAX_THINKING_CHARS = 8_000
 
 
 def _command_text(arguments: dict[str, object]) -> str:
@@ -88,6 +101,10 @@ class RunOutcome:
     # not only the run.finished event.
     progress_steps: int = 0
     blocked_steps: int = 0
+    # D20 — the *resolved* level (post-clamp), same rule as progress_steps
+    # above: it has to reach run.json, not only the run.started event, so a
+    # run's reasoning spend is discoverable without re-reading trace.jsonl.
+    thinking_level: str = "off"
 
 
 class Runner:
@@ -107,11 +124,18 @@ class Runner:
         ledger: CostLedger | None = None,
         context: ContextBuilder | None = None,
         reviewer: Reviewer | None = None,
+        thinking: ThinkingLevel = "off",
     ) -> None:
         self._provider = provider
         self._sandbox = sandbox
         self._writer = writer
         self._max_tokens = max_tokens
+        # D20 — resolved once, here, so both `runectl run` and `runectl bench
+        # run` (which both build a `Runner` through the shared `execute_run`
+        # seam) get the same clamp behavior for free, with no CLI-layer
+        # duplication. `_thinking_requested` is kept only to report a clamp.
+        self._thinking_requested = thinking
+        self._thinking_level, self._thinking_clamped = resolve_thinking_level(model, thinking)
         # D19 — 0 disables the ceiling; anything else stops the run cleanly the
         # moment cumulative spend crosses it.
         self._max_cost_usd = max_cost_usd
@@ -158,6 +182,10 @@ class Runner:
                 approval_policy=state.approval_policy,
                 max_steps=state.max_steps,
                 network=state.category.network,
+                thinking_level=self._thinking_level,
+                thinking_clamped_from=(
+                    self._thinking_requested if self._thinking_clamped else None
+                ),
             )
         )
         self._writer.emit(
@@ -220,6 +248,7 @@ class Runner:
                     messages=state.history,
                     tools=TOOLS,
                     max_tokens=self._max_tokens,
+                    thinking=self._thinking_level,
                 )
             except ProviderError as exc:
                 self._writer.emit(ErrorEvent(step=step, kind="provider", message=str(exc), recoverable=False))
@@ -251,6 +280,22 @@ class Runner:
                 outcome, exit_code = "exhausted", 3
                 break
 
+            # D20 — emitted before llm.response so a live or replayed timeline
+            # shows the reasoning ahead of what it produced. Nothing is emitted
+            # when thinking wasn't requested or a provider returned no text for
+            # it (e.g. OpenAI's Chat Completions surface never does — see
+            # providers/openai.py) — an empty event would just be noise.
+            if completion.thinking_text:
+                thinking_text = completion.thinking_text
+                truncated = len(thinking_text) > _MAX_THINKING_CHARS
+                if truncated:
+                    thinking_text = thinking_text[:_MAX_THINKING_CHARS]
+                self._writer.emit(
+                    LlmThinking(
+                        step=step, text=thinking_text, level=self._thinking_level, truncated=truncated
+                    )
+                )
+
             tool_call_summary = None
             if completion.tool_calls:
                 first = completion.tool_calls[0]
@@ -269,7 +314,12 @@ class Runner:
                 )
             )
             state.history.append(
-                Message(role="assistant", content=completion.text, tool_calls=completion.tool_calls)
+                Message(
+                    role="assistant",
+                    content=completion.text,
+                    tool_calls=completion.tool_calls,
+                    thinking_blocks=completion.thinking_blocks,
+                )
             )
 
             if not completion.tool_calls:
@@ -466,4 +516,5 @@ class Runner:
             outcome=outcome, flag=state.flag, exit_code=exit_code,
             steps_used=state.step, cost_usd=state.cost_usd,
             progress_steps=state.progress_steps, blocked_steps=state.blocked_steps,
+            thinking_level=self._thinking_level,
         )
