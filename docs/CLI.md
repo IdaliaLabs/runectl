@@ -6,6 +6,15 @@ no `--yes` flag needed because nothing asks.
 
 All examples use `uv run runectl`; drop the prefix if you installed the console script.
 
+### Stability
+
+`runectl` is `0.x` — pre-1.0, per [SemVer](https://semver.org/). Flags, output shapes and
+exit codes here are the current contract, not a frozen one; a minor version bump (`0.1` →
+`0.2`) can still change them. The trace event envelope already carries its own version
+field (`v`, currently `1` — see the trace section below), so a breaking change to the
+trace format is at least detectable by a reader, even during `0.x`. See
+[`CHANGELOG.md`](../CHANGELOG.md) for what changed release to release.
+
 ---
 
 ## `runectl run`
