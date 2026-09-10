@@ -78,8 +78,9 @@ into run config or logged.
 
 A closed set for V1 — see `CONTRIBUTING.md`'s "Adding an event type" for the four-step
 process to add one. (This section's original count of sixteen is stale: `flag.reviewed`
-shipped with M6 and `budget.exhausted` with D19; `llm.thinking` is the latest addition,
-D20, 2026-09-09. `trace/events.py`'s `_ALL_PAYLOADS` tuple is the authoritative count.)
+shipped with M6, `budget.exhausted` with D19, `llm.thinking` with D20 (2026-09-09), and
+`flag.rederived` with D3's 2026-09-10 amendment — twenty as of that last one.
+`trace/events.py`'s `_ALL_PAYLOADS` tuple is the authoritative count.)
 
 ### `run.started`
 The run's parameters as actually resolved.

@@ -105,12 +105,22 @@ it. Quietly diverging in code is the failure mode the file exists to prevent.
 
 ## Adding an event type
 
-The event set is closed for V1. If you genuinely need a seventeenth:
+The event set is closed for V1 — twenty types as of `flag.rederived` (D3's 2026-09-10
+amendment); `_ALL_PAYLOADS` is the authoritative count. If you genuinely need one more:
 
 1. Add the payload class in `trace/events.py` with its `event_type` ClassVar
 2. Add it to `_ALL_PAYLOADS` (that's what populates the type registry)
 3. Document it in [`docs/TRACE.md`](docs/TRACE.md)
 4. Consider whether `cli/render.py` should show it specially
+5. **If the event records a command that ran in the sandbox, add it to
+   `exec_results_from_trace` in `sandbox/replay.py`** — that queue is positional, so an
+   exec the replay doesn't know about consumes the *next* tool call's output and shifts
+   every result after it. This step is here because skipping it is exactly what broke
+   replay for a milestone (D3's 2026-09-10 amendment; `tests/integration/test_replay_fidelity.py`)
+
+Step 5 has a matching rule in the other direction: a command must never reach
+`Sandbox.exec` without an event recording it. `flag.rederived` exists because the D15
+judge called `exec` directly and wrote nothing.
 
 Payloads are frozen and `extra="forbid"` — keep them that way, so a malformed event is a
 construction-time error rather than a bad line in the record.

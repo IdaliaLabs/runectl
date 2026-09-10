@@ -1,8 +1,9 @@
 # Architecture
 
 The authority on *why* any of this is shaped the way it is is
-[`DECISIONS.md`](../DECISIONS.md) (D1–D20 as of 2026-09-09; D13 carries a dated
-amendment, not a rewrite — read it before assuming "D1–D16" means the whole file), which
+[`DECISIONS.md`](../DECISIONS.md) (D1–D20; several entries — D3, D11, D13, D15 — carry
+dated amendments rather than rewrites, so read the whole entry, not just its opening
+line, and don't assume "D1–D16" means the whole file), which
 is locked for V1. This document is the map: what each module does, what happens during a
 run, and where the seams are that later milestones fill in.
 
@@ -180,7 +181,8 @@ answer to the predecessor's six mixins sharing ~30 implicit attributes.
 `StubSandbox` (in-process fake filesystem plus a scripted command table) and
 `ScriptedProvider` (a fixed list of completions) together let the entire loop run with no
 container runtime and no API spend. That's not a testing convenience bolted on afterward —
-it's the reason both types exist, and the great majority of the test suite (228 tests as of M9) runs on it.
+it's the reason both types exist, and the great majority of the test suite (228 tests as
+of the 2026-09-10 replay-fidelity fix; 223 at M9) runs on it.
 
 `ReplaySandbox` + `ReplayProvider` are the same idea pointed at a *recorded* run, which
 is what `runectl replay` uses.
