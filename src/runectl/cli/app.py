@@ -203,7 +203,23 @@ def replay_command(run_id: str, check: bool = typer.Option(False, "--check")) ->
         if original != replayed:
             typer.echo(f"MISMATCH: {replay_run_id} diverged from {run_id}'s tool-call sequence", err=True)
             raise typer.Exit(code=1)
-        typer.echo(f"OK: {replay_run_id} reproduces {run_id}'s tool-call sequence at zero spend")
+        # The outcome is checked too, and separately, because comparing only the
+        # sequence is what let the judge's unrecorded re-derivation hide for a
+        # milestone: a replay issued identical tool calls while silently
+        # downgrading `solved` to `candidate`, and --check still said OK
+        # (fixed 2026-09-10; `tests/integration/test_replay_fidelity.py`).
+        recorded_outcome = store.read_manifest(run_id).outcome
+        if outcome.outcome != recorded_outcome:
+            typer.echo(
+                f"MISMATCH: {replay_run_id} reproduced {run_id}'s tool-call sequence but "
+                f"ended {outcome.outcome}, not {recorded_outcome}",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        typer.echo(
+            f"OK: {replay_run_id} reproduces {run_id}'s tool-call sequence "
+            f"and its {recorded_outcome} outcome at zero spend"
+        )
 
 
 def main() -> None:

@@ -201,6 +201,43 @@ class FlagReviewed(EventPayload):
     reason: str
 
 
+class FlagRederived(EventPayload):
+    """D15 mechanism 2 re-ran the cited command in the sandbox, and this is what
+    came back (added 2026-09-10 — D3's event set amended from 19 to 20).
+
+    This exists because the trace was **incomplete without it**: re-derivation
+    calls ``Sandbox.exec`` directly rather than through the dispatcher, so a
+    command really executed in the run's container and left no record. That is
+    the defect. A replay desyncing (``ReplaySandbox`` serves recorded exec
+    results strictly in order, so an unrecorded exec silently consumed the next
+    tool call's output) was only the symptom that surfaced it.
+
+    Carries the whole ``ExecResult`` because that is what makes it replayable:
+    ``sandbox.replay.exec_results_from_trace`` reads these back alongside
+    ``tool.result`` to keep the queue aligned. Emitted by the runner, never by
+    the judge — the judge returns verdicts and mutates nothing (D6).
+
+    ``errored`` marks the case where ``exec`` raised instead of returning. The
+    verdict is the same either way ("could not re-derive"), and a replay of an
+    errored re-derivation is served a plain ``ok=False`` result rather than a
+    re-raised exception — a different mechanism reaching the same verdict, which
+    is what keeps the cursor aligned.
+    """
+
+    event_type: ClassVar[str] = "flag.rederived"
+
+    step: int
+    source_seq: int
+    command: str
+    matched: bool
+    stdout: str
+    stderr: str
+    exit_code: int
+    duration_s: float
+    truncated: bool = False
+    errored: bool = False
+
+
 class FlagDecision(EventPayload):
     event_type: ClassVar[str] = "flag.decision"
 
@@ -269,6 +306,7 @@ _ALL_PAYLOADS: tuple[type[EventPayload], ...] = (
     EvidenceAdded,
     FlagCandidate,
     FlagReviewed,
+    FlagRederived,
     FlagDecision,
     BudgetExhausted,
     CostUpdated,

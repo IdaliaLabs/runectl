@@ -157,12 +157,36 @@ class Check:
 
 
 @dataclass(frozen=True)
+class Rederivation:
+    """What mechanism 2's sandbox call actually did, for the runner to record.
+
+    The judge returns this rather than emitting it: it mutates nothing and owns
+    no writer (D6). ``None`` on the paths that never reach ``exec`` at all — no
+    sandbox, or a cited observation with no re-runnable command — so the runner
+    emits an event only when a command genuinely ran.
+    """
+
+    source_seq: int
+    command: str
+    matched: bool
+    stdout: str
+    stderr: str
+    exit_code: int
+    duration_s: float
+    truncated: bool = False
+    errored: bool = False
+
+
+@dataclass(frozen=True)
 class JudgeVerdict:
     decision: Decision
     provenance_seq: int
     reason: str
     corroboration: int = 0
     checks: tuple[Check, ...] = field(default_factory=tuple)
+    # Set whenever mechanism 2 actually executed something; the runner turns it
+    # into a `flag.rederived` event so the trace records every sandbox command.
+    rederivation: Rederivation | None = None
 
     @property
     def accepted(self) -> bool:
@@ -248,7 +272,7 @@ class FlagJudge:
         format_ok, format_detail = self._format_check(flag)
         checks.append(Check("flag_format", format_ok, format_detail))
 
-        rederived, rederive_detail = self._rederive(flag, source)
+        rederived, rederive_detail, rederivation = self._rederive(flag, source)
         checks.append(Check("rederivation", rederived, rederive_detail))
 
         # Run last: it is the only stage that costs tokens, so everything a
@@ -264,6 +288,7 @@ class FlagJudge:
             format_ok=format_ok,
             rederived=rederived,
             checks=checks,
+            rederivation=rederivation,
         )
 
     # -- stages ---------------------------------------------------------------
@@ -403,21 +428,56 @@ class FlagJudge:
         )
         return verdict.sound, verdict.detail
 
-    def _rederive(self, flag: str, source: ToolObservation) -> tuple[bool, str]:
-        """Re-run the cited command and require the same string back (D15 §2)."""
+    def _rederive(
+        self, flag: str, source: ToolObservation
+    ) -> tuple[bool, str, Rederivation | None]:
+        """Re-run the cited command and require the same string back (D15 §2).
+
+        Returns the verdict plus, when a command actually executed, a record of
+        it for the caller to write to the trace. The two early returns below
+        never reach ``exec``, so they carry no record and produce no event.
+        """
         if self._sandbox is None:
-            return False, "no sandbox available to re-derive in"
+            return False, "no sandbox available to re-derive in", None
         if not source.shell_command:
-            return False, f"the cited observation (seq {source.seq}) has no re-runnable command"
+            return False, f"the cited observation (seq {source.seq}) has no re-runnable command", None
         try:
             result = self._sandbox.exec(source.shell_command, timeout_s=REDERIVE_TIMEOUT_S)
         except Exception as exc:  # a failed re-derivation is a verdict, not a crash
-            return False, f"re-running the cited command failed: {exc}"
+            detail = f"re-running the cited command failed: {exc}"
+            # Recorded even though nothing came back: a replay will call exec
+            # here too, and an unrecorded call is exactly what desynchronizes
+            # ReplaySandbox's queue.
+            return (
+                False,
+                detail,
+                Rederivation(
+                    source_seq=source.seq,
+                    command=source.shell_command,
+                    matched=False,
+                    stdout="",
+                    stderr=str(exc),
+                    exit_code=-1,
+                    duration_s=0.0,
+                    errored=True,
+                ),
+            )
         stdout = str(getattr(result, "stdout", ""))
         stderr = str(getattr(result, "stderr", ""))
-        if self._evident_in(stdout, flag) or self._evident_in(stderr, flag):
-            return True, "re-running the cited command produced the same flag"
-        return False, "re-running the cited command did not produce the flag again"
+        matched = self._evident_in(stdout, flag) or self._evident_in(stderr, flag)
+        record = Rederivation(
+            source_seq=source.seq,
+            command=source.shell_command,
+            matched=matched,
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=int(getattr(result, "exit_code", 0) or 0),
+            duration_s=float(getattr(result, "duration_s", 0.0) or 0.0),
+            truncated=bool(getattr(result, "truncated", False)),
+        )
+        if matched:
+            return True, "re-running the cited command produced the same flag", record
+        return False, "re-running the cited command did not produce the flag again", record
 
     def _apply_policy(
         self,
@@ -427,6 +487,7 @@ class FlagJudge:
         format_ok: bool,
         rederived: bool,
         checks: list[Check],
+        rederivation: Rederivation | None = None,
     ) -> JudgeVerdict:
         if self._policy == "auto":
             return JudgeVerdict(
@@ -435,6 +496,7 @@ class FlagJudge:
                 reason="--approval auto: finalized on plausibility and provenance alone",
                 corroboration=corroboration,
                 checks=tuple(checks),
+                rederivation=rederivation,
             )
         if self._policy == "strict":
             return JudgeVerdict(
@@ -443,6 +505,7 @@ class FlagJudge:
                 reason="--approval strict: candidates are never auto-finalized",
                 corroboration=corroboration,
                 checks=tuple(checks),
+                rederivation=rederivation,
             )
 
         if format_ok and rederived:
@@ -452,6 +515,7 @@ class FlagJudge:
                 reason="re-derived in the sandbox and matching the expected format",
                 corroboration=corroboration,
                 checks=tuple(checks),
+                rederivation=rederivation,
             )
         unmet = "; ".join(
             f"{check.name}: {check.detail}"
@@ -464,6 +528,7 @@ class FlagJudge:
             reason=f"held for approval — {unmet}" if unmet else "held for approval",
             corroboration=corroboration,
             checks=tuple(checks),
+            rederivation=rederivation,
         )
 
     @staticmethod

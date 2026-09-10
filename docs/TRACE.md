@@ -1,7 +1,8 @@
 # The trace format
 
-The trace is the product. Everything else — the manifest, the SQLite index, the human
-timeline, replay — is derived from it.
+The trace is the run's complete record: everything else — the manifest, the SQLite index,
+the human timeline, replay — is derived from it. It is what makes a solve checkable after
+the fact and a failure diagnosable.
 
 Design rules ([`DECISIONS.md`](../DECISIONS.md) D3):
 
@@ -161,6 +162,25 @@ line in `flag.decision`'s reason, because reading *why* a model doubted a flag i
 point of the pass. **Advisory since 2026-09-08**: this event is the whole output of the
 pass, and a `sound: false` verdict no longer holds anything (D11).
 `step`, `flag`, `sound`, `reason`
+
+### `flag.rederived`
+D15 mechanism 2 re-ran the cited command in the sandbox, and this is what came back.
+
+Added 2026-09-10, and the reason is worth stating plainly: **without it the trace was
+incomplete.** Re-derivation calls `Sandbox.exec` directly rather than going through the
+dispatcher, so a command really executed inside the run's container and left no record of
+having done so.
+
+It also carries the full `ExecResult`, which is what makes a gated finalize replayable:
+`ReplaySandbox` serves recorded exec results *positionally*, so an unrecorded exec used to
+consume the next tool call's output and shift everything after it — a replay would issue
+an identical tool-call sequence while quietly ending `candidate` instead of `solved`.
+
+`errored: true` means `exec` raised rather than returned. It is still recorded, because an
+unrecorded failed call desynchronizes the queue exactly as a successful one does; a replay
+is served a plain failed result there instead of a re-raised exception.
+`step`, `source_seq`, `command`, `matched`, `stdout`, `stderr`, `exit_code`,
+`duration_s`, `truncated`, `errored`
 
 ### `flag.decision`
 `finalized`, `pending`, or `rejected`, with the reason. A `rejected` decision is feedback —

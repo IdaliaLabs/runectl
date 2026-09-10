@@ -150,9 +150,16 @@ A replay is itself a real run: it gets a **new run id** and writes its own trace
 `config_snapshot` records `{"replay_of": "<original run id>"}`. The new run id is printed
 to stdout.
 
-`--check` then compares the two runs' `tool.call` event sequences and exits **1** on any
-divergence. That's the regression test: change the loop, replay a recorded run, and find
-out immediately whether the agent would have done something different.
+`--check` then compares two things and exits **1** on either divergence: the two runs'
+`tool.call` event sequences, and their **outcomes**. That's the regression test: change
+the loop, replay a recorded run, and find out immediately whether the agent would have
+done something different — or reached a different verdict on the same evidence.
+
+The outcome half was added 2026-09-10, after comparing only the sequence let a real defect
+hide for a milestone: an unrecorded sandbox call in the D15 judge desynchronized
+`ReplaySandbox`'s positional queue, so replays issued identical tool calls while silently
+ending `candidate` instead of `solved`, and `--check` reported OK throughout. See
+`DECISIONS.md` D3's 2026-09-10 amendment.
 
 Requires the original run to have been recorded with `--record`; exits 6 otherwise.
 
@@ -220,7 +227,7 @@ gpt-5           provider=openai     key=no   thinking=yes (max max) ctx=272000  
 ## `runectl runs`
 
 Discover, inspect, and attach to runs — read-only, on purpose (there is no `runs rm`;
-deleting a run's directory deletes the record, and the record is the product, D3).
+deleting a run's directory deletes the only record of what that run did, D3).
 
 ```bash
 uv run runectl runs list [--limit N] [--category C] [--outcome O] [--json]

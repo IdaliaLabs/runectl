@@ -40,6 +40,7 @@ from runectl.trace.events import (
     ErrorEvent,
     FlagCandidate,
     FlagDecision,
+    FlagRederived,
     FlagReviewed,
     LlmRequest,
     LlmResponse,
@@ -479,6 +480,26 @@ class Runner:
                 self._writer.emit(
                     FlagReviewed(step=step, flag=flag, sound=check.passed, reason=check.detail)
                 )
+        # D15 mechanism 2 runs a command in the sandbox. Recording it is what
+        # keeps the trace complete — and, because `ReplaySandbox` serves
+        # recorded exec results strictly in order, it is also what stops a
+        # replay from feeding this call the *next* tool call's output.
+        if verdict.rederivation is not None:
+            rederived = verdict.rederivation
+            self._writer.emit(
+                FlagRederived(
+                    step=step,
+                    source_seq=rederived.source_seq,
+                    command=rederived.command,
+                    matched=rederived.matched,
+                    stdout=rederived.stdout,
+                    stderr=rederived.stderr,
+                    exit_code=rederived.exit_code,
+                    duration_s=rederived.duration_s,
+                    truncated=rederived.truncated,
+                    errored=rederived.errored,
+                )
+            )
         self._writer.emit(
             FlagDecision(step=step, flag=flag, decision=verdict.decision, reason=verdict.reason)
         )

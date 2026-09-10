@@ -41,13 +41,14 @@ non-interactive `runectl run` subprocess.
   first-class. There is no default provider and no default model — `--model` is always
   required, and the provider is looked up in an explicit registry, never guessed from a
   string prefix.
-- **The trace is the product.** Every run writes an append-only JSONL event stream that
-  is the source of truth: every prompt, tool call, command result, cost update, and flag
-  decision, flushed to disk after each event. A run killed mid-flight still leaves a
-  valid, replayable prefix.
+- **Every solve is checkable.** Each run writes an append-only JSONL event stream — every
+  prompt, tool call, command result, cost update and flag decision, flushed to disk after
+  each event. That is what makes a solve rate mean something: you can read exactly how any
+  flag was reached, and a run killed mid-flight still leaves a valid, replayable prefix.
 - **Replay at zero spend.** `--record` captures provider responses to a cassette;
   `runectl replay <run_id> --check` re-runs the whole loop from that cassette with no
-  API calls and no Docker daemon, and asserts the tool-call sequence is identical.
+  API calls and no Docker daemon, and asserts both the tool-call sequence **and the
+  outcome** are identical.
 - **It refuses to invent a flag.** A submitted flag is only finalized if it appears
   verbatim in tool output the run actually observed. A flag the agent cannot point to in
   its own trace is rejected and the run keeps going.
@@ -223,7 +224,7 @@ Override with `RUNECTL_HOME` and `RUNECTL_CONFIG_HOME` (both honor `XDG_DATA_HOM
 |---|---|
 | [`docs/CLI.md`](docs/CLI.md) | Every command and flag, exit codes, the NDJSON output contract |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Module map, the anatomy of one run, the seams later milestones fill |
-| [`docs/TRACE.md`](docs/TRACE.md) | The trace format: envelope, all 19 event types, `run.json`, artifacts, cassettes |
+| [`docs/TRACE.md`](docs/TRACE.md) | The trace format: envelope, all 20 event types, `run.json`, artifacts, cassettes |
 | [`docs/PROVIDERS.md`](docs/PROVIDERS.md) | Model registry, key resolution, cost accounting, record/replay |
 | [`docs/CATEGORIES.md`](docs/CATEGORIES.md) | How to write a category TOML — adding a category is never a code change |
 | [`docs/STATUS.md`](docs/STATUS.md) | What is real, what is a stub, what is a known gap |

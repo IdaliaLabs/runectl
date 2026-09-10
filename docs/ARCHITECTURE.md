@@ -32,7 +32,7 @@ src/runectl/
                         `runectl run` subprocess, never an in-process loop call
 
     trace/              the record
-        events.py       the typed payloads (19 as of D20's `llm.thinking`) + the
+        events.py       the typed payloads (20 as of D3's 2026-09-10 amendment) + the
                         versioned envelope — `_ALL_PAYLOADS` is the live count
         writer.py       append-only writer: redact secrets, spill >8KB, flush+fsync
         reader.py       lazy ordered reader that tolerates a torn final line
@@ -180,7 +180,7 @@ answer to the predecessor's six mixins sharing ~30 implicit attributes.
 `StubSandbox` (in-process fake filesystem plus a scripted command table) and
 `ScriptedProvider` (a fixed list of completions) together let the entire loop run with no
 container runtime and no API spend. That's not a testing convenience bolted on afterward —
-it's the reason both types exist, and the great majority of the test suite (223 tests as of M9) runs on it.
+it's the reason both types exist, and the great majority of the test suite (228 tests as of M9) runs on it.
 
 `ReplaySandbox` + `ReplayProvider` are the same idea pointed at a *recorded* run, which
 is what `runectl replay` uses.

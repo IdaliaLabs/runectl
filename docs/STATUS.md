@@ -3,7 +3,7 @@
 Last updated **2026-09-09** (thinking capture, `config`/`models`/`runs`, and the TUI —
 see M9 below — landed the same day as the M7/M8 entries this file already described).
 
-M0–M9 are built, typed, and green: 223 tests passing, `mypy --strict` clean,
+M0–M9 are built, typed, and green: 228 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 
@@ -70,18 +70,25 @@ never `budget_tokens`, which is rejected outright on Opus 5/Sonnet 5). The conta
 security *posture* is applied and functional, but its isolation is asserted by
 configuration, not adversarial testing (see [`SECURITY.md`](../SECURITY.md)).
 
-**A real, pre-existing gap this session found, not introduced, while verifying the above:**
+**A real, pre-existing gap this session found — since fixed (2026-09-10).** For the
+record, because it is a good example of a check that looked like it was working:
 `runectl replay`'s regenerated run finished as `candidate` (exit 2) rather than
-reproducing the original's `solved` (exit 0), even though `--check` confirmed an
-identical tool-call sequence. Cause: the D15 judge's re-derivation step calls
-`self._sandbox.exec(...)` directly (`flags/judge.py`), bypassing the
-`ToolDispatcher`/`ToolCall`/`ToolResultEvent` path — so that exec is never captured as
-its own trace event, and `exec_results_from_trace` (which builds `ReplaySandbox`'s
-queue purely from recorded `ToolResultEvent`s) has nothing to serve it. Any run that
-auto-finalized via re-derivation — the primary path under `gated` since the D11
-amendments — hits this on replay. Confirmed by reading `sandbox/replay.py` and
-`flags/judge.py`, neither of which this session touched; not fixed here, since it's a
-D15/replay engine change outside this session's scope, not a thinking/TUI/config one.
+reproducing the original's `solved` (exit 0), while `--check` confirmed an identical
+tool-call sequence and reported OK.
+
+The cause was that the D15 judge re-derives a cited command by calling
+`self._sandbox.exec(...)` directly, bypassing the `ToolDispatcher` path — so that exec was
+never written to the trace at all. Since `ReplaySandbox` serves recorded exec results
+*positionally*, the unrecorded call consumed the next tool call's output and shifted every
+result after it. Any run that auto-finalized via re-derivation — the primary path under
+`gated` since the D11 amendments — hit it.
+
+Fixed by recording the re-derivation as a `flag.rederived` event (D3 amended, 19 -> 20
+events) rather than by special-casing replay: the defect was that the trace was
+incomplete, and the replay desync was its symptom. `runectl replay --check` now asserts
+the **outcome** as well as the sequence, since comparing only the sequence is what let
+this hide for a milestone. Regression gate: `tests/integration/test_replay_fidelity.py`,
+which fails on four separate assertions if the event is removed.
 
 ## Still never run for real
 

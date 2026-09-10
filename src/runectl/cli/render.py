@@ -24,6 +24,7 @@ from runectl.trace.events import (
     EventPayload,
     FlagCandidate,
     FlagDecision,
+    FlagRederived,
     FlagReviewed,
     LlmResponse,
     LlmThinking,
@@ -114,6 +115,17 @@ def _line(payload: EventPayload, width: int) -> str | None:
         # doubted a flag is the entire point of the pass.
         mark = "ok" if payload.sound else "doubts"
         return f"{payload.step:>3} ⚖ review {mark}: {_flat(payload.reason, width - 20)}"
+    if isinstance(payload, FlagRederived):
+        # The gating check under `gated`, so what it ran and whether the string
+        # came back is worth a line of its own rather than only a verdict.
+        if payload.errored:
+            mark = "failed"
+        elif payload.matched:
+            mark = "same flag"
+        else:
+            mark = "no match"
+        command = _flat(payload.command, width - 26)
+        return f"{payload.step:>3} ⟲ re-derive seq {payload.source_seq} [{mark}]  {command}"
     if isinstance(payload, FlagDecision):
         mark = {"finalized": "✓", "pending": "…", "rejected": "✗"}.get(payload.decision, "?")
         reason = _flat(payload.reason, width - 8)

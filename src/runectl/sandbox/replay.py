@@ -16,7 +16,7 @@ from pathlib import Path
 from runectl.config import SANDBOX_WORKDIR
 from runectl.errors import SandboxError
 from runectl.sandbox.base import ExecResult
-from runectl.trace.events import ToolResultEvent
+from runectl.trace.events import FlagRederived, ToolResultEvent
 from runectl.trace.reader import TraceReader
 
 # Tools whose dispatch handler routes through Sandbox.exec (D7). write_file and
@@ -25,7 +25,20 @@ _EXEC_BACKED_TOOLS = frozenset({"run_command", "run_gdb", "search_flag"})
 
 
 def exec_results_from_trace(trace_path: Path, artifacts_dir: Path) -> list[ExecResult]:
-    """Extract, in recorded order, every ExecResult a replay must serve."""
+    """Extract, in recorded order, every ExecResult a replay must serve.
+
+    Two kinds of event put a command into the sandbox, and both belong in this
+    queue: the agent's own tool calls (``tool.result``) and the D15 judge's
+    re-derivation of a cited command (``flag.rederived``), which calls
+    ``Sandbox.exec`` directly rather than through the dispatcher.
+
+    Missing the second kind is not a missing entry — it is a *misaligned* one.
+    The queue is positional, so an unrecorded exec silently hands the judge the
+    next tool call's output and shifts everything after it, which is what made
+    a replayed run reproduce its tool-call sequence while quietly downgrading
+    its outcome from `solved` to `candidate`. Fixed 2026-09-10 by recording the
+    re-derivation (D3 amended, 19 -> 20 events).
+    """
     results: list[ExecResult] = []
     for event in TraceReader(trace_path, artifacts_dir):
         payload = event.payload()
@@ -33,6 +46,22 @@ def exec_results_from_trace(trace_path: Path, artifacts_dir: Path) -> list[ExecR
             results.append(
                 ExecResult(
                     ok=payload.ok,
+                    stdout=payload.stdout,
+                    stderr=payload.stderr,
+                    exit_code=payload.exit_code,
+                    duration_s=payload.duration_s,
+                    timed_out=False,
+                    truncated=payload.truncated,
+                )
+            )
+        elif isinstance(payload, FlagRederived):
+            # An errored re-derivation (exec raised) is served as a plain failed
+            # result rather than a re-raised exception: a different mechanism
+            # reaching the judge's same "could not re-derive" verdict, which is
+            # what matters, and it keeps the cursor aligned either way.
+            results.append(
+                ExecResult(
+                    ok=not payload.errored and payload.exit_code == 0,
                     stdout=payload.stdout,
                     stderr=payload.stderr,
                     exit_code=payload.exit_code,
