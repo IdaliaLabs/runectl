@@ -40,6 +40,10 @@ class RunManifest(BaseModel):
     steps_used: int = 0
     progress_steps: int = 0
     blocked_steps: int = 0
+    # D20 — the *resolved* thinking level (post-clamp), same rule as
+    # progress_steps: a run's reasoning spend has to be discoverable from
+    # run.json alone, not only by re-reading trace.jsonl's run.started event.
+    thinking_level: str = "off"
     # Set when a human (or driving agent) finalized a pending candidate with
     # `runectl flag approve` (D11). It keeps an approved solve distinguishable
     # from one the judge cleared on its own — `runectl bench` scores them apart,
@@ -107,6 +111,7 @@ class Store:
         steps_used: int = 0,
         progress_steps: int = 0,
         blocked_steps: int = 0,
+        thinking_level: str = "off",
     ) -> RunManifest:
         manifest = self.read_manifest(run_id)
         manifest = manifest.model_copy(
@@ -119,6 +124,7 @@ class Store:
                 "steps_used": steps_used,
                 "progress_steps": progress_steps,
                 "blocked_steps": blocked_steps,
+                "thinking_level": thinking_level,
             }
         )
         self._write_manifest(manifest)

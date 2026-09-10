@@ -11,7 +11,7 @@ from runectl.providers.registry import resolve as resolve_model
 
 
 def test_cache_reads_are_a_tenth_of_fresh_input() -> None:
-    model = resolve_model("claude-haiku-4-5-20251001")  # $1.00/1M in
+    model = resolve_model("claude-haiku-4-5")  # $1.00/1M in
     ledger = CostLedger()
 
     fresh = ledger.record(model, input_tokens=1_000_000, output_tokens=0)
@@ -23,7 +23,7 @@ def test_cache_reads_are_a_tenth_of_fresh_input() -> None:
 
 
 def test_cache_writes_cost_a_quarter_more() -> None:
-    model = resolve_model("claude-haiku-4-5-20251001")
+    model = resolve_model("claude-haiku-4-5")
     ledger = CostLedger()
 
     assert ledger.record(model, input_tokens=0, output_tokens=0, cache_write_tokens=1_000_000) == 1.25
@@ -42,4 +42,4 @@ def test_registry_pricing_matches_the_published_rates() -> None:
 def test_cheapest_utility_model_for_anthropic_is_haiku() -> None:
     from runectl.providers.registry import cheapest_model_for
 
-    assert cheapest_model_for("anthropic").id == "claude-haiku-4-5-20251001"
+    assert cheapest_model_for("anthropic").id == "claude-haiku-4-5"

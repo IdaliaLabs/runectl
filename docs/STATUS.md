@@ -1,8 +1,9 @@
 # Status
 
-Last updated **2026-09-09**.
+Last updated **2026-09-09** (thinking capture, `config`/`models`/`runs`, and the TUI —
+see M9 below — landed the same day as the M7/M8 entries this file already described).
 
-M0–M8 are built, typed, and green: 204 tests passing, `mypy --strict` clean,
+M0–M9 are built, typed, and green: 222 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 
@@ -37,6 +38,10 @@ point of this file is that nothing here should surprise you at run time.
 | Containers are named `runectl-<run_id>` so a human can attach mid-run | `tests/unit/test_docker_sandbox.py` |
 | No category claims a tool the arena Dockerfile never installs | `tests/unit/test_categories.py` |
 | A missing image or dead daemon exits 4 before any run directory is created | Verified by hand on 2026-09-07 with the daemon stopped |
+| Thinking resolution/clamping per model, round-trip of provider-native thinking blocks, `llm.thinking` truncation at 8KB, `run.started`'s clamp record | `tests/unit/test_thinking.py` (D20) |
+| A cassette recorded with thinking off is never served to a thinking-on replay | `tests/unit/test_thinking.py::test_request_hash_differs_by_thinking_level` |
+| `runectl config`'s key-shaped-value rejection and round-trip | `tests/unit/test_thinking.py::test_user_config_round_trips_and_rejects_key_shaped_values` |
+| The TUI mounts, its launcher modal opens/composes/dismisses, and a live run's events update the run table | `tests/integration/test_tui.py`, against a stub script standing in for `runectl run` — no real subprocess of the engine, no daemon, no key |
 
 ## Live-verified since the skeleton
 
@@ -47,13 +52,36 @@ unexercised. Two live sessions have since closed most of that gap:
   three live `runectl run`s against Anthropic, and `replay --check`.
 - **2026-09-09** — the arena rebuilt for M7's toolset, and a full ten-challenge
   `runectl bench run` against Anthropic (`bench/results/README.md`).
+- **2026-09-09 (M9)** — the arena rebuilt again (current fingerprint), then one live
+  `runectl run --thinking high --record` against Anthropic
+  (`bench/practice/easy-02`, `modern-clueless-child`): solved in 6 steps, $0.0558, 5
+  `llm.thinking` events with real non-empty reasoning text (confirming `display:
+  "summarized"` is doing its job — the API's own default, `"omitted"`, would have
+  returned empty thinking blocks despite paying for them). `run.json` correctly recorded
+  `thinking_level: "high"`. `replay --check` still reproduced the tool-call sequence at
+  zero spend after D20's changes to `request_hash`.
 
 Exercised for real as a result: `arena build`/`arena status`; `DockerSandbox` building
 and running real containers (triage and agent commands execute inside the amd64 arena);
 and the **Anthropic** adapter against the live API — including its error handling (a
-rejected key exits 6 cleanly, an invalid request exits 5, verified 2026-09-09). The
-container's security *posture* is applied and functional, but its isolation is asserted
-by configuration, not adversarial testing (see [`SECURITY.md`](../SECURITY.md)).
+rejected key exits 6 cleanly, an invalid request exits 5, verified 2026-09-09) and, as of
+the same day, **extended thinking** end to end (adaptive thinking + `output_config.effort`,
+never `budget_tokens`, which is rejected outright on Opus 5/Sonnet 5). The container's
+security *posture* is applied and functional, but its isolation is asserted by
+configuration, not adversarial testing (see [`SECURITY.md`](../SECURITY.md)).
+
+**A real, pre-existing gap this session found, not introduced, while verifying the above:**
+`runectl replay`'s regenerated run finished as `candidate` (exit 2) rather than
+reproducing the original's `solved` (exit 0), even though `--check` confirmed an
+identical tool-call sequence. Cause: the D15 judge's re-derivation step calls
+`self._sandbox.exec(...)` directly (`flags/judge.py`), bypassing the
+`ToolDispatcher`/`ToolCall`/`ToolResultEvent` path — so that exec is never captured as
+its own trace event, and `exec_results_from_trace` (which builds `ReplaySandbox`'s
+queue purely from recorded `ToolResultEvent`s) has nothing to serve it. Any run that
+auto-finalized via re-derivation — the primary path under `gated` since the D11
+amendments — hits this on replay. Confirmed by reading `sandbox/replay.py` and
+`flags/judge.py`, neither of which this session touched; not fixed here, since it's a
+D15/replay engine change outside this session's scope, not a thinking/TUI/config one.
 
 ## Still never run for real
 
@@ -66,6 +94,25 @@ by configuration, not adversarial testing (see [`SECURITY.md`](../SECURITY.md)).
 - **The OpenAI and Google adapters.** Each was written against its installed SDK's actual
   types and exception hierarchy, but no OpenAI or Google key has ever talked to the live
   service. Treat the first real run on each as its smoke test.
+- **Thinking on OpenAI and Google (D20).** Written against the installed SDKs'
+  documented shapes (`reasoning_effort` on OpenAI's Chat Completions; `ThinkingConfig`
+  with `include_thoughts=True` on `google-genai`) and covered by the same
+  fakes-over-mocks unit tests as everything else in `providers/`, but neither has run
+  against a live service — same caveat as the adapters themselves, one level deeper.
+  Two things worth knowing before the first real run: OpenAI's Chat Completions surface
+  has no reasoning-content field at all, so `Completion.thinking_text` is always empty
+  for that adapter even when a level was honored server-side (a Responses API migration
+  would be needed to render it — out of scope here); Google's `ThinkingLevel` enum tops
+  out at `HIGH` (no `xhigh`/`max`), which the registry's `max_thinking_level="high"` for
+  both Gemini models already reflects.
+- **The TUI's live-run path** (launching a real `runectl run` subprocess from the
+  launcher modal, watching multiple runs concurrently, approving a flag through it). The
+  subprocess/NDJSON-parsing mechanism (`runner_proc.run_streaming`) is unit-tested
+  against a stub script standing in for `runectl run`, and the app's reaction to a
+  simulated live run is tested the same way (`tests/integration/test_tui.py`) — but no
+  session has driven it against a real Docker daemon and a real key. `runectl tui
+  --replay <run_id>` (playback over an already-recorded trace) *has* been verified live,
+  against the real thinking-enabled run recorded above.
 
 ## Stubs — wired, discoverable, no body yet
 
@@ -212,8 +259,15 @@ description does not contain enough to solve it without the original repo's file
   `osint`, `network`) ship as data at equal depth, the arena grew the toolset they name,
   and the bench grew from 5 to 10 (one case per new category). Re-benched the same day:
   7/10 solved, 1 false flag, V1 gate met over the 7 gated cases.
-- **M9 — human render polish.** Compact, foldable, width-aware, over the same event
-  stream.
+- **M9 — done (2026-09-09).** Grew beyond its original "human render polish" scope into
+  the operator surface as a whole: extended thinking (D20) captured as its own trace
+  event and rendered live; `runectl config`/`models`/`runs` (discovery and preference
+  commands, all read-only or preference-only); and `runectl tui`, an interactive
+  in-terminal view added to D13 by a dated amendment (a TUI, not a GUI — no server, no
+  port; every run it launches is still a plain non-interactive `runectl run`
+  subprocess, and `loop/runner.py` gained no threading to support it). `runectl tui
+  --replay <run_id>` and `make demo` are the demo `PLAN.md` asks for — a real, recorded
+  run's reasoning and actions, animated at a readable pace, at zero replay-time spend.
 
 Ordering note: M5 and M6 were both prerequisites for trusting a solve, and M6 addresses
 the product's biggest risk — a wrong flag scores worse than no flag. What neither of them

@@ -26,6 +26,7 @@ from runectl.trace.events import (
     FlagDecision,
     FlagReviewed,
     LlmResponse,
+    LlmThinking,
     RunFinished,
     RunStarted,
     StrategyShift,
@@ -66,10 +67,15 @@ def _line(payload: EventPayload, width: int) -> str | None:
     budget = width - 22
 
     if isinstance(payload, RunStarted):
+        thinking = ""
+        if payload.thinking_level != "off":
+            thinking = f" · thinking={payload.thinking_level}"
+            if payload.thinking_clamped_from:
+                thinking += f" (clamped from {payload.thinking_clamped_from})"
         return (
             f"  ▶ {payload.challenge_name} [{payload.category}]  {payload.model}\n"
             f"    max {payload.max_steps} steps · network={payload.network} · "
-            f"approval={payload.approval_policy}"
+            f"approval={payload.approval_policy}{thinking}"
         )
     if isinstance(payload, ChallengeLoaded):
         files = f"{payload.file_count} file(s)" if payload.file_count else "no files"
@@ -83,6 +89,11 @@ def _line(payload: EventPayload, width: int) -> str | None:
         mark = "ok " if payload.ok else ("blocked" if payload.kind == "blocked" else "err")
         body = payload.stdout or payload.stderr
         return f"{payload.step:>3} ← {mark:<12} {_flat(body, budget - 8)} ({payload.duration_s:.1f}s)"
+    if isinstance(payload, LlmThinking):
+        # Clipped like everything else here — the full text is in trace.jsonl,
+        # and (once built) the TUI's thinking pane is where it's read in full.
+        mark = "…" if payload.truncated else ""
+        return f"{payload.step:>3} ∴ {_flat(payload.text, budget)}{mark}"
     if isinstance(payload, LlmResponse):
         if payload.tool_call is None and payload.text_chars:
             return f"{payload.step:>3} · model replied with text and no tool call"

@@ -1,9 +1,10 @@
 # Architecture
 
 The authority on *why* any of this is shaped the way it is is
-[`DECISIONS.md`](../DECISIONS.md) (D1–D16), which is locked for V1. This document is the
-map: what each module does, what happens during a run, and where the seams are that later
-milestones fill in.
+[`DECISIONS.md`](../DECISIONS.md) (D1–D20 as of 2026-09-09; D13 carries a dated
+amendment, not a rewrite — read it before assuming "D1–D16" means the whole file), which
+is locked for V1. This document is the map: what each module does, what happens during a
+run, and where the seams are that later milestones fill in.
 
 ## Layout
 
@@ -14,17 +15,25 @@ src/runectl/
     ids.py              sortable run ids: YYYYMMDD-HHMMSS-<6hex>
 
     cli/                the ONLY package allowed to print
-        app.py          Typer root; wires subcommands; hosts `replay` and `index`
+        app.py          Typer root; wires subcommands; hosts `replay`, `index`, `tui`
         run_cmd.py      `runectl run` — resolves everything, runs the loop, exits honestly
         trace_cmd.py    `runectl trace show`
         keys_cmd.py     `runectl keys set|list|rm`
         arena_cmd.py    `runectl arena build|status`
         flag_cmd.py     `runectl flag list` / `flag approve`
         bench_cmd.py    `runectl bench run`
+        config_cmd.py   `runectl config set|get|list|path` (D20 — preferences, never keys)
+        models_cmd.py   `runectl models list`
+        runs_cmd.py     `runectl runs list|show|ps|attach` — read-only, on the derived index
         render.py       two pure event renderers: NDJSON→stdout, human→stderr
+        tui/            `runectl tui` — the D13-amendment interactive view (M9). Still
+                        `cli/` code under every existing rule: it renders, it never
+                        contains agent logic, and every run it launches is a
+                        `runectl run` subprocess, never an in-process loop call
 
     trace/              the record
-        events.py       the closed set of 16 typed payloads + the versioned envelope
+        events.py       the typed payloads (18 as of D20's `llm.thinking`) + the
+                        versioned envelope — `_ALL_PAYLOADS` is the live count
         writer.py       append-only writer: redact secrets, spill >8KB, flush+fsync
         reader.py       lazy ordered reader that tolerates a torn final line
         store.py        run directories and the run.json manifest
@@ -67,7 +76,7 @@ src/runectl/
     categories/         category data, loaded at runtime
         schema.py       what every category TOML validates against
         loader.py       TOML → Category
-        web.toml crypto.toml misc.toml
+        pwn.toml web.toml crypto.toml forensics.toml rev.toml misc.toml osint.toml network.toml
 ```
 
 ## The three rules that shape everything
@@ -171,7 +180,7 @@ answer to the predecessor's six mixins sharing ~30 implicit attributes.
 `StubSandbox` (in-process fake filesystem plus a scripted command table) and
 `ScriptedProvider` (a fixed list of completions) together let the entire loop run with no
 container runtime and no API spend. That's not a testing convenience bolted on afterward —
-it's the reason both types exist, and the whole 28-test suite runs on it.
+it's the reason both types exist, and the great majority of the test suite (222 tests as of M9) runs on it.
 
 `ReplaySandbox` + `ReplayProvider` are the same idea pointed at a *recorded* run, which
 is what `runectl replay` uses.
@@ -183,6 +192,9 @@ Each of these is shaped now so the milestone that fills it doesn't need an API c
 | Seam | Where | Fills in |
 |---|---|---|
 | Evidence store | `evidence.added` is defined in the trace schema but nothing emits it — findings carry forward in the conversation only | later |
-| Human render polish | `render.py` is plain but correct — one line per event | **M9** |
+
+**M9 (done, 2026-09-09)** filled the human-render-polish seam and then grew past it — see
+[`STATUS.md`](STATUS.md)'s Milestones section and `cli/tui/`'s module docstrings for what
+actually landed (extended thinking, `config`/`models`/`runs`, and the TUI itself).
 
 For exactly what is and isn't real today, see [`STATUS.md`](STATUS.md).

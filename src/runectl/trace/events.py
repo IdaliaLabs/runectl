@@ -15,7 +15,10 @@ from pydantic import BaseModel, ConfigDict
 
 
 class EventPayload(BaseModel):
-    """Base for all sixteen typed event payloads."""
+    """Base for every typed event payload — see ``_ALL_PAYLOADS`` below for the
+    current, authoritative count (docs/TRACE.md is the human-readable inventory;
+    this docstring used to say "sixteen," which stopped being true as of M6's
+    `flag.reviewed` and D19's `budget.exhausted`)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -32,6 +35,13 @@ class RunStarted(EventPayload):
     approval_policy: str
     max_steps: int
     network: str
+    # D20 — the *resolved* thinking level (after any provider clamp), so a
+    # run's reasoning spend is never invisible after the fact. "off" if
+    # thinking wasn't requested. `thinking_clamped_from` is set only when the
+    # requested level differs from `thinking_level` — the loud-not-silent
+    # record of a degradation, never inferred from `thinking_level` alone.
+    thinking_level: str = "off"
+    thinking_clamped_from: str | None = None
 
 
 class ChallengeLoaded(EventPayload):
@@ -81,6 +91,26 @@ class LlmResponse(EventPayload):
     input_tokens: int
     output_tokens: int
     cost_usd: float
+
+
+class LlmThinking(EventPayload):
+    """The model's reasoning for one step (D20, added 2026-09-09).
+
+    A separate event rather than a field on ``llm.response``: thinking text is
+    long and unbounded, so keeping it as its own event lets the writer's 8 KB
+    artifact-spill rule apply to it independently — a long thinking block
+    doesn't bloat every ``llm.response`` line in ``trace.jsonl``. Only emitted
+    when thinking was requested and the provider actually returned text (an
+    empty ``thinking_text`` from the provider emits nothing, since there is
+    nothing to show — see ``loop/runner.py``).
+    """
+
+    event_type: ClassVar[str] = "llm.thinking"
+
+    step: int
+    text: str
+    level: str
+    truncated: bool = False
 
 
 class ToolCall(EventPayload):
@@ -230,6 +260,7 @@ _ALL_PAYLOADS: tuple[type[EventPayload], ...] = (
     TriageResult,
     LlmRequest,
     LlmResponse,
+    LlmThinking,
     ToolCall,
     ToolResultEvent,
     ProgressScored,

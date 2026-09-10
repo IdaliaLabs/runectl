@@ -26,7 +26,12 @@ CREATE TABLE runs (
     cost_usd REAL,
     steps_used INTEGER,
     started_at REAL,
-    finished_at REAL
+    finished_at REAL,
+    flag TEXT,
+    progress_steps INTEGER,
+    blocked_steps INTEGER,
+    approved_at REAL,
+    thinking_level TEXT
 );
 CREATE TABLE events_summary (
     run_id TEXT,
@@ -55,7 +60,7 @@ class IndexDB:
                 except FileNotFoundError:
                     continue
                 conn.execute(
-                    "INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                    "INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     (
                         manifest.run_id,
                         manifest.challenge_name,
@@ -68,6 +73,11 @@ class IndexDB:
                         manifest.steps_used,
                         manifest.started_at,
                         manifest.finished_at,
+                        manifest.flag,
+                        manifest.progress_steps,
+                        manifest.blocked_steps,
+                        manifest.approved_at,
+                        manifest.thinking_level,
                     ),
                 )
                 type_counts: dict[str, int] = {}
@@ -85,10 +95,19 @@ class IndexDB:
             conn.close()
 
     def list_runs(self) -> list[dict[str, Any]]:
+        """Empty, not an error, if the index has never been built (D3: the
+        index is derived and never authoritative — asking a cross-run
+        question before the first `runectl index rebuild` is a legitimate
+        state, not a bug)."""
+        if not self._path.exists():
+            return []
         conn = sqlite3.connect(self._path)
         try:
             conn.row_factory = sqlite3.Row
-            rows = conn.execute("SELECT * FROM runs ORDER BY started_at DESC").fetchall()
+            try:
+                rows = conn.execute("SELECT * FROM runs ORDER BY started_at DESC").fetchall()
+            except sqlite3.OperationalError:
+                return []
             return [dict(row) for row in rows]
         finally:
             conn.close()

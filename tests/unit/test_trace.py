@@ -3,6 +3,7 @@ prefix; `index rebuild` matches the store; secrets never land in trace.jsonl."""
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -92,3 +93,17 @@ def test_index_rebuild_matches_store(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert len(rows) == 1
     assert rows[0]["run_id"] == run_id
     assert rows[0]["outcome"] == "solved"
+
+
+def test_list_runs_is_empty_not_an_error_before_the_first_rebuild(tmp_path: Path) -> None:
+    """D3: the index is derived, never authoritative — `runs list` before the
+    first `index rebuild` is a legitimate empty state (`runectl runs list`),
+    not a crash. Covers both a genuinely missing index.db and one that exists
+    but was never given a schema (sqlite3.connect() alone creates an empty
+    file without creating any table)."""
+    missing = IndexDB(tmp_path / "does-not-exist.db")
+    assert missing.list_runs() == []
+
+    empty_path = tmp_path / "empty.db"
+    sqlite3.connect(empty_path).close()  # touches the file, no schema
+    assert IndexDB(empty_path).list_runs() == []

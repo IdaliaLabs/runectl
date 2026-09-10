@@ -44,7 +44,7 @@ def _run(tmp_path: Path, steps: int = 12):  # type: ignore[no-untyped-def]
     runner = Runner(
         challenge=Challenge(name="c", category="web", description=""),
         category=category,
-        model=resolve_model("claude-haiku-4-5-20251001"),
+        model=resolve_model("claude-haiku-4-5"),
         provider=ScriptedProvider([_same_call(i) for i in range(steps)]),
         sandbox=sandbox,
         writer=writer,

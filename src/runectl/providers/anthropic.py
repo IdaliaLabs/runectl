@@ -6,6 +6,24 @@ exercised too — a rejected key raises a clean UsageError (exit 6) and other AP
 errors a ProviderError (exit 5), see `providers/base.py` and
 `tests/unit/test_provider_errors.py`. The message/usage field names and
 `messages.create` signature were validated against the installed `anthropic` SDK.
+
+Extended thinking (D20, added 2026-09-09): uses adaptive thinking
+(``thinking={"type": "adaptive"}``) plus ``output_config={"effort": ...}`` for
+the level, on Opus 5 / Sonnet 5 / Haiku's peers in this tier. Two things a
+prior-generation implementation would get wrong:
+
+- ``budget_tokens`` is **not sent**. It is rejected with a 400 on both Opus 5
+  and Sonnet 5 — the two Anthropic models this registry marks
+  ``supports_thinking=True`` — and is only a Haiku-era concept, and Haiku is
+  the utility model, which never thinks (`registry.py`).
+- ``display: "summarized"`` is **always set** when thinking is requested. The
+  API's own default is ``"omitted"``, which returns ``thinking`` blocks with
+  an empty ``.thinking`` string — enabling thinking without this flag would
+  spend the tokens and capture nothing.
+
+Thinking blocks, when present, must be replayed back **first** in the assistant
+content list on the next turn, ahead of any text or ``tool_use`` block — that
+ordering is this API's own requirement, not a rendering choice.
 """
 
 from __future__ import annotations
@@ -14,7 +32,7 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 import anthropic
-from anthropic.types import TextBlock, ToolUseBlock
+from anthropic.types import TextBlock, ThinkingBlock, ToolUseBlock
 
 from runectl.providers.base import (
     Completion,
@@ -25,6 +43,7 @@ from runectl.providers.base import (
     api_error,
     auth_error,
 )
+from runectl.providers.registry import ThinkingLevel
 from runectl.tools.schema import ToolSchema, to_anthropic
 
 # 5xx/429/timeout — retried with backoff by complete_with_retry (D5).
@@ -46,6 +65,10 @@ def _to_anthropic_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
             out.append({"role": "user", "content": message.content})
         elif message.role == "assistant":
             content: list[dict[str, Any]] = []
+            # D20 — thinking blocks must come first in the assistant content
+            # list, before text and tool_use, replayed back exactly as the API
+            # returned them. This is the API's own ordering requirement.
+            content.extend(message.thinking_blocks)
             if message.content:
                 content.append({"type": "text", "text": message.content})
             for call in message.tool_calls:
@@ -89,6 +112,7 @@ class AnthropicProvider:
         messages: Sequence[Message],
         tools: Sequence[ToolSchema],
         max_tokens: int,
+        thinking: ThinkingLevel = "off",
     ) -> Completion:
         # D18 — top-level auto-caching puts the breakpoint on the last cacheable
         # block, which in an agent loop is the end of the growing message list.
@@ -99,6 +123,13 @@ class AnthropicProvider:
         extra: dict[str, Any] = (
             {"cache_control": {"type": "ephemeral"}} if self._prompt_cache else {}
         )
+        # D20 — adaptive thinking + an effort level, never budget_tokens (see
+        # module docstring: budget_tokens is rejected outright on this model
+        # tier). display="summarized" is mandatory or thinking content comes
+        # back empty.
+        if thinking != "off":
+            extra["thinking"] = {"type": "adaptive", "display": "summarized"}
+            extra["output_config"] = {"effort": thinking}
         try:
             response = self._client.messages.create(
                 model=self._model_id,
@@ -120,10 +151,17 @@ class AnthropicProvider:
             raise api_error("Anthropic", exc) from exc
 
         text_parts: list[str] = []
+        thinking_parts: list[str] = []
+        thinking_blocks: list[dict[str, Any]] = []
         tool_calls: list[ToolCallRequest] = []
         for block in response.content:
             if isinstance(block, TextBlock):
                 text_parts.append(block.text)
+            elif isinstance(block, ThinkingBlock):
+                thinking_parts.append(block.thinking)
+                # Stored verbatim (as the API returned it) for replay — see
+                # _to_anthropic_messages, which puts these back first.
+                thinking_blocks.append(block.model_dump())
             elif isinstance(block, ToolUseBlock):
                 raw_input = block.input
                 tool_calls.append(
@@ -144,4 +182,6 @@ class AnthropicProvider:
                 cache_write_tokens=response.usage.cache_creation_input_tokens or 0,
             ),
             stop_reason=response.stop_reason or "unknown",
+            thinking_text="\n".join(thinking_parts),
+            thinking_blocks=tuple(thinking_blocks),
         )

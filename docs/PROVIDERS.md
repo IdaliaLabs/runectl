@@ -11,19 +11,44 @@ Provider and capability come from an explicit table in
 `src/runectl/providers/registry.py` — never from sniffing a string prefix like `claude-`.
 An unregistered model id is a hard error (exit 6), not a guess.
 
-| Model id | Provider | Context | Tools | Prompt cache | $/1M in | $/1M out |
-|---|---|---|---|---|---|---|
-| `claude-opus-5` | anthropic | 200K | ✓ | ✓ | 15.00 | 75.00 |
-| `claude-sonnet-5` | anthropic | 200K | ✓ | ✓ | 3.00 | 15.00 |
-| `claude-haiku-4-5-20251001` | anthropic | 200K | ✓ | ✓ | 1.00 | 5.00 |
-| `gpt-5` | openai | 272K | ✓ | ✓ | 5.00 | 15.00 |
-| `gpt-5-mini` | openai | 272K | ✓ | ✓ | 0.50 | 1.50 |
-| `gemini-2.5-pro` | google | 1M | ✓ | ✓ | 1.25 | 10.00 |
-| `gemini-2.5-flash` | google | 1M | ✓ | ✗ | 0.30 | 2.50 |
+| Model id | Provider | Context | Tools | Prompt cache | Thinking | $/1M in | $/1M out |
+|---|---|---|---|---|---|---|---|
+| `claude-opus-5` | anthropic | 1M | ✓ | ✓ | ✓ | 5.00 | 25.00 |
+| `claude-sonnet-5` | anthropic | 1M | ✓ | ✓ | ✓ | 2.00 | 10.00 |
+| `claude-haiku-4-5` | anthropic | 200K | ✓ | ✓ | ✗ (utility model only) | 1.00 | 5.00 |
+| `gpt-5` | openai | 272K | ✓ | ✓ | ✓ | 5.00 | 15.00 |
+| `gpt-5-mini` | openai | 272K | ✓ | ✓ | ✓ | 0.50 | 1.50 |
+| `gemini-2.5-pro` | google | 1M | ✓ | ✓ | ✓ | 1.25 | 10.00 |
+| `gemini-2.5-flash` | google | 1M | ✓ | ✗ | ✓ | 0.30 | 2.50 |
 
-> Pricing and availability snapshot: **2026-09-05**. Re-verify before relying on it for
-> real spend — this repo's convention is that every claim carries the date it was checked,
-> because pricing rots fast.
+> Pricing and availability snapshot: **2026-09-05, corrected 2026-09-09 (D18)**. The
+> original snapshot recorded Opus 5 at $15/$75 and Sonnet 5 at $3/$15, both at a 200K
+> context window — all four numbers were wrong; D18 corrected them to the values above.
+> `claude-haiku-4-5-20251001` was also renamed to `claude-haiku-4-5` — current Anthropic
+> model ids carry no date suffix. Re-verify before relying on this for real spend — this
+> repo's convention is that every claim carries the date it was checked, because pricing
+> rots fast.
+
+## Extended thinking (D20)
+
+`--thinking <off|low|medium|high|xhigh|max>` on `runectl run` and `runectl bench run`,
+default `off`. `runectl models list` shows which registered models support it. The level
+is per-run and per-model, not a category concern (D9) — a category playbook has no opinion
+on what you're willing to spend reasoning about your own challenge.
+
+Anthropic uses adaptive thinking (`thinking: {"type": "adaptive"}`) plus
+`output_config.effort` for the level; `display: "summarized"` is always set, since the
+API's own default (`"omitted"`) returns thinking blocks with empty text — enabling
+thinking without this would spend the tokens and render nothing. `budget_tokens` is not
+used: it is rejected outright on Opus 5 and Sonnet 5, the two Anthropic models in the
+registry above. OpenAI and Google map onto their own reasoning-effort/thinking-budget
+parameters through the same `ModelInfo.thinking_style` field; **both are unverified
+against a live service**, matching the existing OpenAI/Google verification gap below.
+
+Where a model can't represent the requested level, `runectl` clamps to the nearest
+supported one and records the clamp in the trace — it is never silently substituted. The
+resolved level is written to `run.started` and `run.json`, so a run's reasoning spend is
+never invisible after the fact.
 
 ### Adding a model
 
@@ -105,10 +130,11 @@ uv run runectl replay <run_id> --check
 `cassette.jsonl` for every call. `ReplayProvider` reads that file and serves the recorded
 completion back for a matching hash, with no network call.
 
-The hash covers the system prompt, the full message list, the tool names, and
-`max_tokens`. If the loop asks something the cassette doesn't contain, the replay raises
-rather than silently improvising — that's the signal that your change altered the agent's
-behavior.
+The hash covers the system prompt, the full message list, the tool names, `max_tokens`,
+and (as of D20) the resolved thinking configuration — a cassette recorded with thinking
+off is never served to a replay requesting thinking on. If the loop asks something the
+cassette doesn't contain, the replay raises rather than silently improvising — that's the
+signal that your change altered the agent's behavior.
 
 `ScriptedProvider` is the test-only sibling: a fixed list of hand-written `Completion`
 objects returned in order. Together with `StubSandbox`, it's why the whole test suite runs

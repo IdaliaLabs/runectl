@@ -10,13 +10,18 @@ trace of everything it tried.
 It is built to be driven by another AI agent as much as by a human: machine-readable
 I/O, nothing interactive, honest exit codes.
 
-**CLI-only, permanently** — no GUI, no `serve` command, no `ui/` package, ever
-([`DECISIONS.md`](DECISIONS.md) D13).
+**No server, no browser UI, ever** — `runectl` is CLI-only, permanently
+([`DECISIONS.md`](DECISIONS.md) D13). A local, in-terminal TUI (`runectl tui`) is in
+bounds as of a dated 2026-09-09 amendment to D13; it is a second consumer of the same
+event stream, never a network surface, and every run it launches is still a plain
+non-interactive `runectl run` subprocess.
 
 > **Status: pre-alpha.** M0–M8 are built and green: the loop, trace, sandbox,
 > provider and replay layers, the progress/budget machinery, the false-flag subsystem,
 > `runectl bench`, and (M7, 2026-09-09) **all eight categories ship** — `crypto`, `misc`,
-> `web`, `pwn`, `rev`, `forensics`, `osint` and `network`, at equal depth.
+> `web`, `pwn`, `rev`, `forensics`, `osint` and `network`, at equal depth. Since then:
+> extended thinking (D20), `runectl config`/`models`/`runs`, and the `runectl tui`
+> interactive view (D13 amendment) — see [`docs/CLI.md`](docs/CLI.md).
 >
 > It has been scored on live challenges, and those numbers are published in full. The
 > latest run (2026-09-09, claude-sonnet-5, on the ten-challenge M7 suite) scored
@@ -179,15 +184,19 @@ than a claimed solve. `runectl flag list` shows what was held and which check he
 ## Command surface
 
 ```
-runectl run --model <id> (--challenge <file> | --name <n> --category <c>) [options]
+runectl run --model <id> (--challenge <file> | --name <n> --category <c>) [--thinking <level>] [options]
 runectl trace show <run_id> [--format timeline|jsonl]
 runectl replay <run_id> [--check]
 runectl keys set|list|rm <provider>
-runectl arena build|status
+runectl arena ensure|build|status
 runectl index rebuild
 runectl flag list <run_id>           # pending candidates, as JSON lines
 runectl flag approve <run_id> [--flag <value>]
-runectl bench run --model <id> [--suite <dir>] [--max-total-cost <usd>]
+runectl bench run --model <id> [--suite <dir>] [--max-total-cost <usd>] [--thinking <level>]
+runectl config set|get|list|path     # per-provider preferences (model, thinking)
+runectl models list                  # registry + key presence + thinking support
+runectl runs list|show|ps|attach     # discover, inspect, and attach to runs
+runectl tui [--replay <run_id>]      # interactive, in-terminal view (D13 amendment)
 ```
 
 Full reference, every flag, and the machine-readable output contract:
@@ -222,7 +231,7 @@ Override with `RUNECTL_HOME` and `RUNECTL_CONFIG_HOME` (both honor `XDG_DATA_HOM
 | [`bench/results/README.md`](bench/results/README.md) | Every live bench run, failures first, with the traces |
 | [`SECURITY.md`](SECURITY.md) | The sandbox threat model, what Docker is *not* protecting you from, reporting |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | Dev setup, the checks, and the architectural rules a PR must not break |
-| [`DECISIONS.md`](DECISIONS.md) | The locked architecture (D1–D16). Read before changing anything structural. |
+| [`DECISIONS.md`](DECISIONS.md) | The locked architecture (D1–D20). Read before changing anything structural. |
 
 ## Development
 

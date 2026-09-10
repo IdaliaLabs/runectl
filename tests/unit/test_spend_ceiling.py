@@ -40,7 +40,7 @@ def _runner(tmp_path: Path, *, max_cost: float, steps: int) -> Runner:
     return Runner(
         challenge=Challenge(name="c", category="misc", description=""),
         category=category,
-        model=resolve_model("claude-haiku-4-5-20251001"),
+        model=resolve_model("claude-haiku-4-5"),
         provider=ScriptedProvider([_expensive_step() for _ in range(steps)]),
         sandbox=sandbox,
         writer=writer,

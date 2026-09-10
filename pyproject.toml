@@ -15,6 +15,7 @@ dependencies = [
   "google-genai>=0.3",
   "keyring>=25",
   "rich>=13",
+  "textual>=0.80",
 ]
 
 [project.scripts]
@@ -31,6 +32,7 @@ packages = ["src/runectl"]
 dev = [
   "pytest>=8",
   "pytest-cov>=5",
+  "pytest-asyncio>=0.24",
   "mypy>=1.11",
   "ruff>=0.6",
   "types-docker",
@@ -59,3 +61,7 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Phase 4 (the TUI) drives Textual's App.run_test(), which is async; this is
+# scoped to files that opt in via `pytestmark = pytest.mark.asyncio` rather
+# than "auto" so every other (synchronous) test file is unaffected.
+asyncio_mode = "strict"

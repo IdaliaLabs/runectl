@@ -15,3 +15,4 @@ build/
 keys.json
 *.log
 .DS_Store
+.demo-home/

@@ -16,6 +16,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 
 from runectl.providers.base import Completion, Message
+from runectl.providers.registry import ThinkingLevel
 from runectl.tools.schema import ToolSchema
 
 Step = Completion | Callable[[Sequence[Message]], Completion]
@@ -27,6 +28,9 @@ class ScriptedProvider:
     def __init__(self, completions: Sequence[Step]) -> None:
         self._completions = list(completions)
         self._cursor = 0
+        # D20 — the thinking level each call was made with, for tests that
+        # assert the loop resolved and requested the level they expected.
+        self.thinking_requests: list[ThinkingLevel] = []
 
     def complete(
         self,
@@ -35,9 +39,11 @@ class ScriptedProvider:
         messages: Sequence[Message],
         tools: Sequence[ToolSchema],
         max_tokens: int,
+        thinking: ThinkingLevel = "off",
     ) -> Completion:
         if self._cursor >= len(self._completions):
             raise IndexError("ScriptedProvider: complete() called past the end of the script")
+        self.thinking_requests.append(thinking)
         step = self._completions[self._cursor]
         self._cursor += 1
         return step(messages) if callable(step) else step
