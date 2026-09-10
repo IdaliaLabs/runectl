@@ -51,31 +51,35 @@ class LauncherScreen(ModalScreen[list[str] | None]):
         preferred_model = default_model("anthropic") or (model_options[0][1] if model_options else None)
 
         with VerticalScroll(id="launcher-box"):
-            yield Static("[b]New run[/b] — composes and previews the command before launching")
-            yield Label("Challenge TOML (optional — overrides name/category/description below)")
+            yield Static(
+                "[b]New run[/b] — fill in what you're solving below. This form builds the "
+                "real `runectl run` command shown at the bottom; nothing here is hidden "
+                "from you, and you'll see the exact command before it launches."
+            )
+            yield Label("Challenge file (optional — if you have one, it fills in everything below)")
             yield Input(placeholder="bench/practice/easy-02/chal.toml", id="challenge")
-            yield Label("Name")
+            yield Label("Name — a short label for this run")
             yield Input(placeholder="quick-math", id="name")
-            yield Label("Category")
+            yield Label("Category — what kind of challenge this is")
             yield Select(
                 [(c, c) for c in available_categories()], id="category", allow_blank=True
             )
-            yield Label("Description")
+            yield Label("Description — the challenge prompt, pasted as given to you")
             yield Input(placeholder="the challenge prompt", id="description")
-            yield Label("Model")
+            yield Label("Model — which AI provider/model solves it (your API key must be set first)")
             yield Select(model_options, value=preferred_model, id="model", allow_blank=False)
-            yield Label("Thinking")
+            yield Label("Thinking — how much the model reasons before each step (higher costs more)")
             yield Select(
                 [(level, level) for level in THINKING_LEVELS],
                 value=default_thinking("anthropic"),
                 id="thinking",
                 allow_blank=False,
             )
-            yield Label("Approval")
+            yield Label("Approval — 'gated' holds every flag for you to approve before it's final")
             yield Select(
                 [(a, a) for a in APPROVAL_POLICIES], value="gated", id="approval", allow_blank=False
             )
-            yield Label("Max cost (USD, 0 disables)")
+            yield Label("Max cost in USD — the run stops itself once it would spend more (0 disables)")
             yield Input(value=str(DEFAULT_MAX_COST_USD), id="max_cost")
             yield Static("", id="launcher-error")
             yield Static("", id="launcher-preview")

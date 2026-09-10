@@ -1,7 +1,7 @@
 """Hand-authored completions for free, deterministic unit tests (D5, plan §3.5).
 
 Together with :class:`~runectl.sandbox.stub.StubSandbox`, this is what lets the
-whole loop run with no daemon and no API spend (`POSTMORTEM.md` §2, testability).
+whole loop run with no daemon and no API spend.
 
 A step may also be a callable taking the conversation so far. That exists for
 one specific reason: D15 makes the agent cite the `seq` of the observation a

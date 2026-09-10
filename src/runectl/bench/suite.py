@@ -157,7 +157,7 @@ class BenchReport:
 
     @property
     def gate_met(self) -> bool:
-        """The V1 gate (DECISIONS.md D15, plan §10.1): 2 of 5 solved, 0 false flags.
+        """The V1 gate (docs/ARCHITECTURE.md D15): 2 of 5 solved, 0 false flags.
 
         Read over the gated subset only. With no case excluded — the normal
         case — that subset is the whole suite and this is the original rule.

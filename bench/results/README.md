@@ -11,7 +11,7 @@ that justified a change is still here to read.
 
 Two back-to-back live runs of the full M7 suite, same model, no other change between
 them: `2026-09-10-baseline-with-review.json` (`flags/review.py` still in the pipeline)
-and `2026-09-10-no-review.json` (removed — see `DECISIONS.md`'s 2026-09-10 amendment).
+and `2026-09-10-no-review.json` (removed — see `docs/ARCHITECTURE.md`'s 2026-09-10 amendment).
 
 | | with review | without review |
 |---|---|---|
@@ -38,7 +38,7 @@ actual price.
 Fixed in the same branch, found while verifying `flag.reviewed` events in old runs would
 stay readable after the removal: `EventPayload`'s `extra="forbid"` was silently
 truncating `runectl trace show`/`replay` on every run recorded before the prior session's
-dead-code pass dropped a handful of now-unused fields. See `DECISIONS.md`.
+dead-code pass dropped a handful of now-unused fields. See `docs/ARCHITECTURE.md`.
 
 ## 2026-09-09 — claude-sonnet-5 — the M7 ten-challenge suite
 

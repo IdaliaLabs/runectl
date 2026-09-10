@@ -77,4 +77,4 @@ that lets challenge material reach the host filesystem.
 
 Out of scope: the agent writing a bad or destructive command *inside* its own
 container (that is the container's job), the model producing a wrong flag (see
-`DECISIONS.md` D15), and the cost of API calls you authorized.
+`docs/ARCHITECTURE.md` D15), and the cost of API calls you authorized.

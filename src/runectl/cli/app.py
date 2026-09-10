@@ -12,6 +12,7 @@ from typing import Any, cast
 
 import typer
 
+from runectl import __version__
 from runectl.categories.loader import CategoryLoadError, CategoryNotFoundError
 from runectl.categories.loader import load as load_category
 from runectl.cli import (
@@ -37,7 +38,25 @@ from runectl.trace.index import IndexDB
 from runectl.trace.reader import TraceReader
 from runectl.trace.store import Store
 
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"runectl {__version__}")
+        raise typer.Exit()
+
+
 app = typer.Typer(add_completion=False, help="runectl — an agentic CTF solver CLI (Idalia Labs).")
+
+
+@app.callback()
+def _root(
+    version: bool = typer.Option(
+        False, "--version", callback=_version_callback, is_eager=True, help="Print the version and exit."
+    ),
+) -> None:
+    return
+
+
 app.command("run")(run_cmd.run_command)
 app.add_typer(keys_cmd.app, name="keys")
 app.add_typer(arena_cmd.app, name="arena")

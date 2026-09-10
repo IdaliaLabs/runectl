@@ -1,6 +1,6 @@
 """Paths and tunable defaults (D3, D5, D12).
 
-Every constant here is a *starting* value carried from `POSTMORTEM.md` §5 Q6 or
+Every constant here is a *starting* value carried from the predecessor tool's practice or
 chosen for the skeleton, explicitly marked unmeasured (D16) — `runectl bench` (M8)
 is what tunes them, not this file.
 """

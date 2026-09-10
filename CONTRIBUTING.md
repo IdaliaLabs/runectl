@@ -2,7 +2,7 @@
 
 This is currently a solo build, so treat this file as the rules the codebase holds itself
 to — not an invitation-only process document. If you're reading it because you're
-contributing, welcome, and start with [`DECISIONS.md`](DECISIONS.md).
+contributing, welcome, and start with [`ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Setup
 
@@ -46,7 +46,7 @@ touches the store. Never write into the developer's real run store.
 
 ## Rules a change must not break
 
-These come from [`DECISIONS.md`](DECISIONS.md) and each one exists because its absence
+These come from [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) and each one exists because its absence
 caused a specific failure in the predecessor.
 
 **Only `cli/` prints.** No `print()`, no `typer.echo()`, no `rich` console anywhere in
@@ -78,7 +78,7 @@ kind="error", ...)`, not a string starting with `[error]`. Same for `ExecResult`
 
 **One tool call per step.** Extras get a `blocked` result and a matching tool message.
 
-**A sixth tool needs an argument in `DECISIONS.md` first.** The five-tool surface is
+**A sixth tool needs an argument in `docs/ARCHITECTURE.md` first.** The five-tool surface is
 locked; adding to it means demonstrating a category that shell genuinely cannot serve, and
 writing that down before writing the code.
 
@@ -97,7 +97,7 @@ code path that requires the index to exist.
 
 ## Changing a locked decision
 
-D1–D20 in [`DECISIONS.md`](DECISIONS.md) are locked for V1. Changing one means **editing
+D1–D20 in [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) are locked for V1. Changing one means **editing
 that file with a dated reason**, in the same change that alters the code — an amendment
 (see D13's 2026-09-09 entry, which allows `runectl tui` without reopening the rest of
 the lock) is that same discipline applied to widening a decision, not an exception to
@@ -110,7 +110,7 @@ amendment); `_ALL_PAYLOADS` is the authoritative count. If you genuinely need on
 
 1. Add the payload class in `trace/events.py` with its `event_type` ClassVar
 2. Add it to `_ALL_PAYLOADS` (that's what populates the type registry)
-3. Document it in [`docs/TRACE.md`](docs/TRACE.md)
+3. Document it in the "Event types" table in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#event-types)
 4. Consider whether `cli/render.py` should show it specially
 5. **If the event records a command that ran in the sandbox, add it to
    `exec_results_from_trace` in `sandbox/replay.py`** — that queue is positional, so an
@@ -131,7 +131,7 @@ construction-time error rather than a bad line in the record.
 - `from __future__ import annotations` at the top of every module
 - Module docstrings say what the module is *for* and cite the decision that shaped it.
   That convention is load-bearing here — the code is meant to be readable next to
-  `DECISIONS.md`, and a reader should never have to guess why something is shaped oddly.
+  `docs/ARCHITECTURE.md`, and a reader should never have to guess why something is shaped oddly.
 - Comments explain the non-obvious constraint, not the obvious mechanic.
 
 ## Numbers are unmeasured until bench says otherwise
@@ -139,7 +139,7 @@ construction-time error rather than a bad line in the record.
 Every step limit, budget, and threshold currently in the tree is a starting value carried
 from the predecessor and explicitly marked unmeasured. Don't treat them as tuned, and
 don't tune them by intuition — `runectl bench` (M8) is what moves them, and per
-[`DECISIONS.md`](DECISIONS.md) D16 they come down over time, not up.
+[`ARCHITECTURE.md`](docs/ARCHITECTURE.md) D16 they come down over time, not up.
 
 ## Commits
 

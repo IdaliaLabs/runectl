@@ -161,7 +161,7 @@ before anything that costs sandbox time:
    correct clears, two wrong flags cleared, one correct flag held (it cannot see a
    challenge's attached files, which is why it held that one), and zero caught. Deleted
    outright rather than left advisory: an unread verdict printed next to every candidate
-   read as a judgment call it never was. See the D11/D15 amendments in `DECISIONS.md`.
+   read as a judgment call it never was. See the D11/D15 amendments in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 Stages 1–3 reject under **every** `--approval` policy. Stages 5–6 — flag format and
 re-derivation — are what decide whether a candidate can be finalized without a human:
@@ -187,7 +187,7 @@ huge individual messages can still approach the context window before the count 
 Accurate tokenization is a later refinement.
 
 **`runectl bench` is a subcommand group, not a bare command.** It's `runectl bench run
---suite ...`, which diverges from the `DECISIONS.md` D4 sketch.
+--suite ...`, which diverges from [`ARCHITECTURE.md`](ARCHITECTURE.md)'s D4 sketch.
 
 **`--dry-run` from the D4 sketch doesn't exist.** No flag, no code path.
 
