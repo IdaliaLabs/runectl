@@ -297,9 +297,3 @@ vendored from [`csivitu/ctf-challenges`](https://github.com/csivitu/ctf-challeng
 the MIT license, with the required copyright and license text in
 [`bench/THIRD_PARTY_LICENSES.md`](bench/THIRD_PARTY_LICENSES.md) and per-challenge author
 credit in each `PROVENANCE.md`.
-
-## Name
-
-Idalia's Flute, from the Drizzt / *Sellswords* books: an instrument that reveals what
-its player has hidden. The brand idea is *surface what is already there* — which is more
-or less the job description for a CTF solver.
