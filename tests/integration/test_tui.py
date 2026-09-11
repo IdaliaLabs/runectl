@@ -9,6 +9,7 @@ needing the engine, a Docker daemon, or an API key at all.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import sys
 from pathlib import Path
@@ -16,6 +17,7 @@ from pathlib import Path
 import pytest
 
 from runectl.cli.tui.app import RunectlTUI
+from runectl.cli.tui.proc import run_once
 from runectl.cli.tui.runner_proc import run_streaming
 from runectl.trace.events import Event
 
@@ -151,3 +153,99 @@ async def test_app_live_run_updates_the_table_and_timeline(
 
         table = app.query_one("#run-table", DataTable)
         assert "run-x" in table.rows
+
+
+async def test_run_once_against_stub_script(tmp_path: Path) -> None:
+    script = tmp_path / "fake_runectl_once.py"
+    script.write_text("import sys\nprint('stored key for anthropic')\nsys.exit(0)\n")
+
+    exit_code, output = await run_once(
+        ["keys", "set", "anthropic", "sk-x"], launch_argv=(sys.executable, str(script))
+    )
+
+    assert exit_code == 0
+    assert "stored key for anthropic" in output
+
+
+@pytest.mark.parametrize(
+    ("key", "screen_name"),
+    [
+        ("k", "KeysScreen"),
+        ("a", "ArenaScreen"),
+        ("c", "ConfigScreen"),
+        ("m", "ModelsScreen"),
+        ("b", "BenchScreen"),
+    ],
+)
+async def test_each_new_screen_opens_and_closes(key: str, screen_name: str) -> None:
+    app = RunectlTUI()
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        await pilot.press(key)
+        await pilot.pause()
+        assert type(app.screen_stack[-1]).__name__ == screen_name
+        await pilot.press("escape")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1
+
+
+async def test_run_list_filters_narrow_visible_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    from textual.widgets import DataTable, Select
+
+    from runectl.cli.tui import data as tui_data
+    from runectl.cli.tui.data import RunSummary
+
+    summaries = [
+        RunSummary("run-a", "chal-a", "misc", "claude-sonnet-5", "solved", 0.01, 3, "off"),
+        RunSummary("run-b", "chal-b", "web", "gpt-5", "exhausted", 0.02, 5, "off"),
+    ]
+    monkeypatch.setattr(tui_data, "list_runs_fresh", lambda store: summaries)
+
+    app = RunectlTUI()
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        table = app.query_one("#run-table", DataTable)
+        assert len(table.rows) == 2
+
+        app.query_one("#filter-category", Select).value = "web"
+        await pilot.pause()
+        assert list(table.rows.keys()) == ["run-b"]
+
+
+async def test_kill_run_terminates_a_live_process(tmp_path: Path) -> None:
+    """A stub that just sleeps, standing in for a run still in flight — the
+    point here is that `action_kill_run` reaches the real subprocess, not
+    that any particular run behavior is being tested."""
+    script = tmp_path / "fake_runectl_sleep.py"
+    script.write_text("import time\ntime.sleep(30)\n")
+
+    app = RunectlTUI()
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+
+        async def _fake_run_streaming(argv, on_event, **kwargs):  # type: ignore[no-untyped-def]
+            return await run_streaming(
+                argv, on_event, launch_argv=(sys.executable, str(script)), on_start=kwargs.get("on_start")
+            )
+
+        import runectl.cli.tui.app as tui_app_module
+
+        monkeypatch_target = tui_app_module.run_streaming
+        tui_app_module.run_streaming = _fake_run_streaming  # type: ignore[assignment]
+        try:
+            app._launch(["run", "--model", "claude-sonnet-5", "--output", "jsonl"])
+            slot_key = next(iter(app._live_runs))
+            live = app._live_runs[slot_key]
+            await pilot.pause()
+            for _ in range(50):
+                if live.process is not None:
+                    break
+                await pilot.pause(0.05)
+            assert live.process is not None
+
+            app._selected_run_id = slot_key
+            app.action_kill_run()
+            exit_code = await asyncio.wait_for(live.task, timeout=5)
+            assert exit_code.exit_code != 0
+        finally:
+            tui_app_module.run_streaming = monkeypatch_target
