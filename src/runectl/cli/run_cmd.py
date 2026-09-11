@@ -117,7 +117,9 @@ def _build_provider(model: ModelInfo, api_key: str) -> Provider:
             model_id=model.id, api_key=api_key, prompt_cache=model.supports_prompt_cache
         )
     if model.provider == "openai":
-        return OpenAIProvider(model_id=model.id, api_key=api_key)
+        return OpenAIProvider(
+            model_id=model.id, api_key=api_key, supports_thinking=model.supports_thinking
+        )
     return GoogleProvider(model_id=model.id, api_key=api_key)
 
 
