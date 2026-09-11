@@ -72,7 +72,7 @@ async def test_run_streaming_captures_stderr_on_early_failure(tmp_path: Path) ->
 
 
 async def test_app_mounts_and_launcher_opens_and_cancels() -> None:
-    app = RunectlTUI()
+    app = RunectlTUI(splash=False)
     async with app.run_test(size=(120, 50)) as pilot:
         await pilot.pause()
         assert len(app.screen_stack) == 1
@@ -92,7 +92,7 @@ async def test_app_mounts_and_launcher_opens_and_cancels() -> None:
 async def test_launcher_preview_shows_a_composed_command_by_default() -> None:
     from runectl.cli.tui.launcher import LauncherScreen
 
-    app = RunectlTUI()
+    app = RunectlTUI(splash=False)
     async with app.run_test(size=(120, 50)) as pilot:
         await pilot.pause()
         app.push_screen(LauncherScreen())
@@ -139,7 +139,7 @@ async def test_app_live_run_updates_the_table_and_timeline(
 
     monkeypatch.setattr(tui_app_module, "run_streaming", _fake_run_streaming)
 
-    app = RunectlTUI()
+    app = RunectlTUI(splash=False)
     async with app.run_test(size=(120, 50)) as pilot:
         await pilot.pause()
 
@@ -178,7 +178,7 @@ async def test_run_once_against_stub_script(tmp_path: Path) -> None:
     ],
 )
 async def test_each_new_screen_opens_and_closes(key: str, screen_name: str) -> None:
-    app = RunectlTUI()
+    app = RunectlTUI(splash=False)
     async with app.run_test(size=(140, 50)) as pilot:
         await pilot.pause()
         await pilot.press(key)
@@ -201,7 +201,7 @@ async def test_run_list_filters_narrow_visible_rows(monkeypatch: pytest.MonkeyPa
     ]
     monkeypatch.setattr(tui_data, "list_runs_fresh", lambda store: summaries)
 
-    app = RunectlTUI()
+    app = RunectlTUI(splash=False)
     async with app.run_test(size=(140, 50)) as pilot:
         await pilot.pause()
         table = app.query_one("#run-table", DataTable)
@@ -219,7 +219,7 @@ async def test_kill_run_terminates_a_live_process(tmp_path: Path) -> None:
     script = tmp_path / "fake_runectl_sleep.py"
     script.write_text("import time\ntime.sleep(30)\n")
 
-    app = RunectlTUI()
+    app = RunectlTUI(splash=False)
     async with app.run_test(size=(140, 50)) as pilot:
         await pilot.pause()
 
@@ -249,3 +249,113 @@ async def test_kill_run_terminates_a_live_process(tmp_path: Path) -> None:
             assert exit_code.exit_code != 0
         finally:
             tui_app_module.run_streaming = monkeypatch_target
+
+
+async def test_splash_is_shown_by_default_and_dismisses_on_a_keypress() -> None:
+    """The splash is decoration, so the only things worth pinning are that it
+    appears, that it gets out of the way, and that `splash=False` suppresses it
+    entirely — which is what every other test here and `scripts/capture_demo.py`
+    rely on."""
+    app = RunectlTUI()
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        assert type(app.screen_stack[-1]).__name__ == "SplashScreen"
+        await pilot.press("space")
+        await pilot.pause()
+        assert len(app.screen_stack) == 1
+
+
+async def test_splash_never_appears_in_replay_mode() -> None:
+    """`--replay` is the demo path; a decorative screen must not land in a
+    recording or in `capture_demo.py`'s frames."""
+    app = RunectlTUI(replay_run_id="nope-not-a-real-run")
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        assert app._splash is False
+        assert all(type(s).__name__ != "SplashScreen" for s in app.screen_stack)
+
+
+async def test_cost_updates_reach_the_row_before_the_run_finishes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: a running run used to show $0.0000 / 0 steps for its whole
+    life, because only `run.finished` touched those cells. `cost.updated` has
+    always carried `cumulative_cost_usd` and `step`."""
+    lines = [
+        _event_line(type="run.started", data=_RUN_STARTED_DATA),
+        _event_line(
+            type="cost.updated",
+            data={
+                "step": 3, "provider": "anthropic", "model": "claude-sonnet-5",
+                "input_tokens": 10, "output_tokens": 5,
+                "cost_usd": 0.002, "cumulative_cost_usd": 0.0042,
+            },
+        ),
+        "run-x",
+    ]
+    script = _stub_script(tmp_path, lines)
+
+    async def _fake_run_streaming(argv, on_event, **kwargs):  # type: ignore[no-untyped-def]
+        return await run_streaming(argv, on_event, launch_argv=(sys.executable, str(script)))
+
+    import runectl.cli.tui.app as tui_app_module
+
+    monkeypatch.setattr(tui_app_module, "run_streaming", _fake_run_streaming)
+
+    app = RunectlTUI(splash=False)
+    async with app.run_test(size=(140, 50)) as pilot:
+        await pilot.pause()
+        app._launch(["run", "--model", "claude-sonnet-5", "--output", "jsonl"])
+        live = app._live_runs[next(iter(app._live_runs))]
+        await live.task
+        await pilot.pause()
+
+        from textual.widgets import DataTable, Static
+
+        table = app.query_one("#run-table", DataTable)
+        assert "$0.0042" in table.get_row("run-x")
+
+        # The header is the other half of the fix: a run's identity used to be
+        # legible only inside the timeline text, and the step count lives here
+        # rather than in the table (that column was what pushed `cost` off the
+        # edge of the pane).
+        header = str(app.query_one("#run-header", Static).content)
+        assert "c [misc]" in header
+        assert "claude-sonnet-5" in header
+        assert "3 steps" in header
+
+
+async def test_timeline_width_follows_the_pane_not_a_hardcoded_100() -> None:
+    """Regression: `_write_event` formatted every line to a fixed width of 100
+    whatever the terminal was. `event_line` pre-formats and clips to the width
+    it is given, so a wrong one defeats its layout and leaves RichLog to
+    hard-wrap the overflow back to column 0 mid-sentence."""
+
+    async def width_at(columns: int) -> int:
+        app = RunectlTUI(splash=False)  # a fresh app per run_test; they are not reusable
+        async with app.run_test(size=(columns, 50)) as pilot:
+            await pilot.pause()
+            return app._line_width()
+
+    wide, narrow = await width_at(200), await width_at(90)
+    assert wide > narrow, (wide, narrow)
+
+
+async def test_model_dropdowns_lead_with_the_cheapest_of_each_provider() -> None:
+    """With 37 rows, ordering is the whole usability story: alphabetical put
+    `claude-fable-5` ($10/$50) first and buried `gpt-5-nano` ($0.05/$0.40)
+    mid-list. The first option in a dropdown is the one people take."""
+    from runectl.cli.tui.models import model_options
+    from runectl.providers.registry import MODEL_REGISTRY, cheapest_model_for
+
+    options = model_options(mark_missing_keys=False)
+    assert len(options) == len(MODEL_REGISTRY)
+
+    seen: set[str] = set()
+    for label, model_id in options:
+        provider = MODEL_REGISTRY[model_id].provider
+        if provider not in seen:
+            seen.add(provider)
+            assert model_id == cheapest_model_for(provider).id, provider
+        # Price belongs in the label; picking a model is mostly a budget call.
+        assert "$" in label and provider in label

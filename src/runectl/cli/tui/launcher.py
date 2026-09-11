@@ -14,10 +14,11 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Select, Static
 
 from runectl.categories.loader import available_categories
+from runectl.cli.tui.models import model_options, preferred_model
 from runectl.config import DEFAULT_MAX_COST_USD
 from runectl.flags.judge import APPROVAL_POLICIES
-from runectl.providers.registry import MODEL_REGISTRY, THINKING_LEVELS
-from runectl.user_config import default_model, default_thinking
+from runectl.providers.registry import THINKING_LEVELS
+from runectl.user_config import default_thinking
 
 
 class LauncherScreen(ModalScreen[list[str] | None]):
@@ -45,10 +46,8 @@ class LauncherScreen(ModalScreen[list[str] | None]):
     """
 
     def compose(self) -> ComposeResult:
-        model_options = [(f"{m.id}  ({m.provider})", m.id) for m in sorted(
-            MODEL_REGISTRY.values(), key=lambda m: (m.provider, m.id)
-        )]
-        preferred_model = default_model("anthropic") or (model_options[0][1] if model_options else None)
+        options = model_options()
+        preferred = preferred_model(options)
 
         with VerticalScroll(id="launcher-box"):
             yield Static(
@@ -66,8 +65,11 @@ class LauncherScreen(ModalScreen[list[str] | None]):
             )
             yield Label("Description — the challenge prompt, pasted as given to you")
             yield Input(placeholder="the challenge prompt", id="description")
-            yield Label("Model — which AI provider/model solves it (your API key must be set first)")
-            yield Select(model_options, value=preferred_model, id="model", allow_blank=False)
+            yield Label(
+                "Model — cheapest first per provider, with its price per 1M tokens in/out. "
+                "Type to search."
+            )
+            yield Select(options, value=preferred, id="model", allow_blank=False)
             yield Label("Thinking — how much the model reasons before each step (higher costs more)")
             yield Select(
                 [(level, level) for level in THINKING_LEVELS],

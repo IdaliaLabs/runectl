@@ -44,7 +44,11 @@ class ModelsScreen(ModalScreen[None]):
         table = self.query_one("#models-table", DataTable)
         table.add_columns(*_COLUMNS)
         present = list_keys()
-        for model in sorted(MODEL_REGISTRY.values(), key=lambda m: (m.provider, m.id)):
+        # Cheapest first within provider: with 37 rows, alphabetical buried every
+        # cheap tier in the middle of the table.
+        for model in sorted(
+            MODEL_REGISTRY.values(), key=lambda m: (m.provider, m.price_in + m.price_out)
+        ):
             thinking = f"yes (max {model.max_thinking_level})" if model.supports_thinking else "no"
             key = "yes" if present.get(model.provider) else "no"
             table.add_row(
