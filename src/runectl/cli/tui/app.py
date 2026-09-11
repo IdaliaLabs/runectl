@@ -28,6 +28,7 @@ from textual.widgets import (
     ListItem,
     ListView,
     RichLog,
+    Select,
     Static,
     TabbedContent,
     TabPane,
@@ -36,9 +37,17 @@ from textual.widgets import (
 from runectl.cli.render import event_line
 from runectl.cli.tui import data as tui_data
 from runectl.cli.tui.actions import approve_flag
+from runectl.cli.tui.arena_screen import ArenaScreen
+from runectl.cli.tui.bench_screen import BenchScreen
+from runectl.cli.tui.commands import RunectlCommands
+from runectl.cli.tui.config_screen import ConfigScreen
 from runectl.cli.tui.help import HelpScreen
+from runectl.cli.tui.keys_screen import KeysScreen
 from runectl.cli.tui.launcher import LauncherScreen
+from runectl.cli.tui.models_screen import ModelsScreen
+from runectl.cli.tui.proc import run_foreground
 from runectl.cli.tui.runner_proc import RunHandle, run_streaming
+from runectl.config import CONTAINER_NAME_PREFIX
 from runectl.errors import SandboxError
 from runectl.providers.keys import list_keys
 from runectl.sandbox import arena_build
@@ -107,6 +116,7 @@ class LiveRun:
     task: asyncio.Task[RunHandle]
     events: list[Event] = field(default_factory=list)
     run_id: str | None = None
+    process: asyncio.subprocess.Process | None = None
 
 
 def _style_for(payload: EventPayload, theme: Theme) -> str:
@@ -135,16 +145,24 @@ def _style_for(payload: EventPayload, theme: Theme) -> str:
 
 class RunectlTUI(App[None]):
     TITLE = "runectl"
+    COMMANDS = App.COMMANDS | {RunectlCommands}
     BINDINGS = [
         ("n", "new_run", "New run"),
         ("q", "quit", "Quit"),
         ("r", "refresh_runs", "Refresh"),
+        ("k", "keys", "Keys"),
+        ("a", "arena", "Arena"),
+        ("c", "config", "Config"),
+        ("m", "models", "Models"),
+        ("b", "bench", "Bench"),
+        ("x", "attach", "Attach"),
+        ("X", "kill_run", "Kill"),
         ("question_mark", "help", "Help"),
     ]
 
     CSS = """
     #run-list-pane {
-        width: 42;
+        width: 46;
         border-right: heavy $primary;
     }
     #mark {
@@ -152,6 +170,12 @@ class RunectlTUI(App[None]):
         text-align: center;
         height: auto;
         padding: 1 0;
+    }
+    #run-filters {
+        height: auto;
+    }
+    #run-filters Select {
+        width: 1fr;
     }
     #detail-pane {
         width: 1fr;
@@ -182,10 +206,25 @@ class RunectlTUI(App[None]):
         self._playback_delay_s = playback_delay_s
 
     def compose(self) -> ComposeResult:
+        from runectl.categories.loader import available_categories
+
         yield Header()
         with Horizontal():
             with Vertical(id="run-list-pane"):
                 yield Static(_MARK, id="mark")
+                with Horizontal(id="run-filters"):
+                    yield Select(
+                        [(c, c) for c in available_categories()],
+                        prompt="category",
+                        id="filter-category",
+                        allow_blank=True,
+                    )
+                    yield Select(
+                        [(o, o) for o in ("solved", "candidate", "exhausted", "error", "running")],
+                        prompt="outcome",
+                        id="filter-outcome",
+                        allow_blank=True,
+                    )
                 yield DataTable(id="run-table", cursor_type="row")
             with Vertical(id="detail-pane"), TabbedContent(id="detail-tabs"):
                 with TabPane("Timeline", id="tab-timeline"):
@@ -249,7 +288,20 @@ class RunectlTUI(App[None]):
     def action_refresh_runs(self) -> None:
         table = self.query_one("#run-table", DataTable)
         table.clear()
+        category = self.query_one("#filter-category", Select).value
+        outcome = self.query_one("#filter-outcome", Select).value
+        # Select.NULL (unselected) is a truthy sentinel object, not falsy like
+        # None — `if category` alone would treat "nothing chosen" as a filter
+        # matching nothing, and every row would vanish.
+        if category is Select.NULL:
+            category = None
+        if outcome is Select.NULL:
+            outcome = None
         for summary in tui_data.list_runs_fresh(self._store):
+            if category and summary.category != category:
+                continue
+            if outcome and (summary.outcome or "running") != outcome:
+                continue
             table.add_row(
                 summary.run_id,
                 summary.outcome or "running",
@@ -260,12 +312,51 @@ class RunectlTUI(App[None]):
                 key=summary.run_id,
             )
 
+    def on_select_changed(self, event: Select.Changed) -> None:
+        if event.select.id in ("filter-category", "filter-outcome"):
+            self.action_refresh_runs()
+
     def action_new_run(self) -> None:
         def _on_dismiss(argv: list[str] | None) -> None:
             if argv is not None:
                 self._launch(argv)
 
         self.push_screen(LauncherScreen(), _on_dismiss)
+
+    def action_keys(self) -> None:
+        self.push_screen(KeysScreen())
+
+    def action_arena(self) -> None:
+        self.push_screen(ArenaScreen())
+
+    def action_config(self) -> None:
+        self.push_screen(ConfigScreen())
+
+    def action_models(self) -> None:
+        self.push_screen(ModelsScreen())
+
+    def action_bench(self) -> None:
+        self.push_screen(BenchScreen())
+
+    def action_attach(self) -> None:
+        run_id = self._selected_run_id
+        if run_id is None:
+            self.notify("select a run first", severity="warning")
+            return
+        with self.suspend():
+            run_foreground(["docker", "exec", "-it", f"{CONTAINER_NAME_PREFIX}{run_id}", "bash"])
+
+    def action_kill_run(self) -> None:
+        run_id = self._selected_run_id
+        live = self._live_runs.get(run_id) if run_id else None
+        if live is None or live.process is None or live.task.done():
+            self.notify(
+                "no live run selected — this only kills a run started from this session",
+                severity="warning",
+            )
+            return
+        live.process.terminate()
+        self.notify(f"sent SIGTERM to {run_id}")
 
     def _launch(self, argv: list[str]) -> None:
         slot_id = f"__slot_{self._next_slot}"
@@ -291,7 +382,10 @@ class RunectlTUI(App[None]):
                 self._write_event(event)
             self._update_row(event.run_id, event)
 
-        handle = await run_streaming(argv, on_event)
+        def on_start(process: asyncio.subprocess.Process) -> None:
+            live.process = process
+
+        handle = await run_streaming(argv, on_event, on_start=on_start)
         if handle.stderr_tail and handle.run_id is None:
             self.notify(
                 "run failed before writing any event:\n" + "\n".join(handle.stderr_tail[-5:]),

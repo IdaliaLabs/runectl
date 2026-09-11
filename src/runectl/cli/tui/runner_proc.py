@@ -49,6 +49,7 @@ async def run_streaming(
     on_event: Callable[[Event], None],
     *,
     launch_argv: tuple[str, ...] = _DEFAULT_LAUNCH_ARGV,
+    on_start: Callable[[asyncio.subprocess.Process], None] | None = None,
 ) -> RunHandle:
     """Spawn `runectl <argv>`, calling `on_event` for each parsed trace event.
 
@@ -62,6 +63,11 @@ async def run_streaming(
     overrides it — the one legitimate reason to is a test exercising this
     subprocess/parsing path against a stub script instead of the real engine
     (CONTRIBUTING.md: no test may need a daemon or a key).
+
+    `on_start`, if given, fires once with the live `Process` right after
+    spawn — the caller's only chance to keep a handle to it (e.g. to
+    `.terminate()` a run still in flight; see `app.py`'s kill-a-live-run
+    action). Nothing here holds onto it itself.
     """
     process = await asyncio.create_subprocess_exec(
         *launch_argv,
@@ -69,6 +75,8 @@ async def run_streaming(
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+    if on_start is not None:
+        on_start(process)
     assert process.stdout is not None
     assert process.stderr is not None
 

@@ -186,21 +186,28 @@ uv run runectl replay <run_id> --check
 
 ## The TUI
 
-`runectl tui` is the interactive way to watch a run, or several, without leaving your
-terminal — the same event stream `trace show` reads, live, with pending flags one
-keypress from approval. It composes and shows you the exact `runectl run` command before
-launching anything; nothing about what it does is hidden behind the interface.
+`runectl tui` is a full control surface, not just a viewer — everything below is one
+keypress away, faster than dropping back to a shell for it:
 
-![the runectl TUI: a run list on the left, a labeled Timeline/Thinking/Trace/Flags tab group on the right](docs/demo/tui-screenshot.png)
+| Key | Does |
+|---|---|
+| `n` | Compose and launch a new run |
+| `k` / `a` / `c` / `m` / `b` | Manage keys / the arena image / config defaults / browse models / run the bench suite |
+| `x` / `X` | Attach to a run's container / kill one this session launched |
+| `ctrl+p` | Command palette — every action above, searchable by name |
+| `?` | Plain-English help, built for someone who's never used a TUI or played a CTF |
+
+Watching a run live or replayed is still there too — the same event stream `trace show`
+reads, with pending flags one keypress from approval — but it's one tab among several,
+not the whole feature. Every action composes and runs the exact real `runectl` command
+before doing anything; nothing about what it does is hidden behind the interface.
+
+![the runectl TUI: a run list with category/outcome filters on the left, a labeled Timeline/Thinking/Trace/Flags tab group on the right](docs/demo/tui-screenshot.png)
 
 ```bash
-uv run runectl tui                     # live: launch and watch runs, approve flags
+uv run runectl tui                     # live: launch, watch, and manage everything
 uv run runectl tui --replay <run_id>   # animate through a finished run's trace, zero spend
 ```
-
-Press `?` inside it for a plain-English rundown of what everything does — built for
-someone who's never used a TUI or played a CTF before, not just for people who already
-know what a "trace" is.
 
 ## Exit codes
 

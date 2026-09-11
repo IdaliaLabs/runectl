@@ -438,6 +438,33 @@ Arena preflight on startup only reports a missing image (pointing at `arena ensu
 never builds one — D17's rule that a run must never kick off a 30-minute build behind
 your back applies to the TUI too.
 
+### The rest of the CLI, one key away
+
+Watching and launching runs is not all the TUI does — every other command family below
+is reachable without leaving it, each one keyboard-bound and searchable through
+Textual's built-in command palette (`ctrl+p`):
+
+| Key | Opens | Same as |
+|---|---|---|
+| `k` | Keys — view presence, set, or remove a provider key | `runectl keys set\|rm` |
+| `a` | Arena — view image status, build / load-from-file / pull-from-registry | `runectl arena build\|ensure` |
+| `c` | Config — per-provider default model and thinking level | `runectl config set` |
+| `m` | Models — the full registry, key presence, and pricing as a table | `runectl models list` |
+| `b` | Bench — compose and run a suite | `runectl bench run` |
+| `x` | Attach to the selected run's container | `runectl runs attach --exec` |
+| `X` | Kill a run this session launched, still in flight | sends the subprocess `SIGTERM` |
+
+Two dropdowns above the run list filter it by category and outcome.
+
+Every one of these follows the same rule the run launcher already does: it composes and
+runs the real `runectl <command>`, in a subprocess, never reimplementing what that
+command does. `k`/`c` capture the command's output and show it inline; `a`/`b`/`x`
+suspend the TUI (Textual's `App.suspend()`, which hands the real terminal to the child
+process and restores the TUI when it exits) and run it in the foreground instead, because
+their natural output — `docker build`'s progress, a bench suite's live report, an
+interactive shell — is a stream a person already knows how to read, not something worth
+re-parsing into a widget.
+
 ---
 
 ## `runectl arena`
