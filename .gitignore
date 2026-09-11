@@ -16,5 +16,6 @@ keys.json
 *.log
 .DS_Store
 .demo-home/
+# The asciinema recording is the 400KB intermediate; the GIF and MP4 built
+# from it are committed, because the README embeds them.
 docs/demo/session.cast
-docs/demo/runectl-demo.gif

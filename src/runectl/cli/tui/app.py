@@ -227,7 +227,7 @@ class RunectlTUI(App[None]):
            model/cost/steps columns were simply cut off, which is most of what
            the list is for. */
         width: 40%;
-        min-width: 52;
+        min-width: 54;
         border-right: heavy $primary;
     }
     #mark {

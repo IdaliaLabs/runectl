@@ -36,7 +36,7 @@ demo-video: demo-seed
 	@mkdir -p docs/demo
 	@rm -f docs/demo/session.cast
 	RUNECTL_HOME=$(DEMO_HOME) asciinema rec --command "bash scripts/record_demo.sh" \
-	  --window-size 120x40 --output-format asciicast-v2 docs/demo/session.cast
+	  --window-size 132x40 --output-format asciicast-v2 docs/demo/session.cast
 	agg --theme dracula --font-size 16 \
 	  docs/demo/session.cast docs/demo/runectl-demo.gif
 	ffmpeg -y -i docs/demo/runectl-demo.gif -movflags faststart -pix_fmt yuv420p \
