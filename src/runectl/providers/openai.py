@@ -78,10 +78,49 @@ def _to_openai_messages(system: str, messages: Sequence[Message]) -> list[dict[s
     return out
 
 
+def _usage(usage: Any) -> Usage:
+    """Split OpenAI's `prompt_tokens` into its cached and uncached halves (D18).
+
+    Fixed 2026-09-11. `prompt_tokens` is the *total* prompt size, cached tokens
+    included, and this adapter used to assign it straight to `Usage.input_tokens`
+    — whose own docstring says it is uncached input only. Every cache hit was
+    therefore billed at the full input rate, overstating the cost of exactly the
+    runs prompt caching is supposed to make cheap. The cached count lives in
+    `usage.prompt_tokens_details.cached_tokens`.
+
+    OpenAI does not bill cache writes, so `cache_write_tokens` stays zero.
+    """
+    if usage is None:
+        return Usage(input_tokens=0, output_tokens=0)
+    details = getattr(usage, "prompt_tokens_details", None)
+    cached = getattr(details, "cached_tokens", 0) or 0
+    prompt_tokens = usage.prompt_tokens or 0
+    return Usage(
+        # max(): defensive against a provider reporting more cached tokens than
+        # prompt tokens. A negative count would silently credit the ledger.
+        input_tokens=max(prompt_tokens - cached, 0),
+        output_tokens=usage.completion_tokens or 0,
+        cache_read_tokens=cached,
+    )
+
+
 class OpenAIProvider:
-    def __init__(self, *, model_id: str, api_key: str, client: openai.OpenAI | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        model_id: str,
+        api_key: str,
+        client: openai.OpenAI | None = None,
+        supports_thinking: bool = False,
+    ) -> None:
         self._model_id = model_id
         self._client = client or openai.OpenAI(api_key=api_key)
+        # D20 amendment 2026-09-11 — needed to tell two different "off"s apart:
+        # a reasoning model must be told `reasoning_effort: "none"` to stop
+        # thinking (its own default is `medium`), while a non-reasoning model
+        # rejects the parameter outright. Mirrors how `prompt_cache` is already
+        # passed down from the registry row by `run_cmd._build_provider`.
+        self._supports_thinking = supports_thinking
 
     def complete(
         self,
@@ -92,7 +131,19 @@ class OpenAIProvider:
         max_tokens: int,
         thinking: ThinkingLevel = "off",
     ) -> Completion:
-        extra: dict[str, Any] = {"reasoning_effort": thinking} if thinking != "off" else {}
+        # D20 — "off" reaching here means the registry says this model can
+        # actually be stopped from thinking (`thinking_off_supported`); a model
+        # that thinks regardless never sees "off", because
+        # `resolve_thinking_level` has already clamped it up to "low" and
+        # recorded the clamp. On a reasoning model, stopping it means saying so:
+        # `reasoning_effort: "none"`, since omitting the parameter leaves the
+        # model's own default (medium) in force. A non-reasoning model rejects
+        # the parameter, so it gets nothing.
+        extra: dict[str, Any] = {}
+        if thinking != "off":
+            extra["reasoning_effort"] = thinking
+        elif self._supports_thinking:
+            extra["reasoning_effort"] = "none"
         try:
             response = self._client.chat.completions.create(
                 model=self._model_id,
@@ -126,9 +177,6 @@ class OpenAIProvider:
         return Completion(
             text=choice.message.content or "",
             tool_calls=tuple(tool_calls),
-            usage=Usage(
-                input_tokens=usage.prompt_tokens if usage else 0,
-                output_tokens=usage.completion_tokens if usage else 0,
-            ),
+            usage=_usage(usage),
             stop_reason=choice.finish_reason or "unknown",
         )

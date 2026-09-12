@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical
+from textual.css.query import NoMatches
 from textual.theme import Theme
 from textual.widgets import (
     DataTable,
@@ -47,11 +48,13 @@ from runectl.cli.tui.launcher import LauncherScreen
 from runectl.cli.tui.models_screen import ModelsScreen
 from runectl.cli.tui.proc import run_foreground
 from runectl.cli.tui.runner_proc import RunHandle, run_streaming
+from runectl.cli.tui.splash import SplashScreen
 from runectl.config import CONTAINER_NAME_PREFIX
 from runectl.errors import SandboxError
 from runectl.providers.keys import list_keys
 from runectl.sandbox import arena_build
 from runectl.trace.events import (
+    CostUpdated,
     Event,
     EventPayload,
     FlagCandidate,
@@ -64,14 +67,25 @@ from runectl.trace.events import (
 )
 from runectl.trace.store import Store
 
-# The Fork mark (brand/svg/mark-*.svg: a stem splitting in two), in box-drawing
-# characters, since the TUI has no image support — same geometry, different medium.
-_MARK = r"""
-   │
-   │
-  ╱ ╲
- ╱   ╲
-"""
+# The Fork mark (brand/svg/mark-*.svg: a stem splitting in two), in block
+# characters, since the TUI has no image support — same geometry, different
+# medium. Box-drawing rather than block glyphs: both the half-blocks (▟ ▘ ▝) and
+# solid █ render as scattered squares in the fonts these terminals fall back to,
+# where ╱ ╲ │ draw a continuous line. Taller than before and with no leading
+# blank line — it used to be four sparse strokes floating in eight rows of dead
+# space.
+_MARK = """\
+    │
+    │
+    │
+   ╱ ╲
+  ╱   ╲
+ ╱     ╲"""
+
+# Frames for the running-run indicator. Braille cycles smoothly at 8 frames and
+# occupies one cell, so a row's width never changes as it spins.
+_SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧"
+_SPINNER_INTERVAL_S = 0.12
 
 # (label, key) pairs — Textual's DataTable.add_columns() unpacks each tuple
 # into (label, key) itself (see its docstring), so this renders as plain text
@@ -82,8 +96,9 @@ _COLUMNS: tuple[tuple[str, str], ...] = (
     ("category", "category"),
     ("model", "model"),
     ("cost", "cost"),
-    ("steps", "steps"),
 )
+# `steps` used to be a seventh column and was the one that pushed `cost` off the
+# edge of the pane. It lives on the run header instead, which has a whole line.
 
 # "Rune ore": a dark-fantasy night palette for the TUI, distinct from the
 # Idalia Labs brand's strict black/white (that rule governs marketing
@@ -103,9 +118,55 @@ _RUNEORE_THEME = Theme(
     dark=True,
 )
 
+_HEADER_EMPTY = "no run selected"
+# Falls back to this when the timeline pane hasn't been laid out yet (nothing
+# has a real size until the first refresh). Matches `render._width()`'s floor.
+_FALLBACK_LINE_WIDTH = 60
 _TIMELINE_EMPTY = "select a run on the left, or press n to start one"
 _THINKING_EMPTY = "the model's reasoning will appear here once a run is selected"
 _TRACE_EMPTY = "raw trace events will appear here once a run is selected"
+
+
+def _short_id(run_id: str) -> str:
+    """The trailing random suffix of a run id, for the list column.
+
+    A full id (`20260911-233703-dbf4a0`) is 22 columns of a ~48-column pane,
+    which is most of why the table's model/cost/steps columns were being cut off
+    entirely. The suffix alone distinguishes runs, and the full id is on the
+    header line above the tabs and in every command the TUI composes.
+    """
+    return run_id.rsplit("-", 1)[-1]
+
+
+@dataclass
+class RunHeader:
+    """What the line above the detail tabs says about the selected run.
+
+    Exists because a run's identity was previously only legible *inside* the
+    timeline text — scroll down and you no longer knew what you were looking at.
+    No single event carries all of these (the name and model arrive with
+    `run.started`, cost with each `cost.updated`, the outcome only at the end),
+    so they accumulate here.
+    """
+
+    run_id: str
+    challenge_name: str = "-"
+    category: str = "-"
+    model: str = "-"
+    thinking: str = "off"
+    outcome: str = "running"
+    cost_usd: float = 0.0
+    steps: int = 0
+
+    def render(self) -> str:
+        thinking = f" · thinking={self.thinking}" if self.thinking != "off" else ""
+        # The full run id lives here because the list column now shows only its
+        # suffix — this is where you copy it from for a `trace show`.
+        return (
+            f"{self.challenge_name} [{self.category}] · {self.model}{thinking}"
+            f" · {self.steps} steps · ${self.cost_usd:.4f} · {self.outcome}"
+            f"  ·  {self.run_id}"
+        )
 
 
 @dataclass
@@ -162,14 +223,17 @@ class RunectlTUI(App[None]):
 
     CSS = """
     #run-list-pane {
-        width: 46;
+        /* Percentage rather than a fixed 46: at 46 columns the table's own
+           model/cost/steps columns were simply cut off, which is most of what
+           the list is for. */
+        width: 40%;
+        min-width: 54;
         border-right: heavy $primary;
     }
     #mark {
         color: $primary;
         text-align: center;
         height: auto;
-        padding: 1 0;
     }
     #run-filters {
         height: auto;
@@ -180,12 +244,24 @@ class RunectlTUI(App[None]):
     #detail-pane {
         width: 1fr;
     }
+    #run-header {
+        height: auto;
+        padding: 0 1;
+        background: $panel;
+        color: $accent;
+    }
     #timeline-log, #thinking-log, #trace-log {
         height: 1fr;
     }
     """
 
-    def __init__(self, *, replay_run_id: str | None = None, playback_delay_s: float = 0.6) -> None:
+    def __init__(
+        self,
+        *,
+        replay_run_id: str | None = None,
+        playback_delay_s: float = 0.6,
+        splash: bool = True,
+    ) -> None:
         """`replay_run_id` is Phase 5's demo hook: on mount, instead of waiting
         for a selection, animate straight through that run's already-recorded
         `trace.jsonl` at a readable pace — real thinking, zero spend,
@@ -204,6 +280,16 @@ class RunectlTUI(App[None]):
         self._next_slot = 0
         self._replay_run_id = replay_run_id
         self._playback_delay_s = playback_delay_s
+        # Off for tests and for `scripts/capture_demo.py`, so a decorative
+        # screen can never change what either of them sees.
+        self._splash = splash and replay_run_id is None
+        self._spinner_frame = 0
+        self._last_line_width = 0
+        self._playing_back = False
+        # run_id -> header facts, accumulated as that run's events arrive (no
+        # single event carries all of them) so the header survives switching
+        # away from a run and back.
+        self._headers: dict[str, RunHeader] = {}
 
     def compose(self) -> ComposeResult:
         from runectl.categories.loader import available_categories
@@ -226,15 +312,21 @@ class RunectlTUI(App[None]):
                         allow_blank=True,
                     )
                 yield DataTable(id="run-table", cursor_type="row")
-            with Vertical(id="detail-pane"), TabbedContent(id="detail-tabs"):
-                with TabPane("Timeline", id="tab-timeline"):
-                    yield RichLog(id="timeline-log", wrap=True, markup=False)
-                with TabPane("Thinking", id="tab-thinking"):
-                    yield RichLog(id="thinking-log", wrap=True, markup=False)
-                with TabPane("Trace", id="tab-trace"):
-                    yield RichLog(id="trace-log", wrap=True, markup=False)
-                with TabPane("Flags", id="tab-flags"):
-                    yield ListView(id="flag-list")
+            with Vertical(id="detail-pane"):
+                yield Static(_HEADER_EMPTY, id="run-header")
+                with TabbedContent(id="detail-tabs"):
+                    with TabPane("Timeline", id="tab-timeline"):
+                        # min_width=0: the default (78) makes a narrow pane
+                        # scroll horizontally instead of wrapping to its own
+                        # width, which is half of why long lines used to break
+                        # to column 0 mid-sentence.
+                        yield RichLog(id="timeline-log", wrap=True, markup=False, min_width=0)
+                    with TabPane("Thinking", id="tab-thinking"):
+                        yield RichLog(id="thinking-log", wrap=True, markup=False, min_width=0)
+                    with TabPane("Trace", id="tab-trace"):
+                        yield RichLog(id="trace-log", wrap=True, markup=False, min_width=0)
+                    with TabPane("Flags", id="tab-flags"):
+                        yield ListView(id="flag-list")
         yield Footer()
 
     def on_mount(self) -> None:
@@ -248,6 +340,14 @@ class RunectlTUI(App[None]):
         self.query_one("#thinking-log", RichLog).write(_THINKING_EMPTY)
         self.query_one("#trace-log", RichLog).write(_TRACE_EMPTY)
         self._write_flags_empty("select a run to see its pending flags")
+
+        self.set_interval(_SPINNER_INTERVAL_S, self._tick_spinner)
+        mark = self.query_one("#mark", Static)
+        mark.styles.opacity = 0.0
+        mark.styles.animate("opacity", value=1.0, duration=0.6)
+
+        if self._splash:
+            self.push_screen(SplashScreen())
 
         if self._replay_run_id is not None:
             # Demo/playback mode: skip the arena/key warnings (this path never
@@ -303,12 +403,11 @@ class RunectlTUI(App[None]):
             if outcome and (summary.outcome or "running") != outcome:
                 continue
             table.add_row(
-                summary.run_id,
+                _short_id(summary.run_id),
                 summary.outcome or "running",
                 summary.category,
                 summary.model,
                 f"${summary.cost_usd:.4f}",
-                str(summary.steps_used),
                 key=summary.run_id,
             )
 
@@ -364,7 +463,12 @@ class RunectlTUI(App[None]):
         live = LiveRun(argv=argv, task=asyncio.ensure_future(self._drive(slot_id, argv)))
         self._live_runs[slot_id] = live
         table = self.query_one("#run-table", DataTable)
-        table.add_row("(starting…)", "running", "-", "-", "$0.0000", "0", key=slot_id)
+        table.add_row("(starting…)", "running", "-", "-", "$0.0000", key=slot_id)
+        # Watch what you just launched. Without this the new run streamed into
+        # nothing until you noticed it in the list and clicked it.
+        self._selected_run_id = slot_id
+        for log_id in ("#timeline-log", "#thinking-log", "#trace-log"):
+            self.query_one(log_id, RichLog).clear()
 
     async def _drive(self, slot_id: str, argv: list[str]) -> RunHandle:
         live = self._live_runs[slot_id]
@@ -400,25 +504,60 @@ class RunectlTUI(App[None]):
         table = self.query_one("#run-table", DataTable)
         if old_key in table.rows:
             table.remove_row(old_key)
-        table.add_row("(running…)", "running", "-", "-", "$0.0000", "0", key=new_key)
+        table.add_row("(running…)", "running", "-", "-", "$0.0000", key=new_key)
         if self._selected_run_id == old_key:
             self._selected_run_id = new_key
 
     def _update_row(self, run_id: str | None, event: Event) -> None:
+        """Keep the run's row and header current as its events stream in.
+
+        `cost.updated` is handled here as well as the two lifecycle events —
+        without it a running run sat at `$0.0000` and `0 steps` for its entire
+        life and only snapped to the truth once it finished, which is the
+        opposite of what watching a live run is for. The event has carried
+        `cumulative_cost_usd` and `step` all along.
+        """
         if run_id is None:
             return
-        table = self.query_one("#run-table", DataTable)
-        if run_id not in table.rows:
-            return
+        header = self._headers.setdefault(run_id, RunHeader(run_id=run_id))
         payload = event.payload()
         if isinstance(payload, RunStarted):
-            table.update_cell(run_id, "run", run_id)
-            table.update_cell(run_id, "category", payload.category)
-            table.update_cell(run_id, "model", payload.model)
-        if isinstance(payload, RunFinished):
-            table.update_cell(run_id, "outcome", payload.outcome)
-            table.update_cell(run_id, "cost", f"${payload.cost_usd:.4f}")
-            table.update_cell(run_id, "steps", str(payload.steps_used))
+            header.challenge_name = payload.challenge_name
+            header.category = payload.category
+            header.model = payload.model
+            header.thinking = payload.thinking_level
+        elif isinstance(payload, CostUpdated):
+            header.cost_usd = payload.cumulative_cost_usd
+            if payload.step is not None:
+                header.steps = payload.step
+        elif isinstance(payload, RunFinished):
+            header.outcome = payload.outcome
+            header.cost_usd = payload.cost_usd
+            header.steps = payload.steps_used
+
+        table = self.query_one("#run-table", DataTable)
+        if run_id in table.rows:
+            if isinstance(payload, RunStarted):
+                table.update_cell(run_id, "run", _short_id(run_id))
+                table.update_cell(run_id, "category", header.category)
+                table.update_cell(run_id, "model", header.model)
+            if isinstance(payload, (CostUpdated, RunFinished)):
+                table.update_cell(run_id, "cost", f"${header.cost_usd:.4f}")
+            if isinstance(payload, RunFinished):
+                table.update_cell(run_id, "outcome", header.outcome)
+
+        if run_id == self._selected_run_id:
+            self.query_one("#run-header", Static).update(header.render())
+
+    def _set_flag_badge(self, pending: int) -> None:
+        """Put the pending count on the Flags tab itself.
+
+        A candidate waiting on approval is the one thing in this app that needs
+        the user to act; before this it was invisible unless the Flags tab
+        happened to be the one in front."""
+        self.query_one("#detail-tabs", TabbedContent).get_tab("tab-flags").update(
+            f"Flags ({pending})" if pending else "Flags"
+        )
 
     def _write_flags_empty(self, message: str) -> None:
         flag_list = self.query_one("#flag-list", ListView)
@@ -426,6 +565,7 @@ class RunectlTUI(App[None]):
         # name=None so on_list_view_selected's `if not flag: return` guard
         # treats this row as inert rather than an approvable candidate.
         flag_list.append(ListItem(Static(message)))
+        self._set_flag_badge(0)
 
     def _refresh_flag_list(self, run_id: str) -> None:
         candidates = tui_data.read_pending(self._store, run_id)
@@ -438,15 +578,65 @@ class RunectlTUI(App[None]):
             flag_list.append(
                 ListItem(Static(f"{candidate.flag}  ({candidate.how_found})"), name=candidate.flag)
             )
+        self._set_flag_badge(len(candidates))
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         run_id = str(event.row_key.value)
         self._select_run(run_id)
 
+    def _line_width(self) -> int:
+        """The width `event_line` should format to: the timeline pane's own.
+
+        This was hardcoded at 100 regardless of the pane's real size, which is
+        why long lines wrapped mid-sentence back to column 0 — `event_line`
+        pre-formats and clips to the width it is given, so a wrong width defeats
+        its layout and leaves `RichLog` to hard-wrap the overflow. `trace_cmd.py`
+        has always done this correctly via `render._width()`; the TUI just has a
+        different source for the number.
+        """
+        try:
+            width = self.query_one("#timeline-log", RichLog).content_size.width
+        except NoMatches:
+            return _FALLBACK_LINE_WIDTH
+        return max(_FALLBACK_LINE_WIDTH, width)
+
+    def on_resize(self) -> None:
+        """Re-render the selected run at the new width.
+
+        Two guards, both learned the hard way. Textual fires `Resize` on the
+        *initial* layout too, not only on a real terminal resize, so re-rendering
+        unconditionally meant reloading the trace from disk while `_playback_run`
+        was still writing it — the whole event stream appeared twice. And a
+        resize that doesn't change the wrapping width has nothing to redo.
+        """
+        width = self._line_width()
+        if width == self._last_line_width or self._playing_back:
+            return
+        self._last_line_width = width
+        if self._selected_run_id is not None:
+            self._select_run(self._selected_run_id)
+
+    def _tick_spinner(self) -> None:
+        """Advance the running-run indicator. Touches only rows that are still
+        running, so an idle screen full of finished runs does no work."""
+        live_ids = [
+            run_id
+            for run_id, live in self._live_runs.items()
+            if live.run_id == run_id and not live.task.done()
+        ]
+        if not live_ids:
+            return
+        self._spinner_frame = (self._spinner_frame + 1) % len(_SPINNER_FRAMES)
+        frame = _SPINNER_FRAMES[self._spinner_frame]
+        table = self.query_one("#run-table", DataTable)
+        for run_id in live_ids:
+            if run_id in table.rows:
+                table.update_cell(run_id, "outcome", f"{frame} running")
+
     def _write_event(self, event: Event) -> None:
         """The one path an event takes to the panes — live, browsed, or replayed."""
         payload = event.payload()
-        line = event_line(event.payload(), width=100)
+        line = event_line(event.payload(), width=self._line_width())
         if line:
             style = _style_for(payload, self.current_theme)
             self.query_one("#timeline-log", RichLog).write(Text(line, style=style))
@@ -469,7 +659,12 @@ class RunectlTUI(App[None]):
         events = live.events if live is not None else tui_data.read_events(self._store, run_id)
         for event in events:
             self._write_event(event)
+            self._update_row(event.run_id, event)
         self._refresh_flag_list(run_id)
+        header = self._headers.get(run_id)
+        self.query_one("#run-header", Static).update(
+            header.render() if header is not None else _HEADER_EMPTY
+        )
 
     async def _playback_run(self, run_id: str) -> None:
         """Phase 5's demo: step through a finished run's trace at a readable
@@ -487,9 +682,17 @@ class RunectlTUI(App[None]):
         table = self.query_one("#run-table", DataTable)
         if run_id in table.rows:
             table.move_cursor(row=table.get_row_index(run_id))
-        for event in events:
-            self._write_event(event)
-            await asyncio.sleep(self._playback_delay_s)
+        # Holds off `on_resize`'s re-render: the initial layout fires a Resize
+        # while this loop is mid-stream, and reloading the trace underneath it
+        # printed the whole run twice.
+        self._playing_back = True
+        try:
+            for event in events:
+                self._write_event(event)
+                self._update_row(event.run_id, event)
+                await asyncio.sleep(self._playback_delay_s)
+        finally:
+            self._playing_back = False
         if manifest is not None:
             self.notify(
                 f"playback complete: {manifest.outcome} — {manifest.flag or 'no flag'}",

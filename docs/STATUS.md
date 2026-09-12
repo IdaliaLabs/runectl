@@ -43,6 +43,10 @@ point of this file is that nothing here should surprise you at run time.
 | A cassette recorded with thinking off is never served to a thinking-on replay | `tests/unit/test_thinking.py::test_request_hash_differs_by_thinking_level` |
 | `runectl config`'s key-shaped-value rejection and round-trip | `tests/unit/test_thinking.py::test_user_config_round_trips_and_rejects_key_shaped_values` |
 | The TUI mounts, its launcher modal opens/composes/dismisses, and a live run's events update the run table | `tests/integration/test_tui.py`, against a stub script standing in for `runectl run` — no real subprocess of the engine, no daemon, no key |
+| Every registry row is internally coherent: provider valid, thinking flags consistent, prices positive, cache multiplier in range, a utility model resolvable per provider | `tests/unit/test_registry.py`, parametrized over all 37 rows |
+| `--thinking off` resolves to `low` **with the clamp recorded** on every think-by-default model, and stays `off` on models that can actually be stopped | `tests/unit/test_thinking.py` — including a sweep that holds every registry row to the rule, so a new row cannot silently reintroduce the bug |
+| Cached tokens leave `input_tokens` and land in `cache_read_tokens` on all three adapters; Gemini's thinking tokens are counted as output; `cache_read_multiplier` is applied per model | `tests/unit/test_cost_accounting.py` (fake usage objects, not mocks) |
+| The TUI's splash is shown by default, dismissed by any key, and suppressed under `--replay` and `splash=False`; a `cost.updated` event moves the run's row before it finishes; the timeline formats to the pane's real width rather than a fixed 100; model dropdowns lead with the cheapest model of each provider | `tests/integration/test_tui.py` |
 
 ## Live-verified since the skeleton
 
@@ -101,7 +105,29 @@ which fails on four separate assertions if the event is removed.
   image-missing paths *were* exercised by hand.
 - **The OpenAI and Google adapters.** Each was written against its installed SDK's actual
   types and exception hierarchy, but no OpenAI or Google key has ever talked to the live
-  service. Treat the first real run on each as its smoke test.
+  service. Treat the first real run on each as its smoke test. This is not a formality:
+  on 2026-09-11 both were found to be dropping cached tokens on the floor — assigning the
+  provider's total prompt count to `Usage.input_tokens`, whose contract is uncached input
+  only, so every cache hit billed at the full rate — and Google was additionally ignoring
+  `thoughts_token_count`, which it bills as output but reports separately. Both are fixed
+  and unit-tested against fake usage objects (`tests/unit/test_cost_accounting.py`), and
+  **both fixes are themselves unverified against a live service**, same caveat one level
+  deeper. Anthropic's adapter was correct throughout, which is exactly why the gap
+  survived a milestone: the only provider anyone had run live was the one that worked.
+
+- **35 of the 37 registry rows.** Only `claude-sonnet-5` and `claude-opus-5` have ever
+  been used for a real run. Every other row's id, pricing and capability flags come from
+  the provider's published documentation on 2026-09-11 (sources and dates are in
+  `providers/registry.py` and [`CLI.md`](CLI.md)), not from a call that succeeded. An id
+  that has been renamed or retired since, or a model that turns out not to be served by
+  `v1/chat/completions`, will fail at the first request with a clean provider error — but
+  it will fail. Prices are the more insidious risk, because a wrong one does not fail at
+  all; it just reports the wrong number.
+
+- **`--thinking off` on OpenAI and Google.** The 2026-09-11 D20 amendment maps `off` onto
+  `reasoning_effort: "none"` for OpenAI reasoning models and clamps to `low` where a model
+  thinks regardless. The clamp arithmetic is unit-tested across every registry row; what
+  the providers actually do with those requests has not been observed.
 - **Thinking on OpenAI and Google (D20).** Written against the installed SDKs'
   documented shapes (`reasoning_effort` on OpenAI's Chat Completions; `ThinkingConfig`
   with `include_thoughts=True` on `google-genai`) and covered by the same

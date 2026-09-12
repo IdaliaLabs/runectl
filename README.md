@@ -1,89 +1,121 @@
+<div align="center">
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="brand/png/mark-white.png">
-  <img src="brand/png/mark-black.png" alt="runectl mark — a stem splitting in two" width="110">
+  <img src="brand/png/mark-black.png" alt="runectl mark — a stem splitting in two" width="96">
 </picture>
 
 # runectl
 
+**An agentic CTF solver that works the challenge in a sandbox and writes down everything it tried.**
+
+Bring your own API key. Bring your own model. No server, no browser, no account.
+
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
-[![Status: v0.1.0 alpha](https://img.shields.io/badge/status-v0.1.0%20alpha-8B6FF5.svg)](CHANGELOG.md)
+[![Status: v0.1.1 alpha](https://img.shields.io/badge/status-v0.1.1%20alpha-8B6FF5.svg)](CHANGELOG.md)
+[![Tests: 287](https://img.shields.io/badge/tests-287%20·%20no%20key%20needed-6EE7A8.svg)](CONTRIBUTING.md)
+[![Bench: 7/10](https://img.shields.io/badge/bench-7%2F10%20solved-E8C16B.svg)](bench/results/README.md)
+[![Models: 37](https://img.shields.io/badge/models-37%20across%203%20providers-4FA8E8.svg)](docs/CLI.md)
 
-An agentic CTF solver CLI, from [Idalia Labs](https://github.com/IdaliaLabs).
+<sub>from [Idalia Labs](https://github.com/IdaliaLabs) · founded by JMU students</sub>
+
+</div>
+
+---
+
+![runectl solving a challenge: the agent reasons, runs a command in the sandbox, reads the output, and the judge re-derives the flag before finalizing it](docs/demo/runectl-demo.gif)
+
+<div align="center"><sub>A real run, replayed from its own recorded trace at zero spend — <code>runectl tui --replay</code>, not staged footage.</sub></div>
+
+---
 
 ## What it is
 
 You hand `runectl` a CTF challenge — its name, category, the description you were given,
-any provided files — plus your own AI provider API key (Anthropic, OpenAI, or Google;
-whichever model you want). It works the challenge autonomously inside a disposable Docker
-sandbox, one shell command at a time, and writes down everything it tried so the result is
-checkable afterward, not just trusted. It's a CLI, not a service — no account, no server,
-nothing running anywhere but your own machine — and it's built to be driven by another AI
-agent as easily as by a person: machine-readable output, nothing interactive, exit codes
-that tell the truth about how a run ended.
+any provided files — plus your own provider API key. It works the challenge autonomously
+inside a disposable Docker container, one shell command at a time, and records every
+prompt, command, result, cost update and flag decision to an append-only event log.
 
-**No server, no browser UI, ever** — `runectl` is CLI-only, permanently
-([`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) D13). A local, in-terminal TUI
-(`runectl tui`) is in bounds as of a dated 2026-09-09 amendment to D13; it's a second
-consumer of the same event stream, never a network surface, and every run it launches is
-still a plain non-interactive `runectl run` subprocess.
+That log is the point. When the run ends you can read exactly what it tried, replay the
+whole thing for free, and check the answer rather than trust it.
 
----
+It is also built to be driven by *another* AI agent as easily as by a person:
+machine-readable output, nothing interactive, and exit codes that tell the truth about
+how a run ended.
 
-## See it solve one
+> **No server, no browser UI, ever.** `runectl` is CLI-only, permanently
+> ([`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) D13). The local in-terminal TUI is in
+> bounds as of a dated amendment: it is a second consumer of the same event stream, never
+> a network surface, and every run it launches is still a plain non-interactive
+> `runectl run` subprocess.
 
-Every frame below is a real, replayable run — the fixture `make demo` also plays back
-live in your terminal (`runectl tui --replay`), not staged footage. Full walkthrough:
-[`docs/demo/runectl-demo.mp4`](docs/demo/runectl-demo.mp4).
+## How one run works
 
-| Reasoning, live | A command and its output | Judged and finalized |
-| --- | --- | --- |
-| ![the agent's thinking pane populating](docs/demo/thinking.gif) | ![a sandboxed command and its result](docs/demo/toolcall.gif) | ![the flag judge re-deriving and finalizing](docs/demo/solved.gif) |
+```mermaid
+flowchart TD
+    C["challenge<br/>name, category<br/>description, files"] --> T["triage<br/>deterministic<br/>never sees the name"]
+    T --> L{"agent loop"}
+    L -->|tool call| S["Docker sandbox<br/>runectl/arena:kali<br/>one container per run"]
+    S -->|cited output| L
+    L -->|candidate flag| J["flag judge<br/>provenance, anti-echo<br/>re-derive in sandbox"]
+    J -->|rejected| L
+    J -->|finalized| X["exit 0"]
+    J -->|held| H["exit 2<br/>awaiting approval"]
+    L -->|out of budget| E["exit 3"]
+    L -.->|every event| TR[("trace.jsonl<br/>append-only")]
+    J -.-> TR
+    S -.-> TR
+```
+
+The dotted lines are the part that matters: nothing happens that the trace does not
+record, including the judge's own re-derivation.
 
 ## Why it's good
 
-- **Bring your own key, bring your own model.** Anthropic, OpenAI, and Google are all
-  first-class, with no default provider and no default model — `--model` is always
+- **Bring your own key, bring your own model.** Anthropic, OpenAI and Google are all
+  first-class, with **37 registered models** and no default — `--model` is always
   required, looked up in an explicit registry, never guessed from a string prefix.
   Different models are genuinely better at different categories; that choice stays yours.
-- **Every solve is checkable.** Each run writes an append-only JSONL event stream — every
-  prompt, tool call, command result, cost update and flag decision, flushed to disk after
-  each event. A run killed mid-flight still leaves a valid, replayable prefix.
+- **Every solve is checkable.** Each run writes an append-only JSONL event stream, flushed
+  to disk after each event. A run killed mid-flight still leaves a valid, replayable
+  prefix.
 - **Replay at zero spend.** `--record` captures provider responses to a cassette;
-  `runectl replay <run_id> --check` re-runs the whole loop from that cassette with no
-  API calls and no Docker daemon, asserting the tool-call sequence *and the outcome* are
-  identical to the original.
-- **It refuses to invent a flag.** A submitted flag is only finalized if it appears
-  verbatim in tool output the run actually observed and is re-derivable in the sandbox.
-  A flag the agent can't point to in its own trace is rejected and the run keeps going.
-- **No answer keys, structurally.** The one code path that runs before the first paid
-  call — deterministic triage — never receives the challenge name, its filenames, or its
+  `runectl replay <run_id> --check` re-runs the whole loop from that cassette with no API
+  calls and no Docker daemon, asserting the tool-call sequence *and the outcome* match the
+  original.
+- **It refuses to invent a flag.** A flag is only finalized if it appears verbatim in tool
+  output the run actually observed and is re-derivable in the sandbox. A flag the agent
+  can't point to in its own trace is rejected and the run keeps going.
+- **No answer keys, structurally.** The one code path that runs before the first paid call
+  — deterministic triage — never receives the challenge name, its filenames, or its
   description, so a fast-path keyed to a specific file has nowhere to live. A test
   enforces it.
+- **The cost number is real.** Cached tokens, cache writes and reasoning tokens are each
+  priced at their own rate, per model. Getting this wrong is easy and silent — see
+  [`CHANGELOG.md`](CHANGELOG.md) for two ways we got it wrong and how they were found.
 
-> **Status: v0.1.0, first public alpha.** M0–M9 are built and green: the loop, trace,
-> sandbox, provider and replay layers, the progress/budget machinery, the false-flag
-> subsystem, `runectl bench`, and **all eight categories** — `crypto`, `misc`, `web`,
-> `pwn`, `rev`, `forensics`, `osint` and `network`, at equal depth. It has been scored on
-> live challenges and those numbers are published in full: the latest run
-> (2026-09-09, claude-sonnet-5, ten-challenge suite) scored **7 of 10 solved with 1 false
-> flag, and the V1 gate met — 6 solved, 0 false over the 7 gated cases**
-> ([`bench/results/README.md`](bench/results/README.md)). The write-ups lead with the
-> failures — a `rev` challenge the per-run spend ceiling cut off mid-derivation, a
-> `crypto` challenge finalized one transformation short, and a trace where the agent
-> gamed one of our own checks. Read [`docs/STATUS.md`](docs/STATUS.md) for the
-> line-by-line breakdown of what's verified versus what merely exists before you rely on
-> anything here. `0.x` means the CLI's flags and output shape can still change before
-> `1.0` — see [`CHANGELOG.md`](CHANGELOG.md).
+> **Status: v0.1.1, public alpha.** M0–M9 are built and green: the loop, trace, sandbox,
+> provider and replay layers, the progress/budget machinery, the false-flag subsystem,
+> `runectl bench`, and **all eight categories** — `crypto`, `misc`, `web`, `pwn`, `rev`,
+> `forensics`, `osint`, `network`, at equal depth. It has been scored on live challenges
+> and those numbers are published in full: the latest run (2026-09-09, `claude-sonnet-5`,
+> ten-challenge suite) scored **7 of 10 solved with 1 false flag, and the V1 gate met — 6
+> solved, 0 false over the 7 gated cases** ([`bench/results/README.md`](bench/results/README.md)).
+> The write-ups lead with the failures: a `rev` challenge the per-run spend ceiling cut
+> off mid-derivation, a `crypto` challenge finalized one transformation short, and a trace
+> where the agent gamed one of our own checks. Read [`docs/STATUS.md`](docs/STATUS.md) for
+> the line-by-line breakdown of what is verified versus what merely exists before you rely
+> on anything here. `0.x` means the CLI's flags and output shape can still change.
 
 ## Requirements
 
-- **Python 3.12** (3.13 is not supported yet — see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) D1)
+- **Python 3.12** (3.13 is not supported yet — [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) D1)
 - **[uv](https://docs.astral.sh/uv/)** for dependency management
-- **Docker** — needed to build the arena image and to run real challenges. Not needed
-  for the test suite or for `runectl replay`.
-- **A provider API key** for whichever model you choose. Not needed for the test suite
-  or for `runectl replay`.
+- **Docker** — to build the arena image and run real challenges. Not needed for the test
+  suite or for `runectl replay`.
+- **A provider API key** for whichever model you choose. Not needed for the test suite or
+  for `runectl replay`.
 
 ## Install
 
@@ -94,8 +126,8 @@ uv sync
 uv run runectl --help
 ```
 
-Every example below uses `uv run runectl`. If you'd rather have `runectl` on your PATH
-directly, `uv tool install .` also works.
+Every example below uses `uv run runectl`. If you'd rather have `runectl` on your PATH,
+`uv tool install .` also works.
 
 ## Quickstart
 
@@ -120,8 +152,8 @@ key, and tells you exactly how to fix it if it's missing. It never prompts mid-r
 never silently starts a 30-minute build.
 
 **2. Store a provider key.** It goes into your OS keyring, falling back to
-`~/.config/runectl/keys.json` at mode 0600. Keys are never written into a run's config
-and are redacted from the trace by the writer itself.
+`~/.config/runectl/keys.json` at mode 0600. Keys are never written into a run's config and
+are redacted from the trace by the writer itself.
 
 ```bash
 uv run runectl keys set anthropic sk-ant-...
@@ -147,7 +179,7 @@ uv run runectl run \
   --category crypto \
   --description "Ben encrypted the same message under three moduli with e=3..." \
   --flag-format 'csictf\{.+\}' \
-  --model gpt-5 \
+  --model gpt-5-nano \
   --file ./capture.pcap
 ```
 
@@ -184,6 +216,32 @@ uv run runectl replay <run_id> --check
 # OK: 20260907-220651-62a17a reproduces 20260907-220636-9221b7's tool-call sequence at zero spend
 ```
 
+## Pick a model
+
+Competitions run on a budget, so the registry leads with the cheap tiers. `--model` is
+required and never inferred; these are the ones worth knowing:
+
+| Model | Provider | In / Out per 1M | Good for |
+|---|---|---|---|
+| `gpt-5-nano` | openai | $0.05 / $0.40 | the cheapest thing that can drive the loop at all |
+| `gemini-2.5-flash-lite` | google | $0.10 / $0.40 | cheap, 1M context, thinking genuinely off by default |
+| `gpt-5.6-luna` | openai | $0.20 / $1.20 | cheap *and* current-generation reasoning |
+| `claude-haiku-4-5` | anthropic | $1.00 / $5.00 | the default utility/summarizer model |
+| `claude-sonnet-5` | anthropic | $2.00 / $10.00 | what every published bench number here was scored with |
+| `claude-opus-5` | anthropic | $5.00 / $25.00 | when a challenge is genuinely hard |
+
+```bash
+uv run runectl models list     # all 37, with price, context, thinking support, key presence
+```
+
+Two things to know before you trust a cost report. **Only the Anthropic path has ever run
+against a live service** — the OpenAI and Google adapters are written against their SDKs'
+documented shapes and are unverified ([`docs/STATUS.md`](docs/STATUS.md)). And
+**`--thinking off` cannot always be honored**: most current models think by default, and
+some cannot be stopped at all. Where that is the case `runectl` requests the cheapest real
+level instead and records the clamp in the trace, rather than letting the provider's
+default run unreported.
+
 ## The TUI
 
 `runectl tui` is a full control surface, not just a viewer — everything below is one
@@ -191,18 +249,20 @@ keypress away, faster than dropping back to a shell for it:
 
 | Key | Does |
 |---|---|
-| `n` | Compose and launch a new run |
-| `k` / `a` / `c` / `m` / `b` | Manage keys / the arena image / config defaults / browse models / run the bench suite |
+| `n` | Compose and launch a new run — the model picker is cheapest-first with prices, and searchable |
+| `k` / `a` / `c` / `m` / `b` | Keys / arena image / config defaults / browse all 37 models / run the bench suite |
 | `x` / `X` | Attach to a run's container / kill one this session launched |
 | `ctrl+p` | Command palette — every action above, searchable by name |
-| `?` | Plain-English help, built for someone who's never used a TUI or played a CTF |
+| `?` | Plain-English help, written for someone who has never used a TUI or played a CTF |
 
-Watching a run live or replayed is still there too — the same event stream `trace show`
-reads, with pending flags one keypress from approval — but it's one tab among several,
-not the whole feature. Every action composes and runs the exact real `runectl` command
-before doing anything; nothing about what it does is hidden behind the interface.
+![the runectl TUI: a run list with category and outcome filters on the left, a run header line and Timeline/Thinking/Trace/Flags tabs on the right](docs/demo/tui-screenshot.png)
 
-![the runectl TUI: a run list with category/outcome filters on the left, a labeled Timeline/Thinking/Trace/Flags tab group on the right](docs/demo/tui-screenshot.png)
+| Reasoning, live | A command and its output | Judged and finalized |
+| --- | --- | --- |
+| ![the agent's reasoning appearing a step at a time](docs/demo/thinking.gif) | ![a sandboxed command and its result](docs/demo/toolcall.gif) | ![the flag judge re-deriving and finalizing](docs/demo/solved.gif) |
+
+Every action composes and runs the exact real `runectl` command before doing anything;
+nothing about what it does is hidden behind the interface.
 
 ```bash
 uv run runectl tui                     # live: launch, watch, and manage everything
@@ -222,10 +282,10 @@ uv run runectl tui --replay <run_id>   # animate through a finished run's trace,
 | 5 | provider failure after retries |
 | 6 | usage / config error |
 
-Code 2 is the default policy working as intended, not an error: under `--approval gated`
-a flag the judge could not re-derive in the sandbox ends the run as a *candidate* rather
-than a claimed solve. `runectl flag list` shows what was held and which check held it;
-`runectl flag approve` finalizes it. See [`docs/STATUS.md`](docs/STATUS.md).
+Code 2 is the default policy working as intended: under `--approval gated` a flag the
+judge could not re-derive in the sandbox ends the run as a *candidate* rather than a
+claimed solve. `runectl flag list` shows what was held and which check held it;
+`runectl flag approve` finalizes it.
 
 ## Command surface
 
@@ -285,15 +345,15 @@ uv run ruff check .
 uv run pytest                 # no Docker daemon, no API key, no spend
 ```
 
-The whole test suite runs against `StubSandbox` + `ScriptedProvider`, so it needs
-neither a container runtime nor a cent of API credit. That's deliberate — see
+The whole test suite runs against `StubSandbox` + `ScriptedProvider`, so it needs neither a
+container runtime nor a cent of API credit. That's deliberate — see
 [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Security
 
 `runectl` runs model-authored commands against CTF material inside a Docker container.
-[`SECURITY.md`](SECURITY.md) states what that boundary is and — more importantly — what
-it is not, plus how to report a vulnerability privately.
+[`SECURITY.md`](SECURITY.md) states what that boundary is and — more importantly — what it
+is not, plus how to report a vulnerability privately.
 
 ## License
 

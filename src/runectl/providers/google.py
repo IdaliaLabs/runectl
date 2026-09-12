@@ -127,6 +127,35 @@ def _function_declarations(tools: Sequence[ToolSchema]) -> list[types.FunctionDe
     ]
 
 
+def _usage(usage: types.GenerateContentResponseUsageMetadata | None) -> Usage:
+    """Account for cached and thinking tokens, both of which were being dropped (D18).
+
+    Fixed 2026-09-11. Two separate leaks, in opposite directions:
+
+    - `cached_content_token_count` was ignored, so a cache hit was billed at the
+      full input rate — `Usage.input_tokens` is documented as uncached input
+      only, and `prompt_token_count` is the total.
+    - `thoughts_token_count` was ignored, and Gemini reports thinking tokens
+      *outside* `candidates_token_count` while still billing them at the output
+      rate. With thinking on, every reasoning token was free as far as the
+      ledger knew — the understatement grew with exactly the setting that makes
+      a run expensive.
+
+    Google does not bill cache writes separately, so `cache_write_tokens` stays
+    zero.
+    """
+    if usage is None:
+        return Usage(input_tokens=0, output_tokens=0)
+    cached = usage.cached_content_token_count or 0
+    prompt_tokens = usage.prompt_token_count or 0
+    return Usage(
+        # max(): a negative count would silently credit the ledger.
+        input_tokens=max(prompt_tokens - cached, 0),
+        output_tokens=(usage.candidates_token_count or 0) + (usage.thoughts_token_count or 0),
+        cache_read_tokens=cached,
+    )
+
+
 class GoogleProvider:
     def __init__(self, *, model_id: str, api_key: str, client: genai.Client | None = None) -> None:
         self._model_id = model_id
@@ -195,10 +224,7 @@ class GoogleProvider:
         return Completion(
             text="".join(text_parts),
             tool_calls=tuple(tool_calls),
-            usage=Usage(
-                input_tokens=(usage.prompt_token_count or 0) if usage else 0,
-                output_tokens=(usage.candidates_token_count or 0) if usage else 0,
-            ),
+            usage=_usage(usage),
             stop_reason=str(finish_reason) if finish_reason is not None else "unknown",
             thinking_text="\n".join(thinking_parts),
             thinking_blocks=tuple(thinking_blocks),

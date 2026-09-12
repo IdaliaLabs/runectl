@@ -16,9 +16,8 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Select, Static
 
+from runectl.cli.tui.models import model_options, preferred_model
 from runectl.cli.tui.proc import run_foreground
-from runectl.providers.registry import MODEL_REGISTRY
-from runectl.user_config import default_model
 
 
 class BenchScreen(ModalScreen[None]):
@@ -38,16 +37,13 @@ class BenchScreen(ModalScreen[None]):
     BINDINGS = [("escape", "dismiss", "Close")]
 
     def compose(self) -> ComposeResult:
-        model_options = [
-            (f"{m.id}  ({m.provider})", m.id)
-            for m in sorted(MODEL_REGISTRY.values(), key=lambda m: (m.provider, m.id))
-        ]
-        preferred_model = default_model("anthropic") or (model_options[0][1] if model_options else None)
+        options = model_options()
+        preferred = preferred_model(options)
 
         with VerticalScroll(id="bench-box"):
             yield Static("[b]Run the bench suite[/b] — output goes to your real terminal")
             yield Input(value="bench/practice", id="suite")
-            yield Select(model_options, value=preferred_model, id="model", allow_blank=False)
+            yield Select(options, value=preferred, id="model", allow_blank=False)
             yield Input(value="0", placeholder="max total cost, USD (0 disables)", id="max-total-cost")
             with Horizontal():
                 yield Button("Run", id="run", variant="primary")

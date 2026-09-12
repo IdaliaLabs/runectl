@@ -21,15 +21,22 @@ writes down everything it tries. This screen is the whole control surface — wa
 run live or replayed, and manage everything runectl can do without leaving it.
 
 [b]The run list[/b] (left)
-Every run you've started or browsed before. The two dropdowns above it filter by
-category and outcome. Press [b]n[/b] to start a new one — it composes and shows you
-the exact command before launching, nothing hidden.
+Every run you've started or browsed before, listed by the tail of its run id. The
+two dropdowns above it filter by category and outcome. Press [b]n[/b] to start a new
+one — it composes and shows you the exact command before launching, nothing hidden.
+The model dropdown there lists all of them cheapest-first with prices, and you can
+type to search it.
+
+[b]The line above the tabs[/b]
+The selected run in one line: challenge, category, model, thinking level, steps,
+cost so far, outcome, and the full run id — the one to copy for `runectl trace show`.
+It keeps up while a run is still going.
 
 [b]The four tabs[/b] (right)
   Timeline  — one line per step: what it ran, what came back, what it cost
   Thinking  — the model's own reasoning, in its words
   Trace     — the raw recorded event, for when you want to see everything
-  Flags     — candidate answers waiting on your approval
+  Flags     — candidate answers waiting on your approval; the tab shows how many
 
 [b]Approving a flag[/b]
 runectl never submits an answer on its own by default — a candidate sits in the

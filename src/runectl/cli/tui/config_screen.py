@@ -45,8 +45,10 @@ class ConfigScreen(ModalScreen[None]):
             yield Static("[b]Per-provider defaults[/b] — prefills --model/--thinking; never relaxes D5")
             for provider in _PROVIDERS:
                 model_options = [
-                    (m.id, m.id)
-                    for m in sorted(MODEL_REGISTRY.values(), key=lambda m: m.id)
+                    (f"{m.id} · ${m.price_in:g}/${m.price_out:g}", m.id)
+                    for m in sorted(
+                        MODEL_REGISTRY.values(), key=lambda m: m.price_in + m.price_out
+                    )
                     if m.provider == provider
                 ]
                 yield Label(f"{provider} default model")

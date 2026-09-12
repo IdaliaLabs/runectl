@@ -7,6 +7,18 @@ These are kept in the repo on purpose. D16 says step limits and budgets come
 down as real data arrives and never go up, which is only checkable if the data
 that justified a change is still here to read.
 
+> **Every result below predates the 2026-09-11 thinking fix, and is not cost-comparable
+> with anything scored after it.** All of these runs used `claude-sonnet-5` at the default
+> `--thinking off`, which at the time sent no thinking configuration at all — and Anthropic
+> documents Sonnet 5 as thinking by default, so the model reasoned and billed for it while
+> each trace recorded `thinking_level='off'`. The costs reported here are what those runs
+> genuinely cost; what is wrong is the label on them. A run made today with the same flags
+> resolves to `thinking_level='low'` with the clamp recorded, and should cost less. The
+> solve rates and false-flag counts are unaffected — nothing about the fix changes what the
+> agent did. See `docs/ARCHITECTURE.md`'s dated D20 amendment. These are not being re-run:
+> the point of keeping them is that they are the evidence that justified the decisions
+> above, and rewriting evidence after the fact is the opposite of that.
+
 ## 2026-09-10 — claude-sonnet-5 — the disconfirmation review removed (D11/D15)
 
 Two back-to-back live runs of the full M7 suite, same model, no other change between

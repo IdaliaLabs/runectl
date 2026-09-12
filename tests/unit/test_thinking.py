@@ -26,9 +26,34 @@ from runectl.trace.events import LlmThinking, RunStarted
 from runectl.trace.writer import TraceWriter
 
 
-def test_resolve_thinking_level_off_is_always_off() -> None:
-    model = resolve_model("claude-sonnet-5")
+def test_resolve_thinking_level_off_stays_off_when_the_model_can_be_stopped() -> None:
+    model = resolve_model("claude-opus-4-8")  # thinking_off_supported=True (defaults off)
     assert resolve_thinking_level(model, "off") == ("off", False)
+
+
+def test_resolve_thinking_level_off_is_clamped_up_when_the_model_thinks_anyway() -> None:
+    """The D20 2026-09-11 amendment, and the reason it exists.
+
+    This assertion used to read `("off", False)` for `claude-sonnet-5` — which
+    was wrong, and wrong in the direction that hides spend. Sonnet 5 thinks by
+    default; sending no thinking configuration does not stop it. The old
+    behavior produced a run that thought, billed for it, and wrote
+    `thinking_level="off"` into its own trace with no clamp recorded.
+    """
+    model = resolve_model("claude-sonnet-5")  # thinking_off_supported=False
+    assert resolve_thinking_level(model, "off") == ("low", True)
+
+
+def test_every_think_by_default_model_reports_the_clamp() -> None:
+    """No registry row may quietly reintroduce the bug above."""
+    from runectl.providers.registry import MODEL_REGISTRY
+
+    for model in MODEL_REGISTRY.values():
+        resolved, clamped = resolve_thinking_level(model, "off")
+        if model.supports_thinking and not model.thinking_off_supported:
+            assert (resolved, clamped) == ("low", True), model.id
+        else:
+            assert (resolved, clamped) == ("off", False), model.id
 
 
 def test_resolve_thinking_level_no_support_clamps_to_off() -> None:

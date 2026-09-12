@@ -41,6 +41,10 @@ src/runectl/
                         `cli/` code under every existing rule: it renders, it never
                         contains agent logic, and every run it launches is a
                         `runectl run` subprocess, never an in-process loop call
+            app.py      the two-pane app: run list, run header, detail tabs
+            models.py   one model-dropdown list for every screen that needs one —
+                        cheapest first per provider, price in the label
+            splash.py   the launch screen; suppressed in --replay and by splash=False
 
     trace/              the record
         events.py       the typed payloads (20 as of D3's 2026-09-10 amendment) + the
@@ -606,7 +610,15 @@ constants in `providers/cost.py` (identical on all seven rows). **Amended 2026-0
 alongside the D13 TUI amendment: `runectl config`'s stored per-provider preferences never
 relax this — they prefill flags in `runectl models list` and the TUI's launcher, they are
 read only where the user explicitly set them, and the TUI always composes and shows an
-explicit `--model` before launching.
+explicit `--model` before launching. **Amended 2026-09-11:** the registry grew from 7
+rows to 37, covering every cheap tier a competition realistically runs on — the old table
+had no `gpt-5-nano`, no `gemini-2.5-flash-lite`, no `gpt-5.6-luna`, which meant the
+product promise of "bring whatever model you want" was true only for the expensive half of
+each provider's lineup. Two of the old OpenAI prices were also simply wrong (`gpt-5` at
+$5/$15 against an actual $1.25/$10; `gpt-5-mini` at $0.50/$1.50 against $0.25/$2). Every
+provider block in the registry now carries the date and source URL it was checked against,
+because this table has now been wrong twice and both times it corrupted cost reports
+silently.
 
 ### D6 — Run state: one explicit object, no mixins
 
@@ -833,6 +845,24 @@ against a live `models.list()`: Opus 5 and Sonnet 5 had been recorded at roughly
 actual price with a quarter of their actual context window. OpenAI and Google rows remain
 unverified estimates.
 
+**Amended 2026-09-11, two ways.** First, `cache_read_multiplier` moved *back* from a
+module constant in `providers/cost.py` to a `ModelInfo` field — the reverse of the
+2026-09-09 D5 amendment that consolidated it, and for exactly the reason that amendment
+reserved ("make them fields again the day a provider actually differs"). That day arrived
+with the larger registry: a cached input token costs 0.10x a fresh one on everything
+current, but 0.25x on `gpt-4.1*` and 0.50x on `gpt-4o*`. `cache_write_multiplier` stays a
+constant; no registered model differs, and OpenAI and Google don't bill cache writes.
+
+Second, and worse: **the OpenAI and Google adapters were never reporting cache or thinking
+tokens at all.** Both assigned the provider's total prompt count straight to
+`Usage.input_tokens`, whose contract is uncached input only — so every cache hit was
+billed at the full input rate, overstating precisely the runs caching exists to make
+cheap. Google additionally dropped `thoughts_token_count`, which it bills as output but
+reports outside `candidates_token_count`; reasoning spend was invisible to the ledger, and
+the understatement grew with the setting that makes a run expensive. Anthropic's adapter
+had been correct since this decision was written, which is why the gap survived a
+milestone: the only provider anyone had run live was the one that worked.
+
 ### D19 — Every run has a hard spend ceiling
 
 Added 2026-09-07. A step limit bounds actions, not dollars, and an agent loop's failure
@@ -861,6 +891,34 @@ that provider's own API contract. `--record`'s cassette hashing includes the res
 thinking configuration, so a cassette recorded with thinking off is never served to a
 replay requesting thinking on. Not a category concern — thinking level is a per-run,
 per-model choice like `--model` itself.
+
+**Amended 2026-09-11 — `off` clamps upward, and says so.** This decision's whole claim is
+that reasoning spend is never invisible, and it was not being honored. The adapters
+implemented `off` by sending no thinking configuration, on the assumption that no
+configuration means no thinking. That assumption is false on most current models:
+Anthropic documents Claude Sonnet 5 and Opus 5 as thinking by default and the Fable family
+as always on, Gemini 3.x and 2.5 think by default except `flash-lite`, and OpenAI's
+reasoning models default to `medium` effort unless told `none`. So `--thinking off` — the
+*default* — produced runs that thought, billed for the reasoning tokens, and wrote
+`thinking_level='off'` with no clamp into their own traces. Every bench result published
+in `bench/results/` was scored under that behavior, on `claude-sonnet-5`.
+
+The fix reuses this decision's existing machinery rather than adding a second reporting
+channel. A new `ModelInfo.thinking_off_supported` says whether a model can actually be
+stopped; where it cannot, `resolve_thinking_level` clamps `off` **up** to `low` — the
+cheapest level that is a real request — and returns the same `was_clamped` flag that
+already populates `thinking_clamped_from`. The CLI semantic is now stated plainly in
+`CLI.md`: `off` means "do not request thinking", and on a model that thinks anyway,
+runectl asks for the least of it rather than letting the provider's default run
+unreported.
+
+One option deliberately not taken: sending `thinking: {"type": "disabled"}` on Anthropic,
+which Sonnet 5 accepts (Opus 5 accepts it only at effort `high` or below; the Fable family
+rejects it outright). Anthropic documents that disabling thinking on this tier makes
+tool-heavy agentic workloads write tool calls into their visible text, where the calls
+never execute and the text then pollutes the conversation history. That is this loop's
+exact shape, and their guidance is to leave thinking on and lower effort instead — so a
+uniform clamp to `low` is both the safer behavior and the smaller rule.
 
 ### License
 
