@@ -54,6 +54,19 @@ caused a specific failure in the predecessor.
 code emits events; `cli/render.py` is the only thing that turns an event into characters
 on a terminal. `tests/unit/test_render_boundary.py` enforces this.
 
+**A registry row carries a dated source.** Every provider block in
+`providers/registry.py` names the date it was checked and the URL it was checked against.
+This table has been wrong twice — once on Anthropic pricing and context windows, once on
+OpenAI pricing that sat unverified for six days — and both times the result was a cost
+report that was confidently wrong rather than obviously broken. Adding or editing a row
+without re-checking and re-dating its block is how that happens a third time.
+
+**Never assume a provider's default is "off".** Most current models think by default and
+some cannot be stopped; sending no thinking configuration is not the same as requesting no
+thinking. A new row's `thinking_off_supported` must come from that provider's own
+per-model documentation, and `tests/unit/test_thinking.py` sweeps every row to make sure
+the clamp is recorded either way.
+
 **No network surface, ever.** No `serve` command, no HTTP server, no listener, no SSE
 tailer, no browser UI, no top-level `ui/` package — not "later," not "behind a flag."
 

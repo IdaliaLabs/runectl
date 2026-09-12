@@ -30,20 +30,75 @@ Provider and capability come from an explicit table in
 `src/runectl/providers/registry.py` — never from sniffing a string prefix like `claude-`.
 An unregistered model id is a hard error (exit 6), not a guess.
 
-| Model id | Provider | Context | Tools | Prompt cache | Thinking | $/1M in | $/1M out |
-|---|---|---|---|---|---|---|---|
-| `claude-opus-5` | anthropic | 1M | ✓ | ✓ | ✓ | 5.00 | 25.00 |
-| `claude-sonnet-5` | anthropic | 1M | ✓ | ✓ | ✓ | 2.00 | 10.00 |
-| `claude-haiku-4-5` | anthropic | 200K | ✓ | ✓ | ✗ (utility model only) | 1.00 | 5.00 |
-| `gpt-5` | openai | 272K | ✓ | ✓ | ✓ | 5.00 | 15.00 |
-| `gpt-5-mini` | openai | 272K | ✓ | ✓ | ✓ | 0.50 | 1.50 |
-| `gemini-2.5-pro` | google | 1M | ✓ | ✓ | ✓ | 1.25 | 10.00 |
-| `gemini-2.5-flash` | google | 1M | ✓ | ✗ | ✓ | 0.30 | 2.50 |
+Every registered model supports tool use — that is a hard requirement of the loop, so it
+is not a column. Rows are grouped by provider, cheapest first.
 
-> Pricing and availability snapshot: **2026-09-05, corrected 2026-09-09.** The original
-> snapshot recorded Opus 5 at $15/$75 and Sonnet 5 at $3/$15, both at a 200K context
-> window — all four numbers were wrong. Re-verify before relying on this for real spend —
-> pricing rots fast.
+| Model id | Provider | Context | Prompt cache | Thinking | `off` honored | $/1M in | $/1M out |
+|---|---|---|---|---|---|---|---|
+| `claude-haiku-4-5` | anthropic | 200K | ✓ 0.1x | — | n/a | 1.00 | 5.00 |
+| `claude-sonnet-5` | anthropic | 1M | ✓ 0.1x | to `max` | **no** | 2.00 | 10.00 |
+| `claude-sonnet-4-6` | anthropic | 1M | ✓ 0.1x | to `high` | yes | 3.00 | 15.00 |
+| `claude-opus-5` | anthropic | 1M | ✓ 0.1x | to `max` | **no** | 5.00 | 25.00 |
+| `claude-opus-4-8` | anthropic | 1M | ✓ 0.1x | to `max` | yes | 5.00 | 25.00 |
+| `claude-opus-4-7` | anthropic | 1M | ✓ 0.1x | to `max` | yes | 5.00 | 25.00 |
+| `claude-opus-4-6` | anthropic | 1M | ✓ 0.1x | to `high` | yes | 5.00 | 25.00 |
+| `claude-fable-5-1` | anthropic | 1M | ✓ 0.1x | to `max` | **no** | 10.00 | 50.00 |
+| `claude-fable-5` | anthropic | 1M | ✓ 0.1x | to `max` | **no** | 10.00 | 50.00 |
+| `gpt-5-nano` | openai | 400K | ✓ 0.1x | to `high` | yes | 0.05 | 0.40 |
+| `gpt-4.1-nano` | openai | 1.05M | ✓ 0.25x | — | n/a | 0.10 | 0.40 |
+| `gpt-4o-mini` | openai | 128K | ✓ 0.5x | — | n/a | 0.15 | 0.60 |
+| `gpt-5.6-luna` | openai | 1.05M | ✓ 0.1x | to `max` | yes | 0.20 | 1.20 |
+| `gpt-5.4-nano` | openai | 400K | ✓ 0.1x | to `high` | yes | 0.20 | 1.25 |
+| `gpt-4.1-mini` | openai | 1.05M | ✓ 0.25x | — | n/a | 0.40 | 1.60 |
+| `gpt-5-mini` | openai | 400K | ✓ 0.1x | to `high` | yes | 0.25 | 2.00 |
+| `gpt-5.4-mini` | openai | 400K | ✓ 0.1x | to `high` | yes | 0.75 | 4.50 |
+| `gpt-4.1` | openai | 1.05M | ✓ 0.25x | — | n/a | 2.00 | 8.00 |
+| `gpt-5.1` | openai | 400K | ✓ 0.1x | to `max` | yes | 1.25 | 10.00 |
+| `gpt-5` | openai | 400K | ✓ 0.1x | to `max` | yes | 1.25 | 10.00 |
+| `gpt-4o` | openai | 128K | ✓ 0.5x | — | n/a | 2.50 | 10.00 |
+| `gpt-5.6-terra` | openai | 1.05M | ✓ 0.1x | to `max` | yes | 2.00 | 12.00 |
+| `gpt-5.2` | openai | 400K | ✓ 0.1x | to `max` | yes | 1.75 | 14.00 |
+| `gpt-5.4` | openai | 272K | ✓ 0.1x | to `max` | yes | 2.50 | 15.00 |
+| `gpt-5.6-sol` | openai | 1.05M | ✓ 0.1x | to `max` | yes | 4.00 | 20.00 |
+| `gpt-5.5` | openai | 272K | ✓ 0.1x | to `max` | yes | 5.00 | 30.00 |
+| `gpt-6-astra` | openai | 1.05M | ✓ 0.1x | to `max` | **no** | 10.00 | 50.00 |
+| `gemini-2.5-flash-lite` | google | 1M | ✗ | to `high` | yes | 0.10 | 0.40 |
+| `gemini-3.1-flash-lite` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.25 | 1.50 |
+| `gemini-3.5-flash-lite` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.30 | 2.50 |
+| `gemini-2.5-flash` | google | 1M | ✗ | to `high` | **no** | 0.30 | 2.50 |
+| `gemini-3.8-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.75 | 3.75 |
+| `gemini-3.7-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.75 | 3.75 |
+| `gemini-3.6-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.75 | 3.75 |
+| `gemini-3.5-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 1.50 | 9.00 |
+| `gemini-2.5-pro` | google | 1M | ✓ 0.1x | to `high` | **no** | 1.25 | 10.00 |
+| `gemini-3.1-pro-preview` | google | 1M | ✓ 0.1x | to `high` | **no** | 2.00 | 12.00 |
+
+**The `off` honored column** is the one people are surprised by. On most current models,
+sending no thinking configuration does not mean the model does not think — Anthropic
+documents Sonnet 5 and Opus 5 as thinking by default and the Fable family as always on,
+Gemini 3.x and 2.5 think by default except `flash-lite`, and OpenAI's reasoning models
+default to `medium` effort. Where `off` cannot be honored, `runectl` requests the cheapest
+real level (`low`) instead and records the clamp; see *Extended thinking* below.
+
+**The prompt-cache column** carries the cache-read multiplier, because it is not uniform:
+a cached input token costs 0.10x a fresh one on everything current, but 0.25x on
+`gpt-4.1*` and 0.50x on `gpt-4o*`. It is a per-model field (`cache_read_multiplier`) for
+that reason, and the cost ledger reads it per row rather than applying one constant.
+
+> **Pricing and availability snapshot.** Anthropic rows: checked 2026-09-11 against the
+> published model table, prices unchanged since a live `client.models.list()` verification
+> on 2026-09-07. OpenAI rows: checked 2026-09-11 against
+> <https://developers.openai.com/api/docs/pricing>. Google rows: checked 2026-09-11
+> against <https://ai.google.dev/gemini-api/docs/pricing>; the three `gemini-3.x-flash`
+> rows are on a promotional rate through 2026-12-31 and revert to $1.50/$7.50 after.
+>
+> This table has been wrong before, twice, in ways that silently corrupted cost reports.
+> The 2026-09-05 snapshot recorded Opus 5 at $15/$75 and Sonnet 5 at $3/$15, both at a
+> 200K context window — four wrong numbers, corrected 2026-09-07. The OpenAI rows were
+> then carried as "unverified estimates" and never re-checked until 2026-09-11, at which
+> point `gpt-5` turned out to be $1.25/$10.00 rather than the $5.00/$15.00 listed, and
+> `gpt-5-mini` $0.25/$2.00 rather than $0.50/$1.50. Re-verify before relying on any of it
+> for real spend.
 
 ### Extended thinking
 
@@ -59,9 +114,37 @@ is rejected outright on Opus 5 and Sonnet 5. OpenAI and Google map onto their ow
 reasoning-effort/thinking-budget parameters through the same `ModelInfo.thinking_style`
 field; **both are unverified against a live service** — see [`STATUS.md`](STATUS.md).
 
+#### Clamping, in both directions
+
 Where a model can't represent the requested level, `runectl` clamps to the nearest
 supported one and records the clamp in the trace — never silently substituted. The
-resolved level is written to `run.started` and `run.json`.
+resolved level is written to `run.started` (with `thinking_clamped_from` naming what was
+asked for) and to `run.json`.
+
+Clamping goes **up** as well as down, which is the part worth reading. `off` means "do not
+request thinking". On a model where thinking is on by default, or cannot be turned off at
+all, that is not the same as no thinking happening: omitting the parameter leaves the
+provider's own default in force, which is usually the *most* expensive setting. So for
+those models — the `off` honored column in the registry table — `runectl` resolves `off`
+up to `low`, the cheapest level that is a real request, and records the clamp:
+
+```
+run.started  ... thinking_level='low' thinking_clamped_from='off'
+```
+
+This was fixed on 2026-09-11. Before it, `--thinking off` (the default) on
+`claude-sonnet-5` produced a run that thought, billed for the reasoning tokens, and wrote
+`thinking_level='off'` into its own trace with no clamp recorded. Every published bench
+result in [`../bench/results/README.md`](../bench/results/README.md) was scored under that
+behavior; the numbers there are what those runs actually cost, but they are not comparable
+with runs made after the fix.
+
+For Anthropic specifically, `runectl` does **not** send `thinking: {"type": "disabled"}`,
+even on Sonnet 5 where the API accepts it. Anthropic documents that disabling thinking on
+this model tier makes tool-heavy agentic workloads write tool calls into visible text,
+where they never execute and then pollute the conversation history — which is exactly this
+loop's shape. Their guidance is to leave thinking on and lower the effort instead, which is
+what the clamp does.
 
 **Adding a model:** add a `ModelInfo` entry to `MODEL_REGISTRY`; the cost ledger, prompt
 caching, and utility-model selection all read from that row. **Adding a provider:** a
@@ -374,10 +457,16 @@ uv run runectl models list
 ```
 
 ```
-claude-opus-5   provider=anthropic  key=yes  thinking=yes (max max)  ctx=1000000  $5.00/$25.00 per 1M
-claude-sonnet-5 provider=anthropic  key=yes  thinking=yes (max max)  ctx=1000000  $2.00/$10.00 per 1M [configured default]
-gpt-5           provider=openai     key=no   thinking=yes (max max) ctx=272000   $5.00/$15.00 per 1M
+claude-haiku-4-5	provider=anthropic	key=yes	thinking=no	ctx=200000	$1.00/$5.00 per 1M
+claude-sonnet-5	provider=anthropic	key=yes	thinking=yes (max max)	ctx=1000000	$2.00/$10.00 per 1M
+gemini-2.5-flash-lite	provider=google	key=no	thinking=yes (max high)	ctx=1000000	$0.10/$0.40 per 1M
+gpt-5-nano	provider=openai	key=no	thinking=yes (max high)	ctx=400000	$0.05/$0.40 per 1M
+...
 ```
+
+All 37 rows, grouped by provider and ordered cheapest first. This is the list to reach
+for before a competition: `gpt-5-nano` at $0.05/$0.40 and `gemini-2.5-flash-lite` at
+$0.10/$0.40 are two orders of magnitude cheaper per run than the flagship tiers.
 
 ---
 
@@ -449,12 +538,33 @@ Textual's built-in command palette (`ctrl+p`):
 | `k` | Keys — view presence, set, or remove a provider key | `runectl keys set\|rm` |
 | `a` | Arena — view image status, build / load-from-file / pull-from-registry | `runectl arena build\|ensure` |
 | `c` | Config — per-provider default model and thinking level | `runectl config set` |
-| `m` | Models — the full registry, key presence, and pricing as a table | `runectl models list` |
+| `m` | Models — all 37 rows, key presence and pricing as a table | `runectl models list` |
 | `b` | Bench — compose and run a suite | `runectl bench run` |
 | `x` | Attach to the selected run's container | `runectl runs attach --exec` |
 | `X` | Kill a run this session launched, still in flight | sends the subprocess `SIGTERM` |
+| `?` | Help overlay — what everything on the screen does, in plain English | — |
 
 Two dropdowns above the run list filter it by category and outcome.
+
+### Reading the screen
+
+The **run list** on the left shows each run by the tail of its id — the full id is 22
+columns, which at pane width used to push the model and cost columns off the edge
+entirely. The **header line above the tabs** carries the selected run's full identity:
+challenge, category, model, thinking level, steps, cost so far, outcome, and the full run
+id to copy for a `trace show`. It keeps up with a live run rather than filling in only at
+the end. The **Flags tab** shows its pending-candidate count in the tab label, because a
+flag waiting on approval is the one thing on this screen that needs you to act.
+
+The **model dropdown** in the launcher, bench and config screens lists every registered
+model cheapest-first within provider, with its price in the label and a `· no key` marker
+where that provider has no key configured. Textual's `Select` searches as you type, so 37
+entries are navigable by typing a few characters of the id.
+
+A splash screen shows the mark and wordmark for about a second on launch; any key
+dismisses it. It never appears under `--replay`, and `RunectlTUI(splash=False)` disables
+it outright, which is what the test suite and `scripts/capture_demo.py` use so decoration
+can never alter what either of them sees.
 
 Every one of these follows the same rule the run launcher already does: it composes and
 runs the real `runectl <command>`, in a subprocess, never reimplementing what that
