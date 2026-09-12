@@ -1,4 +1,4 @@
-"""Cost ledger: every LLM call, including utility calls, lands here (D5, plan §3.4)."""
+"""Cost ledger: every LLM call, including utility calls, lands here (D5)."""
 
 from __future__ import annotations
 

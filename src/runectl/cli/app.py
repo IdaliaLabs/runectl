@@ -1,4 +1,4 @@
-"""The top-level Typer app (D4 V1 command surface, plan §9.1, §9.5).
+"""The top-level Typer app (D4 V1 command surface, §9.5).
 
 Only this package renders (D13) — core code emits events and never prints.
 Exit codes come from D4's table plus `errors.py`'s hierarchy; expected
@@ -82,7 +82,7 @@ def tui_command(
         0.6, "--playback-delay", help="Seconds between events in --replay mode"
     ),
 ) -> None:
-    """Interactive, in-terminal view over runs (D13 amendment, 2026-09-09).
+    """Interactive, in-terminal view over runs.
 
     Imported lazily so every other command's startup stays fast and doesn't
     pay Textual's import cost — this is the only command that needs it.
@@ -93,7 +93,7 @@ def tui_command(
 
 
 index_app = typer.Typer(
-    add_completion=False, help="Maintain the derived SQLite index (D3 — never authoritative)."
+    add_completion=False, help="Maintain the derived SQLite index (rebuildable from the traces)."
 )
 
 
@@ -118,7 +118,7 @@ def _tool_call_sequence(trace_path: Path, artifacts_dir: Path) -> list[tuple[str
 
 @app.command("replay")
 def replay_command(run_id: str, check: bool = typer.Option(False, "--check")) -> None:
-    """Re-run a recorded run from its cassette — no daemon, no spend (D2, D5)."""
+    """Re-run a recorded run from its cassette — no Docker daemon, no API spend."""
     store = Store()
     try:
         manifest = store.read_manifest(run_id)

@@ -1,4 +1,4 @@
-"""`runectl run` (D4 V1 command surface, plan §9.1).
+"""`runectl run` (D4 V1 command surface).
 
 Non-interactive end to end: resolve the challenge and category, resolve the
 model/provider/key, start the sandbox, run the loop, persist the trace, and
@@ -330,7 +330,7 @@ def run_command(
     utility_model: str | None = typer.Option(None, "--utility-model"),
     api_key: str | None = typer.Option(None, "--api-key"),
     approval: str = typer.Option(
-        "gated", "--approval", help="gated|strict|auto — what a cleared candidate becomes (D11)"
+        "gated", "--approval", help="gated|strict|auto — what a cleared candidate becomes"
     ),
     network: str | None = typer.Option(None, "--network"),
     max_steps: int | None = typer.Option(None, "--max-steps"),
@@ -348,7 +348,7 @@ def run_command(
         "default, or off (D20)",
     ),
 ) -> None:
-    """Solve one challenge end-to-end, writing a replayable trace (D3, D4)."""
+    """Solve one challenge end-to-end, writing a replayable trace."""
     try:
         chal = _resolve_challenge(challenge, name, category, description, description_file, file, flag_format)
         result = execute_run(

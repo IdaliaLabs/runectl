@@ -1,4 +1,4 @@
-"""`runectl bench run` — score the practice suite (M8, plan §10.1).
+"""`runectl bench run` — score the practice suite (M8).
 
 Drives real runs through `run_cmd.execute_run`, the same path `runectl run`
 uses, then scores each against its `expected.json`. Reports the solve rate and
@@ -36,7 +36,10 @@ from runectl.cli.run_cmd import (
 from runectl.config import DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, RunectlError, SandboxError, UsageError
 
-app = typer.Typer(add_completion=False, help="Run the capability benchmark suite (D16, plan §10.1).")
+app = typer.Typer(
+    add_completion=False,
+    help="Score the practice challenge suite: solve rate, false flags, wasted steps.",
+)
 
 
 @app.command("run")
@@ -46,7 +49,7 @@ def bench_run(
     utility_model: str | None = typer.Option(None, "--utility-model"),
     api_key: str | None = typer.Option(None, "--api-key"),
     approval: str = typer.Option(
-        "gated", "--approval", help="gated|strict|auto — what a cleared candidate becomes (D11)"
+        "gated", "--approval", help="gated|strict|auto — what a cleared candidate becomes"
     ),
     only: list[str] = typer.Option([], "--only", help="Challenge name or directory; repeatable"),
     max_steps: int | None = typer.Option(None, "--max-steps"),
@@ -61,7 +64,7 @@ def bench_run(
     thinking: str = typer.Option(
         "off",
         "--thinking",
-        help="off|low|medium|high|xhigh|max (D20). Defaults to off, not the "
+        help="off|low|medium|high|xhigh|max. Defaults to off, not the "
         "configured per-provider default — a suite runs unattended and repeatably.",
     ),
 ) -> None:

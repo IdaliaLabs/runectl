@@ -301,7 +301,7 @@ description does not contain enough to solve it without the original repo's file
   in-terminal view added to D13 by a dated amendment (a TUI, not a GUI — no server, no
   port; every run it launches is still a plain non-interactive `runectl run`
   subprocess, and `loop/runner.py` gained no threading to support it). `runectl tui
-  --replay <run_id>` and `make demo` are the demo `PLAN.md` asks for — a real, recorded
+  --replay <run_id>` and `make demo` are the demo this project set out to build — a real, recorded
   run's reasoning and actions, animated at a readable pace, at zero replay-time spend.
 
 Ordering note: M5 and M6 were both prerequisites for trusting a solve, and M6 addresses

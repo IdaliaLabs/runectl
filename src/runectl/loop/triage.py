@@ -1,4 +1,4 @@
-"""Deterministic pre-LLM triage (D10, plan §5.3).
+"""Deterministic pre-LLM triage (D10).
 
 ``triage()`` takes only a sandbox and a category — never the challenge name,
 its filenames, or its description. That is the structural guarantee behind

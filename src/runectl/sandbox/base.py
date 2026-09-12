@@ -1,4 +1,4 @@
-"""The sandbox boundary (D2, plan §2.1). Zero Docker imports here — the loop only
+"""The sandbox boundary (D2). Zero Docker imports here — the loop only
 ever knows about this Protocol and :class:`ExecResult`."""
 
 from __future__ import annotations

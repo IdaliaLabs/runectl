@@ -161,5 +161,5 @@ the model:
 
 ```
 Wire utility-model calls through the shared cost ledger; test the M3 retry gate
-Vendor one bench challenge (plan §10.1) and fix a DockerSandbox daemon-touch bug
+Vendor one bench challenge and fix a DockerSandbox daemon-touch bug
 ```

@@ -1,5 +1,5 @@
 """D7 tool dispatch: structured results, path-traversal rejection, empty-command
-rejection (plan §4.2-4.3)."""
+rejection."""
 
 from __future__ import annotations
 

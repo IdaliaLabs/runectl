@@ -1,4 +1,4 @@
-"""One explicit run state, no mixins (D6, plan §5.1).
+"""One explicit run state, no mixins (D6).
 
 The predecessor's coupling failure was ~30 instance attributes shared
 implicitly across six mixins in the predecessor tool. Here there is exactly

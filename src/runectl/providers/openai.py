@@ -1,4 +1,4 @@
-"""OpenAI adapter (D5, plan §3.4).
+"""OpenAI adapter (D5).
 
 NOTE for reviewers: this adapter's shape was verified against the installed
 `openai` SDK (chat completion / usage field names, `chat.completions.create`

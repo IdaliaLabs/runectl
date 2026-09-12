@@ -1,5 +1,5 @@
 """Serves recorded ``ExecResult``s for ``runectl replay`` — no daemon, no side
-effects (D2, plan §2.5).
+effects (D2).
 
 Deliberately dumb: it plays back exec results strictly in the order they were
 recorded, with no string-matching against the incoming command. Sequence

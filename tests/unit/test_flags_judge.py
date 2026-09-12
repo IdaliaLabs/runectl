@@ -1,4 +1,4 @@
-"""The M4 minimal flag path (D15 seam, plan §7.5): reject a flag with no
+"""The M4 minimal flag path (D15 seam): reject a flag with no
 provenance in observed tool output, accept one that literally appeared."""
 
 from __future__ import annotations

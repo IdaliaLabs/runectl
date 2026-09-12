@@ -514,7 +514,8 @@ non-interactive as it is when driven from a shell.
 **`--replay <run_id>`** is Phase 5's demo mode: it animates straight through a finished
 run's already-recorded `trace.jsonl` at a readable pace (`--playback-delay`, default
 0.6s between events) — "show the thought, show the command, show the output, show the
-next move" (`PLAN.md`'s stated demo). This is deliberately **not** `runectl replay`,
+next move" — the demo this project set out to build. This is deliberately **not**
+`runectl replay`,
 which re-executes the loop against `ReplayProvider`/`ReplaySandbox` to prove the
 tool-call sequence still matches; playback only reads what already happened, so it needs
 no sandbox, no provider, and spends nothing regardless of whether the original run did.

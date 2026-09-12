@@ -1,4 +1,4 @@
-"""`runectl trace show` (plan §9.4). ``timeline`` is the primary review surface;
+"""`runectl trace show`. ``timeline`` is the primary review surface;
 ``jsonl`` is the raw event stream."""
 
 from __future__ import annotations

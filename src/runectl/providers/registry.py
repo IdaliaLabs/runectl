@@ -1,4 +1,4 @@
-"""Model registry: provider/capability metadata, never string-prefix sniffing (D5, plan §3.2).
+"""Model registry: provider/capability metadata, never string-prefix sniffing (D5).
 
 ``--model`` is required; the provider and every capability (prompt caching,
 context window, price, thinking support) come from this table. Adding a

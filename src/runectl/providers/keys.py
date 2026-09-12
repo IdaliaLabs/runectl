@@ -1,4 +1,4 @@
-"""Provider key resolution (D5, plan §3.3).
+"""Provider key resolution (D5).
 
 Precedence: ``--api-key`` > env > OS keyring > ``~/.config/runectl/keys.json``
 (mode 0600). Keys are never written to project/run config and never logged;

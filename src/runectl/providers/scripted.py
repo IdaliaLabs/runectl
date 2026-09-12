@@ -1,4 +1,4 @@
-"""Hand-authored completions for free, deterministic unit tests (D5, plan §3.5).
+"""Hand-authored completions for free, deterministic unit tests (D5).
 
 Together with :class:`~runectl.sandbox.stub.StubSandbox`, this is what lets the
 whole loop run with no daemon and no API spend.

@@ -1,4 +1,4 @@
-"""Append-only JSONL trace writer (D3, plan §1.2).
+"""Append-only JSONL trace writer (D3).
 
 Two hooks run on every event before it hits disk: secret redaction (so a leaked
 key can never land in ``trace.jsonl``) and >8KB spill to ``artifacts/`` (so the

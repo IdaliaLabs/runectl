@@ -12,11 +12,11 @@
 
 `chal.toml` re-states the challenge's own description text (the "Sources"
 block from the original README) as `description`; `expected.json` carries the
-known-correct flag for scoring only, per plan §10.1 — it is never read by any
+known-correct flag for scoring only — it is never read by any
 solver code path (D10's zero-answer-key rule applies to challenge data the
 same as to solver logic).
 
-Picked for the M4 skeleton gate (plan §10.1: "one easy challenge is vendored
+Picked for the M4 skeleton gate ("one easy challenge is vendored
 now") because it is fully self-contained — the entire input is the challenge
 description text itself, no binary files, no live network service — so it
 exercises `runectl run --challenge` without needing anything beyond the arena

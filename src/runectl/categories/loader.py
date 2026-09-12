@@ -1,4 +1,4 @@
-"""Load category data from TOML at runtime (D9, plan §8.2 — the loader is HANDOFF).
+"""Load category data from TOML at runtime (D9 — the loader is HANDOFF).
 
 Adding a category is a data file, never a code change. As of M7 (2026-09-08) all
 eight standard categories ship as data, at equal depth from day one (D14 — no

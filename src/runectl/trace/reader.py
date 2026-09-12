@@ -1,4 +1,4 @@
-"""Lazy, ordered trace reader (D3, plan §1.3).
+"""Lazy, ordered trace reader (D3).
 
 Reads ``trace.jsonl`` line by line, validating each line to its typed payload
 model. If a line fails to parse (a SIGKILL can leave the final line truncated),

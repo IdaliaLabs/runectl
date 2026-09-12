@@ -1,4 +1,4 @@
-"""`runectl arena status|build|ensure` (D2, D17, plan §9.1).
+"""`runectl arena status|build|ensure` (D2, D17).
 
 `ensure` is the only interactive surface in the product, and it is interactive
 only when a human is actually sitting at a TTY with no flags given. Every path

@@ -1,4 +1,4 @@
-"""`runectl keys set|list|rm` (D5 §3.3, plan §9.1)."""
+"""`runectl keys set|list|rm` (D5 §3.3)."""
 
 from __future__ import annotations
 

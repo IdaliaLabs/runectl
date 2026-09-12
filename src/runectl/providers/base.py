@@ -1,4 +1,4 @@
-"""Provider protocol and the provider-agnostic retry/degrade path (D5, plan §3.1, 3.4).
+"""Provider protocol and the provider-agnostic retry/degrade path (D5, 3.4).
 
 Non-streaming request/response in the core (D5): this is what makes retries,
 cassettes, and replay determinism straightforward. Every LLM call — the main

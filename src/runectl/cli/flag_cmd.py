@@ -20,7 +20,7 @@ from runectl.trace.reader import TraceReader
 from runectl.trace.store import Store
 from runectl.trace.writer import TraceWriter
 
-app = typer.Typer(add_completion=False, help="Review and finalize flag candidates (D11, D15).")
+app = typer.Typer(add_completion=False, help="Review and finalize flag candidates held for approval.")
 
 
 class PendingCandidate:

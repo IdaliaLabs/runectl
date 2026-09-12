@@ -12,8 +12,8 @@ demo-seed:
 	@RUNECTL_HOME=$(DEMO_HOME) uv run python scripts/seed_demo.py > $(DEMO_HOME)/.run_id
 	@RUNECTL_HOME=$(DEMO_HOME) uv run runectl index rebuild >/dev/null
 
-# Phase 5's demo (PLAN.md: "show the thought, show the command, show the
-# output, show the next move"). The TUI animates through the seeded run's
+# The demo this project set out to build: "show the thought, show the
+# command, show the output, show the next move". The TUI animates through the seeded run's
 # already-recorded trace via `runectl tui --replay` (never `runectl replay`,
 # which re-executes the loop and is not what a demo needs).
 demo: demo-seed

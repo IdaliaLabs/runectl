@@ -1,4 +1,4 @@
-"""The capability benchmark (M8, plan §10.1) — what earns the right to tune D8.
+"""The capability benchmark (M8) — what earns the right to tune D8.
 
 Two things this scores, and the second is the one that is easy to leave out:
 

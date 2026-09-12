@@ -1,4 +1,4 @@
-"""Google (Gemini) adapter (D5, plan §3.4).
+"""Google (Gemini) adapter (D5).
 
 NOTE for reviewers: this adapter's shape was verified against the installed
 `google-genai` SDK (types, field names, `models.generate_content` signature,

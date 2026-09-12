@@ -1,4 +1,4 @@
-"""The loop: decide -> one tool call -> observe (D6, plan §5.2).
+"""The loop: decide -> one tool call -> observe (D6).
 
 Category-agnostic; every branch emits a trace event and the runner never
 prints (D4/D13 — only `cli/` renders). Two collaborators do the judging and

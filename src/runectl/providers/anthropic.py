@@ -1,4 +1,4 @@
-"""Anthropic adapter (D5, plan §3.4).
+"""Anthropic adapter (D5).
 
 Verified against the live API as of 2026-09-09: the ten-challenge bench ran
 through this adapter (`bench/results/README.md`), and its error handling was

@@ -1,4 +1,4 @@
-"""Real Docker sandbox: one container per run (D2, plan §2.3).
+"""Real Docker sandbox: one container per run (D2).
 
 NOTE for reviewers: this module could not be exercised against a live Docker
 daemon while building the skeleton (no daemon was available in the build

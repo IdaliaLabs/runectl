@@ -1,4 +1,4 @@
-"""Category data schema every TOML validates against (D9, plan §8.1).
+"""Category data schema every TOML validates against (D9).
 
 The loader (§8.2, HANDOFF) validates every category file against this shape.
 ``tactic_families``/``signal_low``/``signal_high``/``budgets`` are real, typed

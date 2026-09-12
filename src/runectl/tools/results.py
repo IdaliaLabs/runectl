@@ -1,4 +1,4 @@
-"""Structured tool results — never a string-prefixed error (D7, plan §4.1)."""
+"""Structured tool results — never a string-prefixed error (D7)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-"""Derived SQLite index over the run store (D3, plan §1.5).
+"""Derived SQLite index over the run store (D3).
 
 The database is never authoritative — ``runectl index rebuild`` regenerates it
 purely from ``runs/`` on disk. If ``index.db`` were deleted right now, nothing

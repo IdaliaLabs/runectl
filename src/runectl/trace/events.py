@@ -1,4 +1,4 @@
-"""The trace event schema (D3, plan §1.1).
+"""The trace event schema (D3).
 
 Every event written to ``trace.jsonl`` is a versioned :class:`Event` envelope
 carrying a typed :class:`EventPayload` subclass as ``data``. Each payload class

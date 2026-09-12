@@ -1,11 +1,11 @@
-"""Maps a tool call to a sandbox action (D7, plan §4.2-4.4).
+"""Maps a tool call to a sandbox action (D7-4.4).
 
 Handles the four tools that touch the sandbox: ``run_command``, ``run_gdb``,
 ``write_file``, ``search_flag``. ``submit_flag`` never reaches here — it is not
 a sandbox action, so the runner (loop/runner.py) intercepts it and hands it to
 ``flags.judge``, the D15 subsystem, instead.
 
-Preflight stays thin on purpose (plan §4.3): trim, reject empty, apply a
+Preflight stays thin on purpose: trim, reject empty, apply a
 timeout. No fat auto-install logic — tooling is the arena image's job
 (D2/`arena/Dockerfile`); a missing tool surfaces as a normal command failure,
 not something dispatch tries to silently self-heal.
@@ -93,6 +93,6 @@ class ToolDispatcher:
         pattern = str(arguments.get("flag_pattern", "")).strip()
         if not pattern:
             return _blocked("search_flag: empty flag_pattern")
-        # -r recursive, -n line numbers (provenance, plan §4.4), -o only-matching, -I skip binaries
+        # -r recursive, -n line numbers (provenance), -o only-matching, -I skip binaries
         command = f"grep -rnoIE {shlex.quote(pattern)} /ctf/ 2>/dev/null | head -200"
         return _from_exec(self._sandbox.exec(command, timeout_s=_DEFAULT_TIMEOUT_S), command)

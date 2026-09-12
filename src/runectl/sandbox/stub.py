@@ -1,4 +1,4 @@
-"""In-process fake sandbox: no daemon, no tokens (D2, plan §2.2).
+"""In-process fake sandbox: no daemon, no tokens (D2).
 
 Built before :class:`~runectl.sandbox.docker.DockerSandbox` so the loop is
 testable from day one. Commands are resolved from a scripted lookup table

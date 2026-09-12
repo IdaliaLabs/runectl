@@ -670,7 +670,7 @@ class RunectlTUI(App[None]):
         """Phase 5's demo: step through a finished run's trace at a readable
         pace, one event per `_playback_delay_s` seconds — "show the thought,
         show the command, show the output, show the next move"
-        (`PLAN.md`'s stated demo). Reads only the already-recorded
+        — the demo this project set out to build. Reads only the already-recorded
         `trace.jsonl` — no sandbox, no provider, no spend."""
         self._selected_run_id = run_id
         self.query_one("#timeline-log", RichLog).clear()

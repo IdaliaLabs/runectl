@@ -1,4 +1,4 @@
-"""The five tools, defined once; wire formats are derived per provider (D7, plan §3.1).
+"""The five tools, defined once; wire formats are derived per provider (D7).
 
 Carried from the predecessor tool's proven minimal surface:
 ``run_command`` is the workhorse, ``run_gdb`` is batch-only so it can never

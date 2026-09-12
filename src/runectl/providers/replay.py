@@ -1,4 +1,4 @@
-"""Cassette recording/replay: byte-identical responses at zero spend (D5, plan §3.5).
+"""Cassette recording/replay: byte-identical responses at zero spend (D5).
 
 ``--record`` wraps a real provider in :class:`RecordingProvider`, which hashes
 each request and appends the request/response pair to ``cassette.jsonl``.

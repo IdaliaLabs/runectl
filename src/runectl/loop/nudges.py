@@ -1,4 +1,4 @@
-"""Earned nudges as pure functions (plan §5.5).
+"""Earned nudges as pure functions.
 
 Carried from the predecessor tool's proven anti-failure patches, re-expressed
 as pure functions instead of branches scattered through the

@@ -1,4 +1,4 @@
-"""Context management: summarize, don't truncate; one limit (D12, plan §5.4).
+"""Context management: summarize, don't truncate; one limit (D12).
 
 NOTE on scope: token-budget compaction is approximated here by a message-count
 threshold, not a real per-provider token count — accurate tokenization is a
@@ -71,7 +71,7 @@ def summarize_tool_output(
 
 @dataclass
 class ContextBuilder:
-    """Dedupes identical tool output by digest (plan §4.5/§5.4), applies the one
+    """Dedupes identical tool output by digest, applies the one
     context limit (D12), and owns history compaction."""
 
     limit: int = DEFAULT_TOOL_OUTPUT_LIMIT

@@ -1,4 +1,4 @@
-"""Durable run storage: files are authoritative (D3, plan §1.4).
+"""Durable run storage: files are authoritative (D3).
 
 ``~/.local/share/runectl/runs/<run_id>/{run.json,trace.jsonl,artifacts/,cassette.jsonl}``.
 ``run.json`` is a small manifest rewritten wholesale on ``finish_run``; everything

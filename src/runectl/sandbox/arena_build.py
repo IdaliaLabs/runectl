@@ -1,4 +1,4 @@
-"""Arena image lifecycle: inspect / build / load / pull (D2, D17, plan §2.4).
+"""Arena image lifecycle: inspect / build / load / pull (D2, D17).
 
 The arena image is the one piece of setup a user must do before any run, and
 until D17 the only remedy on a fresh machine was "run `runectl arena build`" —

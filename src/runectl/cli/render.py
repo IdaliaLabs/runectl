@@ -1,4 +1,4 @@
-"""stdout=NDJSON (off-TTY default); stderr=human render (D4, D13, plan §9.2).
+"""stdout=NDJSON (off-TTY default); stderr=human render (D4, D13).
 
 Each renderer is a pure function of one event — it may never read run state
 (D4), which is what guarantees the human view can only ever show you something
