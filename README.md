@@ -13,9 +13,9 @@ Bring your own API key. Bring your own model. No server, no browser, no account.
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
-[![Status: v0.1.4 alpha](https://img.shields.io/badge/status-v0.1.4%20alpha-8B6FF5.svg)](CHANGELOG.md)
+[![Status: v0.1.5 alpha](https://img.shields.io/badge/status-v0.1.5%20alpha-8B6FF5.svg)](CHANGELOG.md)
 [![Tests: 294](https://img.shields.io/badge/tests-294%20·%20no%20key%20needed-6EE7A8.svg)](CONTRIBUTING.md)
-[![Bench: 7/10](https://img.shields.io/badge/bench-7%2F10%20solved-E8C16B.svg)](bench/results/README.md)
+[![Bench: 6-7/10](https://img.shields.io/badge/bench-6%E2%80%937%2F10%20across%20runs-E8C16B.svg)](bench/results/README.md)
 [![Models: 37](https://img.shields.io/badge/models-37%20across%203%20providers-4FA8E8.svg)](docs/CLI.md)
 
 <sub>from [Idalia Labs](https://github.com/IdaliaLabs) · founded by JMU students</sub>
@@ -95,16 +95,21 @@ record, including the judge's own re-derivation.
   priced at their own rate, per model. Getting this wrong is easy and silent — see
   [`CHANGELOG.md`](CHANGELOG.md) for two ways we got it wrong and how they were found.
 
-> **Status: v0.1.4, public alpha.** M0–M9 are built and green: the loop, trace, sandbox,
+> **Status: v0.1.5, public alpha.** M0–M9 are built and green: the loop, trace, sandbox,
 > provider and replay layers, the progress/budget machinery, the false-flag subsystem,
 > `runectl bench`, and **all eight categories** — `crypto`, `misc`, `web`, `pwn`, `rev`,
 > `forensics`, `osint`, `network`, at equal depth. It has been scored on live challenges
-> and those numbers are published in full: the latest run (2026-09-09, `claude-sonnet-5`,
-> ten-challenge suite) scored **7 of 10 solved with 1 false flag, and the V1 gate met — 6
-> solved, 0 false over the 7 gated cases** ([`bench/results/README.md`](bench/results/README.md)).
-> The write-ups lead with the failures: a `rev` challenge the per-run spend ceiling cut
-> off mid-derivation, a `crypto` challenge finalized one transformation short, and a trace
-> where the agent gamed one of our own checks. Read [`docs/STATUS.md`](docs/STATUS.md) for
+> and those numbers are published in full, including the ones that disagree with each
+> other: two scored runs of the ten-challenge suite on `claude-sonnet-5` returned **7/10
+> with 1 false flag** (2026-09-09) and **6/10 with 2** (2026-09-13, current code)
+> ([`bench/results/README.md`](bench/results/README.md)). The V1 gate was met on the
+> first and missed on the second. That spread is not noise to be averaged away: repeating
+> one gated case eight times showed it false-flags roughly one run in six, which means a
+> single suite run cannot establish a zero-false-flag gate at all — so this README no
+> longer claims it does. The write-ups lead with the failures: a `rev` challenge the
+> per-run spend ceiling cut off mid-derivation, a `crypto` challenge finalized one
+> transformation short, a `rev` challenge that re-derived a confidently wrong flag, and a
+> trace where the agent gamed one of our own checks. Read [`docs/STATUS.md`](docs/STATUS.md) for
 > the line-by-line breakdown of what is verified versus what merely exists before you rely
 > on anything here. `0.x` means the CLI's flags and output shape can still change.
 

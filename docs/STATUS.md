@@ -298,21 +298,31 @@ forensics and network, so a solve rate is no longer only a statement about crypt
 Three categories still can't be measured in the gate — `web` needs a live service the
 offline sandbox can't host, and `pwn`/`osint` are present but scored *outside the gate*
 (pwn: a local flag file the agent can read directly; osint: an answer in rotted
-live-internet state). The ten-challenge suite was scored on 2026-09-09 (claude-sonnet-5,
-`bench/results/README.md`): **7/10 solved, 1 false flag, and the V1 gate MET — 6 solved,
-0 false over the 7 gated cases.** Of the new categories, forensics and network solved;
-rev was cut off mid-derivation by the per-run spend ceiling (a budget outcome, not a
-capability wall).
+live-internet state). The ten-challenge suite has been scored twice (claude-sonnet-5,
+`bench/results/README.md`): **7/10 with 1 false flag, gate met** on 2026-09-09, and
+**6/10 with 2 false flags, gate missed** on 2026-09-13 against current code. The two
+disagree on one gated case, `esrever`, which repeats show false-flags about one run in
+six — so the difference between them is not necessarily the code.
 
-**Four live bench scores. The gate is met on the third and again on the fourth — read
-what that means.** The latest run (2026-09-09, `bench/results/README.md`, the M7
-ten-challenge suite) scored **7 of 10 solved with 1 false flag**, with the gate **met — 6
-solved, 0 false over 7 gated cases** spanning crypto, misc, forensics and network. The
-earlier third run (2026-09-08) met it at 3 solved / 0 false over 4 gated cases on the
-five-challenge, four-fifths-crypto suite. The gate says the false-flag subsystem is doing
-its job on the cases it can fairly judge. It does not say the solver is finished — `rev`
-went unsolved (cut off by the per-run spend ceiling mid-derivation), and the one false
-flag is still `quick-math`, below.
+**Five live bench scores, and they do not agree. Read what that means.** The gate was
+met on 2026-09-08 (3 solved / 0 false over 4 gated, on the older five-challenge suite)
+and on 2026-09-09 (**7/10**, 6 solved / 0 false over 7 gated). It was **missed** on
+2026-09-13 (**6/10**, 5 solved / 1 false), the first run against current code.
+
+The honest reading is not that something regressed. Repeating the case that broke the
+gate — `esrever` — eight times on the same code returned five correct and one false at
+the default setting, and one of each at `--thinking high`: roughly a one-in-six false
+flag, with a different wrong answer each time. A gate that asks for *zero* false flags
+therefore cannot be established by one suite run, because a single run of a stochastic
+suite passes or fails partly on luck. Earlier versions of this file, and of the README,
+asserted "the V1 gate is met" as though it were a property of the tool. It is a property
+of a sample. That was overclaiming and is corrected here rather than quietly restated.
+
+What the gate results do support is narrower and still worth something: on the cases it
+can fairly judge, the false-flag subsystem catches what it was built to catch. What it
+does not catch is a derivation that is internally consistent and wrong — `quick-math`
+and now `esrever` both re-derived cleanly while being wrong, because re-derivation
+proves provenance, not correctness.
 
 `quick-math` is the excluded case, and it is excluded for a stated reason rather than for
 being hard: its run does the Hastad broadcast attack correctly and submits the recovered
@@ -368,7 +378,8 @@ description does not contain enough to solve it without the original repo's file
 - **M7 — done (2026-09-09).** The remaining five categories (`pwn`, `rev`, `forensics`,
   `osint`, `network`) ship as data at equal depth, the arena grew the toolset they name,
   and the bench grew from 5 to 10 (one case per new category). Re-benched the same day:
-  7/10 solved, 1 false flag, V1 gate met over the 7 gated cases.
+  7/10 solved, 1 false flag, V1 gate met over the 7 gated cases — a result the
+  2026-09-13 re-bench did not reproduce (6/10, 2 false, gate missed); see above.
 - **M9 — done (2026-09-09).** Grew beyond its original "human render polish" scope into
   the operator surface as a whole: extended thinking (D20) captured as its own trace
   event and rendered live; `runectl config`/`models`/`runs` (discovery and preference

@@ -4,6 +4,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 [SemVer](https://semver.org/); `0.x` means the CLI contract can still change between
 minor versions — see [`docs/CLI.md`](docs/CLI.md)'s Stability note.
 
+## [0.1.5] — 2026-09-13
+
+### Fixed
+- **`runectl config set run.max_cost` / `run.approval` silently did nothing.** Both keys
+  were advertised in `runectl config --help` as "run-wide defaults" while nothing read
+  them — setting one succeeded, wrote the file, and changed no run. Now read by `run` and
+  `bench run`, with precedence explicit flag > config > built-in default, so config can
+  only fill a gap the command line left (D5 is untouched: `--model` is still required).
+  A configured `0` means D19's "no ceiling" and is no longer mistaken for unset.
+- **The TUI help text misdescribed the default approval policy.** It said runectl "never
+  submits an answer on its own by default — a candidate sits in the Flags tab until you
+  select it," which is true only of `--approval strict`. Under the default `gated`, a
+  candidate that matches the flag format *and* re-derives in the sandbox is finalized
+  with no human involved. That is the safety claim, so it mattered that it was wrong.
+
+### Added
+- **Every CLI command is now reachable from the TUI.** `index rebuild` (`i`) and
+  `replay --check` (`R`) were terminal-only, and the run-wide config defaults above were
+  reachable from neither. All are keybound and in the `ctrl+p` palette, and
+  `tests/unit/test_cli_tui_parity.py` fails if a new CLI command is added without a route.
+
+### Changed
+- **The bench is no longer presented as a single number.** A second scored run of the
+  ten-challenge suite (2026-09-13, first against post-fix code) returned 6/10 with 2 false
+  flags and missed the V1 gate, where 2026-09-09 returned 7/10 with 1 and met it. Eight
+  repeats of the case that broke the gate showed it false-flags about one run in six, at
+  `--thinking high` as well as at the default — so the spread is sampling, not regression,
+  and a single run cannot establish a zero-false-flag gate. The README badge, the status
+  block and `docs/STATUS.md` no longer claim the gate as met; both runs are published
+  side by side with the variance measured. See `bench/results/README.md`.
+
 ## [0.1.4] — 2026-09-13
 
 The last provider gets its first real call. An OpenAI key drove every one of the 18

@@ -39,9 +39,13 @@ It keeps up while a run is still going.
   Flags     — candidate answers waiting on your approval; the tab shows how many
 
 [b]Approving a flag[/b]
-runectl never submits an answer on its own by default — a candidate sits in the
-Flags tab until you select it. That gate is the point: a wrong flag costs nothing
-until you say yes.
+Under the default [b]--approval gated[/b], a candidate finalizes on its own when it
+matches the expected flag format [i]and[/i] re-derives in the sandbox; anything that
+fails either check waits in the Flags tab for you. Re-derivation proves the flag
+came from a command that really produced it — not that the derivation was right,
+so a confidently wrong answer can still pass.
+Run [b]--approval strict[/b] if you want to see every candidate before it counts:
+nothing auto-finalizes, and the run ends as `candidate` until you approve it.
 
 [b]Everything else is one key away[/b]
   k  API keys           a  arena sandbox image     c  config defaults

@@ -7,8 +7,13 @@ These are kept in the repo on purpose. D16 says step limits and budgets come
 down as real data arrives and never go up, which is only checkable if the data
 that justified a change is still here to read.
 
-> **Every result below predates the 2026-09-11 thinking fix, and is not cost-comparable
-> with anything scored after it.** All of these runs used `claude-sonnet-5` at the default
+> **Read the 2026-09-13 entry first.** It is the only result scored against current
+> code, and it is the one that establishes that a single suite run is not a property
+> of the tool — the same gated case passes or fails across repeats, so "the V1 gate is
+> met" is a statement about one sample, not about `runectl`.
+
+> **Every result below the 2026-09-13 entry predates the 2026-09-11 thinking fix, and is
+> not cost-comparable with anything scored after it.** All of these runs used `claude-sonnet-5` at the default
 > `--thinking off`, which at the time sent no thinking configuration at all — and Anthropic
 > documents Sonnet 5 as thinking by default, so the model reasoned and billed for it while
 > each trace recorded `thinking_level='off'`. The costs reported here are what those runs
@@ -18,6 +23,61 @@ that justified a change is still here to read.
 > agent did. See `docs/ARCHITECTURE.md`'s dated D20 amendment. These are not being re-run:
 > the point of keeping them is that they are the evidence that justified the decisions
 > above, and rewriting evidence after the fact is the opposite of that.
+
+## 2026-09-13 — claude-sonnet-5 — first run against post-fix code, and the gate misses
+
+`2026-09-13-claude-sonnet-5.json`. The first suite scored after the 2026-09-11 thinking
+fix and the 2026-09-12/13 provider fixes. Run with the same flags as 2026-09-09 (default
+`--thinking off`, default `--approval gated`), so the difference is the code, not the
+invocation.
+
+| | 2026-09-09 | 2026-09-13 |
+|---|---|---|
+| solve rate | 7/10 | **6/10** |
+| false flags | 1 (`quick-math`, outside the gate) | **2** (`quick-math`, plus `esrever`) |
+| V1 gate | MET — 6 solved / 0 false over 7 gated | **NOT MET** — 5 solved / 1 false |
+| cost | $1.34 | $1.2822 |
+
+The gate misses on one case. `esrever` finalized
+`csictf{aesreverisjustreverseinreverseright}` against an expected
+`csictf{esreverisjustreverseinreverseright}` — one leading character.
+
+**That case is not deterministic, and measuring it is the point of this entry.** Eight
+repeats of `esrever` alone, same day, same code:
+
+| invocation | runs | correct | false |
+|---|---|---|---|
+| default (`--thinking off`, clamps to `low`) | 6 | 5 | **1** |
+| `--thinking high` | 2 | 1 | **1** |
+
+The two false flags were different wrong answers — `csictf{aesrever…}` once,
+`csictf{esrever_is_just_reverse_in_reverse_right}` once. Both are the agent guessing at
+punctuation and word boundaries after a decrypt that yields an unbroken run of letters;
+neither is a failure to solve the challenge. Roughly one run in six at the default.
+
+Three conclusions, in descending order of how much they matter:
+
+1. **A single suite run cannot establish the V1 gate.** The gate asks for zero false
+   flags. If one gated case false-flags ~17% of the time, then any individual suite run
+   has a meaningful chance of missing the gate *regardless of whether anything changed*.
+   2026-09-09 passed and 2026-09-13 failed, and the difference between them is not
+   necessarily the code. Stating "the gate is met" on the strength of one run was
+   overclaiming, and this file said so nowhere until now.
+2. **The regression is not the thinking fix.** It reproduces at `--thinking high`, which
+   that fix does not touch. Solved runs also got markedly cheaper — `modern-clueless-child`
+   $0.0160, `little-rsa` $0.0171, `gradient-sky` $0.0204 — which is the fix doing exactly
+   what it was expected to do. The suite total barely moved only because two runs hit the
+   $0.50 ceiling and account for $1.02 of the $1.28.
+3. **Re-derivation proves provenance, not correctness.** `esrever`'s wrong flag re-derived
+   cleanly: the command really did produce that string. This is the same class as
+   `quick-math`, which has been documented as uncatchable since 2026-09-08 — the
+   difference is only that `quick-math` is scored outside the gate and `esrever` is not.
+   Under the default `--approval gated`, a candidate that matches the flag format and
+   re-derives is finalized with no human involved.
+
+Not re-run further, and the numbers above are not being averaged into a headline. Two
+sampled runs and eight repeats of one case are what exists; presenting a mean of that as
+a solve rate would be a worse claim than showing both runs and the spread.
 
 ## 2026-09-10 — claude-sonnet-5 — the disconfirmation review removed (D11/D15)
 
