@@ -127,3 +127,63 @@ def test_error_factories_carry_actionable_text_and_the_right_exit_codes() -> Non
     assert "OPENAI_API_KEY" in str(ue) and "keys set openai" in str(ue)
     pe = api_error("Google", RuntimeError("400 bad request"))
     assert isinstance(pe, ProviderError) and pe.exit_code == 5
+
+
+def test_a_provider_stated_retry_delay_is_honored() -> None:
+    """Found live on 2026-09-13 against Gemini's free tier.
+
+    Exponential backoff over four attempts waits roughly seven seconds in total.
+    A per-minute quota that clears in thirty-five is therefore indistinguishable
+    from a hard failure — the run died after four fast retries against a limit
+    that was about to lift. Free-tier users are exactly who the README points at
+    cheap models, so this was their default experience.
+    """
+    from runectl.providers.base import MAX_RETRY_AFTER_S
+
+    class _RateLimited:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def complete(
+            self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema],
+            max_tokens: int, thinking: ThinkingLevel = "off",
+        ) -> Completion:
+            self.calls += 1
+            if self.calls == 1:
+                raise TransientProviderError("429 quota exceeded", retry_after=35.0)
+            return _OK
+
+    slept: list[float] = []
+    result = complete_with_retry(
+        _RateLimited(), _MODEL, CostLedger(),
+        system="s", messages=[], tools=[], max_tokens=10, sleep=slept.append,
+    )
+    assert result.text == "ok"
+    assert slept[0] >= 35.0, f"waited {slept} — less than the provider asked for"
+    assert slept[0] <= MAX_RETRY_AFTER_S
+
+
+def test_an_absurd_retry_delay_is_capped() -> None:
+    """D19 bounds dollars; nothing bounds wall-clock, so a hostile or buggy
+    delay must not park a run for a day."""
+    from runectl.providers.base import MAX_RETRY_AFTER_S
+
+    class _Hostile:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def complete(
+            self, *, system: str, messages: Sequence[Message], tools: Sequence[ToolSchema],
+            max_tokens: int, thinking: ThinkingLevel = "off",
+        ) -> Completion:
+            self.calls += 1
+            if self.calls == 1:
+                raise TransientProviderError("429", retry_after=86_400.0)
+            return _OK
+
+    slept: list[float] = []
+    complete_with_retry(
+        _Hostile(), _MODEL, CostLedger(),
+        system="s", messages=[], tools=[], max_tokens=10, sleep=slept.append,
+    )
+    assert slept[0] == MAX_RETRY_AFTER_S

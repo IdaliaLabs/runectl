@@ -106,6 +106,15 @@ class ModelInfo(BaseModel):
     # a model never thinks in the first place.
     thinking_off_supported: bool = True
 
+    # Added 2026-09-13 after a live probe: the provider still lists this model
+    # and existing accounts may still call it, but it is closed to new ones and
+    # returns 404 for them. Kept registered rather than deleted — deleting it
+    # would break the accounts that *do* have access, and the provider's own 404
+    # names the replacement more helpfully than an "unknown model" error would.
+    # Excluded from `cheapest_model_for`, because a default nobody new can use
+    # is not a default.
+    retired: bool = False
+
 
 MODEL_REGISTRY: dict[str, ModelInfo] = {
     # ---------------------------------------------------------------- anthropic
@@ -344,17 +353,20 @@ MODEL_REGISTRY: dict[str, ModelInfo] = {
         supports_prompt_cache=True, price_in=1.25, price_out=10.0,
         supports_thinking=True, thinking_style="google_budget", max_thinking_level="high",
         thinking_off_supported=False,
+        retired=True,
     ),
     "gemini-2.5-flash": ModelInfo(
         id="gemini-2.5-flash", provider="google", context_window=1_000_000,
         supports_prompt_cache=False, price_in=0.30, price_out=2.50,
         supports_thinking=True, thinking_style="google_budget", max_thinking_level="high",
         thinking_off_supported=False,
+        retired=True,
     ),
     "gemini-2.5-flash-lite": ModelInfo(
         id="gemini-2.5-flash-lite", provider="google", context_window=1_000_000,
         supports_prompt_cache=False, price_in=0.10, price_out=0.40,
         supports_thinking=True, thinking_style="google_budget", max_thinking_level="high",
+        retired=True,
     ),
 }
 
@@ -376,7 +388,9 @@ def resolve(model_id: str) -> ModelInfo:
 
 def cheapest_model_for(provider: ProviderName) -> ModelInfo:
     """Default --utility-model: the cheapest model of the same provider as --model."""
-    candidates = [m for m in MODEL_REGISTRY.values() if m.provider == provider]
+    candidates = [
+        m for m in MODEL_REGISTRY.values() if m.provider == provider and not m.retired
+    ]
     if not candidates:
         raise UnknownModelError(f"no registered models for provider {provider!r}")
     return min(candidates, key=lambda m: m.price_in + m.price_out)

@@ -9,6 +9,7 @@ pydantic/mypy error, not something that can slip into the trace as a bare dict.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
@@ -328,8 +329,59 @@ class Event(BaseModel):
     data: dict[str, Any]
 
     def payload(self) -> EventPayload:
-        """Validate ``data`` back into its typed payload model."""
+        """Validate ``data`` back into its typed payload model.
+
+        Spilled fields are substituted with a short placeholder first; see
+        :func:`describe_artifact_refs`. Without that, any event carrying a tool
+        output over the spill threshold raised a ``ValidationError`` here — a
+        string field holding ``{"$artifact": ..., "bytes": ...}`` is not a
+        string — and every caller of this method broke on it.
+        """
         model = EVENT_TYPES.get(self.type)
         if model is None:
             raise ValueError(f"unknown event type: {self.type!r}")
-        return model.model_validate(self.data)
+        return model.model_validate(describe_artifact_refs(self.data))
+
+
+def _is_artifact_ref(value: Any) -> bool:
+    return isinstance(value, dict) and "$artifact" in value and "bytes" in value
+
+
+def describe_artifact_refs(data: Any) -> Any:
+    """Replace unresolved spill references with a short human-readable note.
+
+    The writer moves any string over ``ARTIFACT_SPILL_THRESHOLD_BYTES`` into
+    ``artifacts/`` and leaves ``{"$artifact": digest, "bytes": n}`` in its place
+    (D3). That is correct on disk and wrong in memory: the payload models type
+    those fields as ``str``, so validating a spilled event raised instead of
+    returning one.
+
+    Callers that can reach the artifacts directory should resolve the real
+    content first (``TraceReader`` does). This is the fallback for the ones that
+    cannot — chiefly the live render path, which receives an event at emit time
+    and only ever prints a clipped line of it anyway.
+    """
+    if _is_artifact_ref(data):
+        return f"<{data['bytes']} bytes in artifacts/{data['$artifact']}.txt>"
+    if isinstance(data, dict):
+        return {k: describe_artifact_refs(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [describe_artifact_refs(v) for v in data]
+    return data
+
+
+def resolve_artifact_refs(data: Any, artifacts_dir: Path) -> Any:
+    """Restore spilled strings from ``artifacts/``, so a reader sees the run as
+    it happened rather than a summary of it. Falls back to the placeholder for
+    an artifact file that is missing (a partially copied run directory)."""
+    if _is_artifact_ref(data):
+        path = artifacts_dir / f"{data['$artifact']}.txt"
+        try:
+            return path.read_text(encoding="utf-8")
+        except OSError:
+            return describe_artifact_refs(data)
+    if isinstance(data, dict):
+        return {k: resolve_artifact_refs(v, artifacts_dir) for k, v in data.items()}
+    if isinstance(data, list):
+        return [resolve_artifact_refs(v, artifacts_dir) for v in data]
+    return data

@@ -13,8 +13,8 @@ Bring your own API key. Bring your own model. No server, no browser, no account.
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
-[![Status: v0.1.2 alpha](https://img.shields.io/badge/status-v0.1.2%20alpha-8B6FF5.svg)](CHANGELOG.md)
-[![Tests: 289](https://img.shields.io/badge/tests-289%20·%20no%20key%20needed-6EE7A8.svg)](CONTRIBUTING.md)
+[![Status: v0.1.3 alpha](https://img.shields.io/badge/status-v0.1.3%20alpha-8B6FF5.svg)](CHANGELOG.md)
+[![Tests: 294](https://img.shields.io/badge/tests-294%20·%20no%20key%20needed-6EE7A8.svg)](CONTRIBUTING.md)
 [![Bench: 7/10](https://img.shields.io/badge/bench-7%2F10%20solved-E8C16B.svg)](bench/results/README.md)
 [![Models: 37](https://img.shields.io/badge/models-37%20across%203%20providers-4FA8E8.svg)](docs/CLI.md)
 
@@ -95,7 +95,7 @@ record, including the judge's own re-derivation.
   priced at their own rate, per model. Getting this wrong is easy and silent — see
   [`CHANGELOG.md`](CHANGELOG.md) for two ways we got it wrong and how they were found.
 
-> **Status: v0.1.2, public alpha.** M0–M9 are built and green: the loop, trace, sandbox,
+> **Status: v0.1.3, public alpha.** M0–M9 are built and green: the loop, trace, sandbox,
 > provider and replay layers, the progress/budget machinery, the false-flag subsystem,
 > `runectl bench`, and **all eight categories** — `crypto`, `misc`, `web`, `pwn`, `rev`,
 > `forensics`, `osint`, `network`, at equal depth. It has been scored on live challenges
@@ -224,7 +224,7 @@ required and never inferred; these are the ones worth knowing:
 | Model | Provider | In / Out per 1M | Good for |
 |---|---|---|---|
 | `gpt-5-nano` | openai | $0.05 / $0.40 | the cheapest thing that can drive the loop at all |
-| `gemini-2.5-flash-lite` | google | $0.10 / $0.40 | cheap, 1M context, thinking genuinely off by default |
+| `gemini-3.1-flash-lite` | google | $0.25 / $1.50 | cheapest Google model still open to new accounts |
 | `gpt-5.6-luna` | openai | $0.20 / $1.20 | cheap *and* current-generation reasoning |
 | `claude-haiku-4-5` | anthropic | $1.00 / $5.00 | the default utility/summarizer model |
 | `claude-sonnet-5` | anthropic | $2.00 / $10.00 | what every published bench number here was scored with |
@@ -234,13 +234,15 @@ required and never inferred; these are the ones worth knowing:
 uv run runectl models list     # all 37, with price, context, thinking support, key presence
 ```
 
-Two things to know before you trust a cost report. **Only the Anthropic path has ever run
-against a live service** — the OpenAI and Google adapters are written against their SDKs'
-documented shapes and are unverified ([`docs/STATUS.md`](docs/STATUS.md)). And
-**`--thinking off` cannot always be honored**: most current models think by default, and
-some cannot be stopped at all. Where that is the case `runectl` requests the cheapest real
-level instead and records the clamp in the trace, rather than letting the provider's
-default run unreported.
+Three things to know. **The OpenAI path has never run against a live service** — that
+adapter is written against the SDK's documented shapes and is unverified
+([`docs/STATUS.md`](docs/STATUS.md)); Anthropic and Google have both been exercised for
+real. **Some registered models are closed to new accounts** — the `gemini-2.5-*` rows in
+particular — and are marked `retired` in `runectl models list`; they stay registered for
+accounts that kept access, and are never chosen as a default. And **`--thinking off`
+cannot always be honored**: most current models think by default and some cannot be
+stopped at all, so `runectl` requests the cheapest real level instead and records the
+clamp in the trace, rather than letting the provider's default run unreported.
 
 ## The TUI
 

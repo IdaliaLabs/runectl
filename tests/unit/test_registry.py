@@ -58,8 +58,13 @@ def test_every_provider_has_a_utility_model(provider: str) -> None:
     rows would make every run on it fail at construction."""
     model = cheapest_model_for(provider)  # type: ignore[arg-type]
     assert model.provider == provider
+    # Cheapest *available*: a retired row is still registered so accounts that
+    # kept access can name it explicitly, but it must never be handed to someone
+    # as a default they never chose. Google's cheapest row on price alone is
+    # gemini-2.5-flash-lite, which 404s for every new account.
+    assert not model.retired
     assert model is min(
-        (m for m in MODEL_REGISTRY.values() if m.provider == provider),
+        (m for m in MODEL_REGISTRY.values() if m.provider == provider and not m.retired),
         key=lambda m: m.price_in + m.price_out,
     )
 

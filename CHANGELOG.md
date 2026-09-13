@@ -4,6 +4,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 [SemVer](https://semver.org/); `0.x` means the CLI contract can still change between
 minor versions — see [`docs/CLI.md`](docs/CLI.md)'s Stability note.
 
+## [0.1.3] — 2026-09-13
+
+The first release where a second provider has actually been run. A live Gemini key drove
+`bench/practice/easy-02` for 39 steps; four bugs fell out, none of which the type checker,
+the linter or 289 tests had caught, and none of which a test could have caught.
+
+### Fixed
+- **Gemini rejected every second turn.** It attaches a `thought_signature` to each
+  `functionCall` part and requires it back verbatim on the next request; the adapter
+  dropped it, so any run involving a tool call — which is all of them — died at step 2
+  with a 400. Now carried on `ToolCallRequest.provider_signature`.
+- **A tool output over 8KB silently truncated the trace.** The writer spills large strings
+  to `artifacts/` and leaves a reference (D3), and nothing resolved it on the way back.
+  `Event.payload()` raised, the live renderer crashed mid-run, and `TraceReader` mistook
+  that error for a torn final line — so `trace show`, `replay` and the TUI all stopped at
+  the first large output and dropped the rest without a word. The reader had held an
+  `artifacts_dir` it never once read. The trace is the product; this was the worst bug in
+  the codebase.
+- **Three registry models were dead.** `gemini-2.5-pro`, `gemini-2.5-flash` and
+  `gemini-2.5-flash-lite` are closed to new accounts and 404. The last was both the
+  README's recommended cheap Google pick and the default utility model for Google. Now
+  marked `retired`, excluded from defaults, flagged in `runectl models list`, and kept
+  registered for accounts that still have access.
+- **Rate-limit backoff ignored the provider's stated delay.** Gemini's free tier asks for
+  ~35 seconds; four exponential retries wait about seven in total, so a limit about to
+  lift was indistinguishable from a hard failure — the default experience for exactly the
+  free-tier users the README points at cheap models.
+
 ## [0.1.2] — 2026-09-12
 
 ### Fixed

@@ -50,6 +50,46 @@ point of this file is that nothing here should surprise you at run time.
 
 ## Live-verified since the skeleton
 
+**2026-09-13 — the Google adapter, exercised for real for the first time.** A live Gemini
+key ran `bench/practice/easy-02` end to end: **39 steps**, thinking captured per step, tool
+calls dispatched into the sandbox, results returned, cost accumulating correctly to
+$0.1579. It did not solve the challenge (a cheap model on a free tier), but the adapter,
+the D20 thinking round-trip, the cost ledger and the artifact spill path all work against
+a live service. Four bugs surfaced in the process, none of which any test had caught, and
+none of which could have been caught without a real call:
+
+- **Three registry rows were dead.** `gemini-2.5-pro`, `gemini-2.5-flash` and
+  `gemini-2.5-flash-lite` are closed to new accounts and return 404. The last of those was
+  both the README's recommended cheap Google pick *and* `cheapest_model_for("google")` —
+  the default utility model for anyone using Google at all. Now marked `retired`, excluded
+  from defaults, and flagged in `models list`. Note that `models.list()` still lists all
+  three: the listing is not an availability signal, only a call is.
+- **Gemini rejected every second turn.** It attaches a `thought_signature` to each
+  `functionCall` part and requires it back verbatim; the adapter dropped it, so any run
+  with a tool call died at step 2 with a 400. D20 already required thinking state to
+  round-trip per each provider's contract — this is that contract's Google shape, now
+  carried on `ToolCallRequest.provider_signature`.
+- **A tool output over 8KB broke reading the trace.** See the entry below; found here,
+  but not a Google problem.
+- **Rate-limit backoff ignored the provider's stated delay.** Gemini's free tier asks for
+  ~35s; four exponential retries wait about seven in total, so a limit that was about to
+  lift looked like a hard failure. `TransientProviderError` now carries `retry_after`.
+
+**The OpenAI adapter remains unexercised.** Its cache-token fix and its `reasoning_effort`
+mapping are still unverified against a live service. On the evidence above — two of the
+three adapters had real bugs the moment a real call was made, in code that was typed,
+linted and unit-tested — treat it as untested, not as probably-fine.
+
+**2026-09-13 — a spilled tool output silently truncated the trace.** The writer moves any
+string over 8KB into `artifacts/` and leaves a reference behind (D3). Nothing resolved it
+on the way back: `Event.payload()` raised on the reference, the live human renderer
+crashed mid-run, and `TraceReader` mistook the same error for a torn final line — so
+`trace show`, `replay` and the TUI all stopped at the first large output and silently
+dropped everything after it. The reader had held an `artifacts_dir` it never read since
+the beginning. Both halves fixed; regression in `tests/unit/test_artifact_spill.py`.
+
+
+
 **2026-09-12 — an attempted re-bench, and what it did prove.** A full ten-case suite was
 launched against `claude-sonnet-5` after the thinking fix. It did not produce a score: the
 Anthropic account was out of credit, so all ten runs failed at step 1 for $0.00. Three

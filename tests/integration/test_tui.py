@@ -353,8 +353,9 @@ async def test_model_dropdowns_lead_with_the_cheapest_of_each_provider() -> None
 
     seen: set[str] = set()
     for label, model_id in options:
-        provider = MODEL_REGISTRY[model_id].provider
-        if provider not in seen:
+        model = MODEL_REGISTRY[model_id]
+        provider = model.provider
+        if provider not in seen and not model.retired:
             seen.add(provider)
             assert model_id == cheapest_model_for(provider).id, provider
         # Price belongs in the label; picking a model is mostly a budget call.

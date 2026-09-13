@@ -35,7 +35,9 @@ def model_options(*, mark_missing_keys: bool = True) -> list[tuple[str, str]]:
     options: list[tuple[str, str]] = []
     for model in sorted(MODEL_REGISTRY.values(), key=lambda m: (m.provider, _total_price(m))):
         suffix = ""
-        if mark_missing_keys and not present.get(model.provider):
+        if model.retired:
+            suffix = "  · retired"
+        elif mark_missing_keys and not present.get(model.provider):
             suffix = "  · no key"
         options.append(
             (

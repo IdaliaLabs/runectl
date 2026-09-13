@@ -22,6 +22,9 @@ from runectl.providers.cost import CostLedger
 from runectl.providers.registry import ModelInfo, ThinkingLevel
 from runectl.tools.schema import ToolSchema
 
+# Ceiling on a provider-stated retry delay, in seconds.
+MAX_RETRY_AFTER_S = 90.0
+
 
 class ToolCallRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -29,6 +32,17 @@ class ToolCallRequest(BaseModel):
     id: str
     name: str
     arguments: dict[str, Any]
+    # Opaque per-call continuity token some providers attach to a tool call and
+    # require back verbatim when the turn is replayed. Base64 text, not bytes,
+    # so it survives the trace writer and the cassette as plain JSON.
+    #
+    # Added 2026-09-13 for Gemini, which returns a `thought_signature` on each
+    # functionCall part and rejects the next request with a 400 if it is missing
+    # ("required for tools to work correctly"). Kept generic and optional rather
+    # than named for Google: D20 already says thinking state must round-trip per
+    # each provider's own contract, and this is that contract's Google shape.
+    # Providers with no such concept leave it None.
+    provider_signature: str | None = None
 
 
 class Usage(BaseModel):
@@ -82,7 +96,19 @@ class Completion(BaseModel):
 
 class TransientProviderError(Exception):
     """Raised by an adapter for a 429/5xx/timeout. Retried with backoff; never
-    escapes :func:`complete_with_retry` — callers only ever see :class:`ProviderError`."""
+    escapes :func:`complete_with_retry` — callers only ever see :class:`ProviderError`.
+
+    ``retry_after`` is the provider's own stated wait in seconds, when it gives
+    one. Honoring it matters on a per-minute rate limit: plain exponential
+    backoff over four attempts waits about seven seconds in total, so a limit
+    that clears in thirty is indistinguishable from a hard failure. An adapter
+    that cannot determine a delay leaves it ``None`` and gets the exponential
+    schedule alone.
+    """
+
+    def __init__(self, message: str, retry_after: float | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
 
 
 def auth_error(provider: str, exc: Exception) -> UsageError:
@@ -185,7 +211,15 @@ def complete_with_retry(
         except TransientProviderError as exc:
             last_error = exc
             if attempt < attempts - 1:
-                sleep((2**attempt) + random.uniform(0, 1))
+                backoff = (2**attempt) + random.uniform(0, 1)
+                # A provider that names its own wait knows better than our
+                # curve does; a free-tier per-minute quota routinely asks for
+                # longer than the whole exponential schedule. Capped so a bad
+                # or hostile value cannot park a run indefinitely — D19 bounds
+                # dollars, and nothing bounds wall-clock.
+                if exc.retry_after is not None:
+                    backoff = max(backoff, min(exc.retry_after, MAX_RETRY_AFTER_S))
+                sleep(backoff)
             continue
         ledger.record(
             model,

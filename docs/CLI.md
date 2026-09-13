@@ -62,16 +62,23 @@ is not a column. Rows are grouped by provider, cheapest first.
 | `gpt-5.6-sol` | openai | 1.05M | ✓ 0.1x | to `max` | yes | 4.00 | 20.00 |
 | `gpt-5.5` | openai | 272K | ✓ 0.1x | to `max` | yes | 5.00 | 30.00 |
 | `gpt-6-astra` | openai | 1.05M | ✓ 0.1x | to `max` | **no** | 10.00 | 50.00 |
-| `gemini-2.5-flash-lite` | google | 1M | ✗ | to `high` | yes | 0.10 | 0.40 |
+| `gemini-2.5-flash-lite` ⚠️ | google | 1M | ✗ | to `high` | yes | 0.10 | 0.40 |
 | `gemini-3.1-flash-lite` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.25 | 1.50 |
 | `gemini-3.5-flash-lite` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.30 | 2.50 |
-| `gemini-2.5-flash` | google | 1M | ✗ | to `high` | **no** | 0.30 | 2.50 |
+| `gemini-2.5-flash` ⚠️ | google | 1M | ✗ | to `high` | **no** | 0.30 | 2.50 |
 | `gemini-3.8-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.75 | 3.75 |
 | `gemini-3.7-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.75 | 3.75 |
 | `gemini-3.6-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.75 | 3.75 |
 | `gemini-3.5-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 1.50 | 9.00 |
-| `gemini-2.5-pro` | google | 1M | ✓ 0.1x | to `high` | **no** | 1.25 | 10.00 |
+| `gemini-2.5-pro` ⚠️ | google | 1M | ✓ 0.1x | to `high` | **no** | 1.25 | 10.00 |
 | `gemini-3.1-pro-preview` | google | 1M | ✓ 0.1x | to `high` | **no** | 2.00 | 12.00 |
+
+**⚠️ marks a retired model** — one the provider has closed to new accounts. It stays in
+the registry because accounts that already had access can still name it, and because the
+provider's own 404 ("no longer available to new users, please use X") is more useful than
+an unknown-model error. It is never chosen as a default: `cheapest_model_for` skips
+retired rows, so `--utility-model` never lands on one. Confirmed by a live probe on
+2026-09-13, which is the only way to know — `models.list()` still *lists* all three.
 
 **The `off` honored column** is the one people are surprised by. On most current models,
 sending no thinking configuration does not mean the model does not think — Anthropic

@@ -23,6 +23,7 @@ handled the same way Anthropic's thinking-block signature is (see
 from __future__ import annotations
 
 import base64
+import re
 from collections.abc import Sequence
 
 from google import genai
@@ -52,6 +53,24 @@ def _is_transient(exc: genai_errors.APIError) -> bool:
     if isinstance(exc, genai_errors.ServerError):
         return True
     return isinstance(exc, genai_errors.ClientError) and exc.code == 429
+
+
+_RETRY_DELAY_RE = re.compile(r"'retryDelay':\s*'(\d+(?:\.\d+)?)s'|retry in (\d+(?:\.\d+)?)s")
+
+
+def _retry_after(exc: Exception) -> float | None:
+    """Pull Gemini's own stated wait out of a 429.
+
+    It supplies one in two places — a `RetryInfo.retryDelay` detail and the
+    prose "Please retry in 34.8s" — and the free tier's per-minute quota
+    routinely asks for longer than our whole exponential schedule. The SDK
+    surfaces the body as text rather than a typed field, so this reads it back
+    out; a miss just means the default backoff applies.
+    """
+    match = _RETRY_DELAY_RE.search(str(exc))
+    if match is None:
+        return None
+    return float(match.group(1) or match.group(2))
 
 
 def _thought_part_to_dict(part: types.Part) -> dict[str, object]:
@@ -94,7 +113,17 @@ def _to_google_contents(messages: Sequence[Message]) -> list[types.Content]:
             for call in message.tool_calls:
                 parts.append(
                     types.Part(
-                        function_call=types.FunctionCall(id=call.id, name=call.name, args=call.arguments)
+                        function_call=types.FunctionCall(
+                            id=call.id, name=call.name, args=call.arguments
+                        ),
+                        # Without this Gemini rejects the whole request with a
+                        # 400: "Function call is missing a thought_signature in
+                        # functionCall parts." Found on the first live run.
+                        thought_signature=(
+                            base64.b64decode(call.provider_signature)
+                            if call.provider_signature
+                            else None
+                        ),
                     )
                 )
             out.append(types.Content(role="model", parts=parts))
@@ -189,7 +218,7 @@ class GoogleProvider:
             )
         except genai_errors.APIError as exc:
             if _is_transient(exc):
-                raise TransientProviderError(str(exc)) from exc
+                raise TransientProviderError(str(exc), _retry_after(exc)) from exc
             if isinstance(exc, genai_errors.ClientError) and exc.code in (401, 403):
                 raise auth_error("Google", exc) from exc
             # Any other API error (400/404/422, an unexpected client/server error):
@@ -215,7 +244,18 @@ class GoogleProvider:
             if part.function_call is not None:
                 call = part.function_call
                 tool_calls.append(
-                    ToolCallRequest(id=call.id or "", name=call.name or "", arguments=dict(call.args or {}))
+                    ToolCallRequest(
+                        id=call.id or "",
+                        name=call.name or "",
+                        arguments=dict(call.args or {}),
+                        # Gemini requires this back on the next turn; see
+                        # ToolCallRequest.provider_signature.
+                        provider_signature=(
+                            base64.b64encode(part.thought_signature).decode("ascii")
+                            if part.thought_signature
+                            else None
+                        ),
+                    )
                 )
 
         usage = response.usage_metadata

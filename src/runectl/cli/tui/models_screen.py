@@ -52,6 +52,7 @@ class ModelsScreen(ModalScreen[None]):
             thinking = f"yes (max {model.max_thinking_level})" if model.supports_thinking else "no"
             key = "yes" if present.get(model.provider) else "no"
             table.add_row(
-                model.id, model.provider, str(model.context_window), thinking,
+                f"{model.id}  ⚠ retired" if model.retired else model.id,
+                model.provider, str(model.context_window), thinking,
                 f"{model.price_in:.2f}", f"{model.price_out:.2f}", key,
             )

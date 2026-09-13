@@ -32,6 +32,11 @@ def models_list() -> None:
         has_key = "yes" if keys_present.get(model.provider) else "no"
         thinking = f"yes (max {model.max_thinking_level})" if model.supports_thinking else "no"
         marker = " [configured default]" if configured_defaults.get(model.provider) == model.id else ""
+        # Loud, not silent: an unmarked row that 404s for most readers is
+        # worse than no row. Retired models stay listed because accounts
+        # that kept access can still name them explicitly.
+        if model.retired:
+            marker += " [RETIRED — closed to new accounts]"
         typer.echo(
             f"{model.id}\tprovider={model.provider}\tkey={has_key}\tthinking={thinking}\t"
             f"ctx={model.context_window}\t${model.price_in:.2f}/${model.price_out:.2f} per 1M{marker}"
