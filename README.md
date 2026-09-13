@@ -24,9 +24,9 @@ CLI-only. Bring your own API key and model. No server, no browser, no account.
 
 ---
 
-![runectl solving a challenge: the agent reasons, runs a command in the sandbox, reads the output, and the judge re-derives the flag before finalizing it](docs/demo/runectl-demo.gif)
+![runectl solving a challenge end to end: the agent reasons, runs a command in the sandbox, reads the output, and the judge re-derives the flag before finalizing it](docs/demo/runectl-demo.gif)
 
-<div align="center"><sub>A real run replayed from its own recorded trace at zero spend — <code>runectl tui --replay</code>, not staged footage.</sub></div>
+<div align="center"><sub>One whole run in five seconds — reasoning, two sandboxed commands, re-derivation, exit 0. Replayed from its own recorded trace at zero spend (<code>runectl tui --replay</code>), not staged footage. Reproduce it with <code>make demo</code>.</sub></div>
 
 ---
 
@@ -262,11 +262,12 @@ equivalent.
 | `ctrl+p` | Command palette — every action, searchable |
 | `?` | Help, written for a first-time TUI and CTF user |
 
-![the runectl TUI: a run list with category and outcome filters on the left, a run header line and Timeline/Thinking/Trace/Flags tabs on the right](docs/demo/tui-screenshot.png)
+![the runectl TUI at the end of a run: category and outcome filters over a run list on the left; on the right a run header line, Timeline/Thinking/Trace/Flags tabs, and a timeline showing two sandboxed commands, the candidate flag, its re-derivation, and exit 0](docs/demo/tui-screenshot.png)
 
-| Reasoning, live | A command and its output | Judged and finalized |
-| --- | --- | --- |
-| ![the agent's reasoning appearing a step at a time](docs/demo/thinking.gif) | ![a sandboxed command and its result](docs/demo/toolcall.gif) | ![the flag judge re-deriving and finalizing](docs/demo/solved.gif) |
+The same frame the GIF above ends on. Reading down the timeline: the agent's reasoning
+(`∴`), the command it ran (`→`), what came back (`←`), the candidate flag (`?`), the
+judge re-running the cited command (`↻`), and the finalize decision with the reason it was
+allowed.
 
 Every action composes and executes a real `runectl` command; nothing it does is reachable
 only through the interface.
