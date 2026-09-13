@@ -13,8 +13,8 @@ Bring your own API key. Bring your own model. No server, no browser, no account.
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
-[![Status: v0.1.1 alpha](https://img.shields.io/badge/status-v0.1.1%20alpha-8B6FF5.svg)](CHANGELOG.md)
-[![Tests: 287](https://img.shields.io/badge/tests-287%20·%20no%20key%20needed-6EE7A8.svg)](CONTRIBUTING.md)
+[![Status: v0.1.2 alpha](https://img.shields.io/badge/status-v0.1.2%20alpha-8B6FF5.svg)](CHANGELOG.md)
+[![Tests: 289](https://img.shields.io/badge/tests-289%20·%20no%20key%20needed-6EE7A8.svg)](CONTRIBUTING.md)
 [![Bench: 7/10](https://img.shields.io/badge/bench-7%2F10%20solved-E8C16B.svg)](bench/results/README.md)
 [![Models: 37](https://img.shields.io/badge/models-37%20across%203%20providers-4FA8E8.svg)](docs/CLI.md)
 
@@ -95,7 +95,7 @@ record, including the judge's own re-derivation.
   priced at their own rate, per model. Getting this wrong is easy and silent — see
   [`CHANGELOG.md`](CHANGELOG.md) for two ways we got it wrong and how they were found.
 
-> **Status: v0.1.1, public alpha.** M0–M9 are built and green: the loop, trace, sandbox,
+> **Status: v0.1.2, public alpha.** M0–M9 are built and green: the loop, trace, sandbox,
 > provider and replay layers, the progress/budget machinery, the false-flag subsystem,
 > `runectl bench`, and **all eight categories** — `crypto`, `misc`, `web`, `pwn`, `rev`,
 > `forensics`, `osint`, `network`, at equal depth. It has been scored on live challenges
@@ -280,7 +280,7 @@ uv run runectl tui --replay <run_id>   # animate through a finished run's trace,
 | 3 | run exhausted, no candidate |
 | 4 | sandbox / infrastructure failure |
 | 5 | provider failure after retries |
-| 6 | usage / config error |
+| 6 | usage / config error — including a provider account out of credit, which never clears on retry |
 
 Code 2 is the default policy working as intended: under `--approval gated` a flag the
 judge could not re-derive in the sandbox ends the run as a *candidate* rather than a

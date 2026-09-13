@@ -56,3 +56,33 @@ def test_a_400_becomes_a_clean_provider_error() -> None:
     with pytest.raises(ProviderError) as caught:
         _provider(exc).complete(system="s", messages=[], tools=(), max_tokens=10)
     assert caught.value.exit_code == 5
+
+
+def test_a_billing_400_exits_6_not_5() -> None:
+    """Found live on 2026-09-12, and the reason exit codes are a feature.
+
+    A bench suite hit Anthropic's "credit balance is too low" 400 on all ten
+    challenges. Every run exited 5 — "provider failure after retries" — which
+    tells a caller the far side had a problem and a retry might help. Nothing
+    would have helped; the account was out of money. An agent driving runectl
+    (the point of D4's contract) would retry into a wall. Billing is a config
+    problem, so it gets config's exit code.
+    """
+    exc = anthropic.BadRequestError(
+        "Your credit balance is too low to access the Anthropic API.",
+        response=_response(400),
+        body=None,
+    )
+    with pytest.raises(UsageError) as caught:
+        _provider(exc).complete(system="s", messages=[], tools=(), max_tokens=10)
+    assert caught.value.exit_code == 6
+    assert "will not clear on retry" in str(caught.value)
+
+
+def test_a_non_billing_400_still_exits_5() -> None:
+    """The split must not swallow ordinary malformed-request errors."""
+    exc = anthropic.BadRequestError("messages: at least one message is required",
+                                    response=_response(400), body=None)
+    with pytest.raises(ProviderError) as caught:
+        _provider(exc).complete(system="s", messages=[], tools=(), max_tokens=10)
+    assert caught.value.exit_code == 5

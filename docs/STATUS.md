@@ -50,6 +50,27 @@ point of this file is that nothing here should surprise you at run time.
 
 ## Live-verified since the skeleton
 
+**2026-09-12 — an attempted re-bench, and what it did prove.** A full ten-case suite was
+launched against `claude-sonnet-5` after the thinking fix. It did not produce a score: the
+Anthropic account was out of credit, so all ten runs failed at step 1 for $0.00. Three
+things were confirmed anyway, none of which a test could have shown:
+
+- **The D20 thinking clamp engages on a real run.** Every run's header read
+  `thinking=low (clamped from off)` — the fix behaving exactly as specified, against the
+  live API rather than against `resolve_thinking_level` in isolation.
+- **A provider failure exits cleanly**, with the API's own message surfaced and no
+  traceback — the M7 error handling holding under a failure nobody wrote it for.
+- **The exit code was wrong**, and that is now fixed. Each run exited **5**
+  ("provider failure after retries"), which tells a caller a retry might help. Nothing
+  would have; the account was out of money. Billing failures now exit **6**, the same
+  code a bad key gets, because they are actionable by a person and never by a retry.
+  Regression: `tests/unit/test_provider_errors.py`.
+
+**The suite has still not been scored against the post-fix code.** The published numbers
+in `bench/results/` remain the pre-fix ones, and remain labelled as such.
+
+
+
 The build session had no Docker daemon and no API keys, so several paths shipped
 unexercised. Two live sessions have since closed most of that gap:
 

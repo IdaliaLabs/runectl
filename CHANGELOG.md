@@ -4,6 +4,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 [SemVer](https://semver.org/); `0.x` means the CLI contract can still change between
 minor versions — see [`docs/CLI.md`](docs/CLI.md)'s Stability note.
 
+## [0.1.2] — 2026-09-12
+
+### Fixed
+- **A provider account with no credit exited 5 instead of 6.** Found by pointing a real
+  bench suite at a real API: all ten runs failed on Anthropic's "credit balance is too
+  low" 400, and each exited 5 — "provider failure after retries", which tells a caller a
+  retry might help. Nothing would have. Billing failures now exit 6, the same code a bad
+  key gets, because they are fixable by a person and never by a retry. This matters
+  specifically because `runectl` is built to be driven by another agent, which would
+  otherwise have retried into a wall.
+
 ## [0.1.1] — 2026-09-11
 
 The first public release. Two of the three items under Fixed are bugs found by auditing

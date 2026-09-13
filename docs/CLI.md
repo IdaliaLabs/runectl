@@ -331,7 +331,7 @@ esac
 | 3 | run exhausted, no candidate | yes |
 | 4 | sandbox / infrastructure failure | yes |
 | 5 | provider failure after retries | yes |
-| 6 | usage / config error | yes |
+| 6 | usage / config error — including a provider account out of credit, which never clears on retry | yes |
 
 Codes 0, 2 and 3 are *outcomes* of a finished run — they are carried on the run's
 manifest and its `run.finished` event, and are not exceptions. Codes 4, 5 and 6 mean the

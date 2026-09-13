@@ -100,12 +100,50 @@ def auth_error(provider: str, exc: Exception) -> UsageError:
     )
 
 
-def api_error(provider: str, exc: Exception) -> ProviderError:
+# Substrings every provider uses for "this account cannot pay for the call".
+# Matched case-insensitively against the error text, because none of the three
+# SDKs gives billing its own exception class — it arrives as a generic 400.
+_BILLING_MARKERS = (
+    "credit balance is too low",  # Anthropic
+    "insufficient_quota",  # OpenAI
+    "exceeded your current quota",  # OpenAI
+    "billing",  # all three, various phrasings
+    "payment required",
+    "quota exceeded",  # Google
+)
+
+
+def billing_error(provider: str, exc: Exception) -> UsageError:
+    """An account that cannot pay is a config problem, not a provider outage.
+
+    Found live on 2026-09-12: a bench suite hit Anthropic's "credit balance is
+    too low" 400 on every one of ten challenges and each run exited **5**, which
+    the CLI contract defines as a provider failure. That is the wrong answer to
+    the wrong question. Exit 5 tells a caller the far side had a problem and a
+    retry might work; here nothing will work until a human adds credit, so a
+    driving agent (D4's whole premise) would sit in a retry loop against a wall.
+    Exit 6 — usage/config, the same code a bad key gets — is the truthful one,
+    and it is actionable by exactly the person who can act on it.
+    """
+    return UsageError(
+        f"{provider} rejected the call for billing reasons ({exc}). "
+        f"This will not clear on retry — add credit to the {provider} account, "
+        "or run against a different provider with `--model`."
+    )
+
+
+def api_error(provider: str, exc: Exception) -> ProviderError | UsageError:
     """A non-transient, non-auth API failure (a 400/404/422, an unexpected 4xx).
 
     Surfaced as a clean :class:`ProviderError` (exit 5) rather than letting the
     raw SDK exception escape as a traceback. Not retried — these do not clear on
-    their own the way a 429/5xx does."""
+    their own the way a 429/5xx does.
+
+    Billing failures are split out to exit 6 first; see :func:`billing_error`.
+    """
+    text = str(exc).lower()
+    if any(marker in text for marker in _BILLING_MARKERS):
+        return billing_error(provider, exc)
     return ProviderError(f"{provider} API call failed: {exc}")
 
 
