@@ -19,7 +19,7 @@ license; the required copyright and license text is in
 `expected.json` and `PROVENANCE.md` wrappers are this project's. The exception is
 `easy-08` (`stream-secret`, network), which is original Idalia work under this
 repo's Apache-2.0 LICENSE — there was no network challenge to vendor, and its
-`PROVENANCE.md` states the honesty cost of scoring a challenge you authored.
+`PROVENANCE.md` states the honesty cost of scoring a self-authored challenge.
 
 ## The gate
 
@@ -70,13 +70,13 @@ it knows it has it.
    Idalia work under this repo's Apache-2.0 license. No other licenses; this repo is
    public. An authored challenge (like `easy-08`) is a last resort for a category with
    nothing vendorable, and its `PROVENANCE.md` must state the honesty cost of scoring a
-   challenge you wrote.
+   self-authored challenge.
 2. **Vendor the sources block, never the walkthrough.** Upstream READMEs usually contain a
    full exploit. Including it measures reading comprehension, not solving, and it puts an
    answer key inside challenge data — the same failure `docs/ARCHITECTURE.md` D10 forbids in
    solver code.
-3. **Re-derive the flag yourself** before writing `expected.json`, rather than copying it
-   out of the README. Every flag in this suite was.
+3. **Re-derive the flag independently** before writing `expected.json`, rather than
+   copying it out of the README. Every flag in this suite was.
 4. **Prefer a self-verifiable answer.** Either it is readable English, or the sandbox can
    check it (`easy-04`'s closed form can be validated against its own brute force for
    small inputs).

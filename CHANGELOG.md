@@ -15,7 +15,7 @@ minor versions — see [`docs/CLI.md`](docs/CLI.md)'s Stability note.
   A configured `0` means D19's "no ceiling" and is no longer mistaken for unset.
 - **The TUI help text misdescribed the default approval policy.** It said runectl "never
   submits an answer on its own by default — a candidate sits in the Flags tab until you
-  select it," which is true only of `--approval strict`. Under the default `gated`, a
+  select it," which describes `--approval strict` only. Under the default `gated`, a
   candidate that matches the flag format *and* re-derives in the sandbox is finalized
   with no human involved. That is the safety claim, so it mattered that it was wrong.
 
@@ -78,7 +78,7 @@ the moment they were.
 
 ## [0.1.3] — 2026-09-13
 
-The first release where a second provider has actually been run. A live Gemini key drove
+The first release in which a second provider has been run live. A Gemini key drove
 `bench/practice/easy-02` for 39 steps; four bugs fell out, none of which the type checker,
 the linter or 289 tests had caught, and none of which a test could have caught.
 
@@ -155,7 +155,7 @@ both corrupted numbers this project publishes.
 
 ### Added
 - **37 models across the three providers**, up from 7 — including the cheap tiers a
-  competition actually runs on: `gpt-5-nano` ($0.05/$0.40),
+  competition realistically runs on: `gpt-5-nano` ($0.05/$0.40),
   `gemini-2.5-flash-lite` ($0.10/$0.40), `gpt-5.6-luna` ($0.20/$1.20).
   `runectl models list` and every TUI model picker now order cheapest-first per provider
   and show prices inline.

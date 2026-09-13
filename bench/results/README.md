@@ -17,12 +17,12 @@ that justified a change is still here to read.
 > `--thinking off`, which at the time sent no thinking configuration at all — and Anthropic
 > documents Sonnet 5 as thinking by default, so the model reasoned and billed for it while
 > each trace recorded `thinking_level='off'`. The costs reported here are what those runs
-> genuinely cost; what is wrong is the label on them. A run made today with the same flags
-> resolves to `thinking_level='low'` with the clamp recorded, and should cost less. The
-> solve rates and false-flag counts are unaffected — nothing about the fix changes what the
-> agent did. See `docs/ARCHITECTURE.md`'s dated D20 amendment. These are not being re-run:
-> the point of keeping them is that they are the evidence that justified the decisions
-> above, and rewriting evidence after the fact is the opposite of that.
+> cost; the label on them is what is wrong. A run made today with the same flags resolves
+> to `thinking_level='low'` with the clamp recorded, and should cost less. Solve rates and
+> false-flag counts are unaffected — the fix changes nothing about what the agent did. See
+> `docs/ARCHITECTURE.md`'s dated D20 amendment. They are not being re-run: they are the
+> evidence that justified the decisions above, and rewriting evidence after the fact
+> defeats the purpose of keeping it.
 
 ## 2026-09-13 — claude-sonnet-5 — first run against post-fix code, and the gate misses
 
@@ -42,7 +42,7 @@ The gate misses on one case. `esrever` finalized
 `csictf{aesreverisjustreverseinreverseright}` against an expected
 `csictf{esreverisjustreverseinreverseright}` — one leading character.
 
-**That case is not deterministic, and measuring it is the point of this entry.** Eight
+**That case is not deterministic, and measuring it is what this entry exists for.** Eight
 repeats of `esrever` alone, same day, same code:
 
 | invocation | runs | correct | false |
@@ -104,8 +104,8 @@ the first place (D11's 2026-09-08 amendment made it advisory; this date removed 
 outright). Cost moved the other way from what removing a $0.002-per-candidate call would
 predict, for the same reason — the budget-exhausted run alone spent $0.55 more than its
 counterpart, which swamps eight candidates' worth of review calls (~$0.016) many times
-over. Read the per-case cost delta, not the suite total, if comparing the review call's
-actual price.
+over. Comparing the review call's price means reading the per-case cost delta, not the
+suite total.
 
 Fixed in the same branch, found while verifying `flag.reviewed` events in old runs would
 stay readable after the removal: `EventPayload`'s `extra="forbid"` was silently
@@ -189,8 +189,8 @@ the expected result, not a regression.
 - One model (claude-sonnet-5), one run. No variance data.
 - Two runs (`esrever`, `flying-places`) hit the D19 per-run $0.50 ceiling. For
   `flying-places` that is the ceiling doing its job on an unsolvable case; for
-  `esrever` it cut off a solve in progress, which is worth remembering before
-  reading its `unsolved` as a capability gap.
+  `esrever` it cut off a solve in progress, so its `unsolved` is not a capability
+  gap.
 - `stream-secret` is Idalia-authored, not vendored (no MIT pcap existed). A tool
   solving a challenge its authors wrote is weaker evidence than a competition
   capture — noted here as it is in the challenge's `PROVENANCE.md`.
@@ -232,8 +232,8 @@ digits* of that integer are hex bytes spelling `h45t4d` — is not a step the
 reasoning was wrong about, it is a step the agent never took, and a reviewer
 handed sound reasoning has nothing to object to.
 
-**This is the ceiling on the mechanism, and it is worth stating plainly: a
-disconfirmation pass catches irrational answers, not wrong ones.** It would have
+**This is the ceiling on the mechanism: a disconfirmation pass catches irrational
+answers, not wrong ones.** It would have
 caught a fabricated flag, a placeholder, a value with no derivation behind it.
 It cannot catch a correct process that stopped one step early — and neither can
 corroboration, re-derivation, or a format check, because every one of them
@@ -261,7 +261,7 @@ what the anti-echo rule rejects. Step 15 was rejected for exactly that, and
 step 16's fix printed the bare number, which then failed provenance because the
 *flag* was not in the output. **For any challenge whose flag is a computed value
 wrapped in a known prefix, provenance and anti-echo are in tension.** That is a
-design problem worth solving properly, not a tuning knob.
+design problem, not a tuning knob.
 
 ### What this run does not tell us
 
@@ -299,14 +299,14 @@ that trace to the same rule.
 ### Why the four correct answers were held
 
 All four were held for exactly one reason: `corroboration: 1 independent
-observation(s), need 2`. A clean solve produces the flag once — you decode the
-ciphertext, the flag is there, you are done. D11's corroboration rule asks for
-two tool calls with different output fingerprints producing the same string,
-which a competent single-shot solve has no reason to do.
+observation(s), need 2`. A clean solve produces the flag once: decode the
+ciphertext, the flag is there, done. D11's corroboration rule asks for two tool
+calls with different output fingerprints producing the same string, which a
+competent single-shot solve has no reason to do.
 
 ### How the wrong answer got through
 
-`quick-math`'s trace (run `20260908-160323-444a1e`) is worth reading in full.
+`quick-math`'s trace (run `20260908-160323-444a1e`) records the whole failure.
 The agent solved the cryptography correctly — Håstad's broadcast attack, CRT,
 integer cube root, recovering `m = 683435743464` — and then failed at the
 challenge's actual trick, which is that the *decimal digits* of that integer are
@@ -440,7 +440,7 @@ the same command when the value comes from a variable. Anti-echo can only see
 literals, and this is the boundary of what it can see. Noted, not patched — the
 flag it produced was wrong for reasons that have nothing to do with provenance.
 
-### The gate, honestly stated
+### What the gate covers
 
 `gate_met: true` here means **3 solved, 0 false flags over 4 gated cases**, with
 `quick-math` excluded and printed. The unqualified suite numbers — 3/5 solved
@@ -457,8 +457,8 @@ the solver is finished.
   two wrong flags cleared, one correct flag held, nothing caught. The blind spot is
   still real and still unfixed; it just costs nothing now, so it is parked.
 
-  What that leaves as the gate is worth stating, because it is the pattern across
-  three benches: **both mechanisms tried as the auto-finalize bar and removed —
+  What that leaves as the gate is the pattern across three benches: **both
+  mechanisms tried as the auto-finalize bar and removed —
   corroboration, then the review — were forms of model or agent judgement, and each
   was satisfiable or fooled by the model it was judging.** What survives is the
   sandbox. Provenance says the string came out of a tool rather than the agent's own

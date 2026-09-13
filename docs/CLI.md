@@ -1,28 +1,27 @@
 # CLI reference
 
-`runectl` is the whole product ([`ARCHITECTURE.md`](ARCHITECTURE.md) D13). Everything below
-is non-interactive: no command prompts, nothing that can block a run waiting on a human,
-no `--yes` flag needed because nothing asks.
+`runectl` is the whole product ([`ARCHITECTURE.md`](ARCHITECTURE.md) D13). Every command
+below is non-interactive: no prompts, nothing that blocks a run waiting on a human, no
+`--yes` flag, because nothing asks.
 
-All examples use `uv run runectl`; drop the prefix if you installed the console script.
+Examples use `uv run runectl`; drop the prefix when the console script is installed.
 
 ### Stability
 
-`runectl` is `0.x` — pre-1.0, per [SemVer](https://semver.org/). Flags, output shapes and
-exit codes here are the current contract, not a frozen one; a minor version bump (`0.1` →
-`0.2`) can still change them. The trace event envelope already carries its own version
-field (`v`, currently `1` — see the trace section below), so a breaking change to the
-trace format is at least detectable by a reader, even during `0.x`. See
-[`CHANGELOG.md`](../CHANGELOG.md) for what changed release to release.
+`runectl` is `0.x`, pre-1.0 per [SemVer](https://semver.org/). Flags, output shapes and
+exit codes here are the current contract, not a frozen one: a minor version bump (`0.1` →
+`0.2`) can change them. The trace event envelope carries its own version field (`v`,
+currently `1`), so a breaking change to the trace format is detectable by a reader even
+during `0.x`. Release-to-release changes: [`CHANGELOG.md`](../CHANGELOG.md).
 
 ---
 
 ## Providers, models, and keys
 
 `runectl` is bring-your-own-key across three first-class providers, with **no default
-provider and no default model**. `--model` is always required. Different models are
-genuinely better at different CTF categories, so choosing one is the user's call, not a
-default `runectl` quietly makes (D5, [`ARCHITECTURE.md`](ARCHITECTURE.md)).
+provider and no default model**. `--model` is always required: model choice materially
+changes results per category, so it is never made implicitly (D5,
+[`ARCHITECTURE.md`](ARCHITECTURE.md)).
 
 ### The model registry
 
@@ -30,8 +29,8 @@ Provider and capability come from an explicit table in
 `src/runectl/providers/registry.py` — never from sniffing a string prefix like `claude-`.
 An unregistered model id is a hard error (exit 6), not a guess.
 
-Every registered model supports tool use — that is a hard requirement of the loop, so it
-is not a column. Rows are grouped by provider, cheapest first.
+Every registered model supports tool use — a hard requirement of the loop, so it is not a
+column. Rows are grouped by provider, cheapest first.
 
 | Model id | Provider | Context | Prompt cache | Thinking | `off` honored | $/1M in | $/1M out |
 |---|---|---|---|---|---|---|---|
@@ -76,37 +75,37 @@ is not a column. Rows are grouped by provider, cheapest first.
 **⚠️ marks a retired model** — one `runectl` cannot actually use, for one of two reasons,
 both found by live probe on 2026-09-13 and both stated per-row in `models list`:
 
-- **Closed to new accounts** (the three `gemini-2.5-*` rows). The model still exists and
-  existing accounts can still call it; a new key gets a 404. `models.list()` still
-  *lists* all three, which is why only a real call settles it.
-- **Rejects function tools** (`gpt-6-astra` and the three `gpt-5.6-*` rows). These answer
-  normally — until you attach a function tool, which `v1/chat/completions` refuses to mix
-  with reasoning on these models at *any* setting, including omitting the setting. Every
-  `runectl` step sends tools, so the model is reachable and still unusable here. A move
-  to `v1/responses` would lift this.
+- **Closed to new accounts** — the three `gemini-2.5-*` rows. The model exists and
+  existing accounts can call it; a new key gets a 404. `models.list()` still returns all
+  three, so only a real call settles availability.
+- **Rejects function tools** — `gpt-6-astra` and the three `gpt-5.6-*` rows. These answer
+  normally until a function tool is attached, which `v1/chat/completions` refuses to mix
+  with reasoning on these models at any setting, including omitting the setting. Every
+  `runectl` step sends tools, so the model is reachable and still unusable here. A move to
+  `v1/responses` would lift this.
 
 Retired rows stay registered because whoever does have access can still name them
 explicitly, and because a specific reason beats an unknown-model error. They are never
 chosen as a default: `cheapest_model_for` skips them, so `--utility-model` never lands on
 one.
 
-**The `off` honored column** is the one people are surprised by. On most current models,
-sending no thinking configuration does not mean the model does not think — Anthropic
-documents Sonnet 5 and Opus 5 as thinking by default and the Fable family as always on,
-Gemini 3.x and 2.5 think by default except `flash-lite`, and OpenAI's reasoning models
-default to `medium` effort. Where `off` cannot be honored, `runectl` requests the cheapest
-real level (`low`) instead and records the clamp; see *Extended thinking* below.
+**The `off` honored column.** On most current models, sending no thinking configuration
+does not mean the model does not think: Anthropic documents Sonnet 5 and Opus 5 as
+thinking by default and the Fable family as always on; Gemini 3.x and 2.5 think by default
+except `flash-lite`; OpenAI's reasoning models default to `medium` effort. Where `off`
+cannot be honored, `runectl` requests the cheapest real level (`low`) and records the
+clamp — see *Extended thinking* below.
 
-The OpenAI rows in both columns are **live-probed, not read off a page** — one real call
-per model per level, with a tool attached. That mattered: the docs implied eight rows
-accepted `max` (none do — `xhigh` is the real ceiling), and implied the `gpt-5` family
-accepted `reasoning_effort: "none"` (it does not, and the registry comment asserted the
-exact opposite until a real call proved it).
+The OpenAI rows in both columns are live-probed rather than read off a page: one real call
+per model per level, with a tool attached. The difference was material. Documentation
+implied eight rows accepted `max` (none do; `xhigh` is the ceiling) and implied the `gpt-5`
+family accepted `reasoning_effort: "none"` (it does not, and the registry comment asserted
+the opposite until a real call proved it).
 
-**The prompt-cache column** carries the cache-read multiplier, because it is not uniform:
-a cached input token costs 0.10x a fresh one on everything current, but 0.25x on
-`gpt-4.1*` and 0.50x on `gpt-4o*`. It is a per-model field (`cache_read_multiplier`) for
-that reason, and the cost ledger reads it per row rather than applying one constant.
+**The prompt-cache column** carries the cache-read multiplier, which is not uniform: a
+cached input token costs 0.10x a fresh one on everything current, 0.25x on `gpt-4.1*` and
+0.50x on `gpt-4o*`. It is a per-model field (`cache_read_multiplier`), read per row by the
+cost ledger rather than applied as one constant.
 
 > **Pricing and availability snapshot.** Anthropic rows: checked 2026-09-11 against the
 > published model table, prices unchanged since a live `client.models.list()` verification
@@ -115,20 +114,20 @@ that reason, and the cost ledger reads it per row rather than applying one const
 > against <https://ai.google.dev/gemini-api/docs/pricing>; the three `gemini-3.x-flash`
 > rows are on a promotional rate through 2026-12-31 and revert to $1.50/$7.50 after.
 >
-> This table has been wrong before, twice, in ways that silently corrupted cost reports.
-> The 2026-09-05 snapshot recorded Opus 5 at $15/$75 and Sonnet 5 at $3/$15, both at a
-> 200K context window — four wrong numbers, corrected 2026-09-07. The OpenAI rows were
-> then carried as "unverified estimates" and never re-checked until 2026-09-11, at which
-> point `gpt-5` turned out to be $1.25/$10.00 rather than the $5.00/$15.00 listed, and
-> `gpt-5-mini` $0.25/$2.00 rather than $0.50/$1.50. Re-verify before relying on any of it
-> for real spend.
+> This table has been wrong twice, both times in ways that silently corrupted cost
+> reports. The 2026-09-05 snapshot recorded Opus 5 at $15/$75 and Sonnet 5 at $3/$15, both
+> at a 200K context window — four wrong numbers, corrected 2026-09-07. The OpenAI rows were
+> then carried as unverified estimates and not re-checked until 2026-09-11, at which point
+> `gpt-5` proved to be $1.25/$10.00 rather than the listed $5.00/$15.00, and `gpt-5-mini`
+> $0.25/$2.00 rather than $0.50/$1.50. Re-verify before relying on any of it for real
+> spend.
 
 ### Extended thinking
 
 `--thinking <off|low|medium|high|xhigh|max>` on `runectl run` and `runectl bench run`,
-default `off`. `runectl models list` shows which registered models support it. The level
-is per-run and per-model, not a category concern — a category playbook has no opinion on
-what you're willing to spend reasoning about your own challenge.
+default `off`. `runectl models list` reports which registered models support it. The level
+is per-run and per-model, never a category concern: a category playbook has no opinion on
+reasoning spend.
 
 Anthropic uses adaptive thinking (`thinking: {"type": "adaptive"}`) plus
 `output_config.effort` for the level; `display: "summarized"` is always set, since the
@@ -137,45 +136,44 @@ is rejected outright on Opus 5 and Sonnet 5. OpenAI and Google map onto their ow
 reasoning-effort/thinking-budget parameters through the same `ModelInfo.thinking_style`
 field; both were verified live on 2026-09-13 — see [`STATUS.md`](STATUS.md).
 
-Two OpenAI-specific limits worth knowing, both live-confirmed. `reasoning_effort` accepts
-a **narrower set of values per model than the SDK's type suggests**, and narrower again
-once function tools are attached — which is why four rows are retired and four more are
-registered as non-thinking. And Chat Completions returns **no reasoning content at all**,
-so `llm.thinking` events never appear on an OpenAI run even at `--thinking high`: the
-level is requested and billed, but there is nothing to render. Anthropic and Google both
-return summarized thinking text.
+Two OpenAI-specific limits, both live-confirmed. `reasoning_effort` accepts a narrower set
+of values per model than the SDK's type suggests, and narrower again once function tools
+are attached — the cause of four retired rows and four more registered as non-thinking.
+And Chat Completions returns no reasoning content, so `llm.thinking` events never appear on
+an OpenAI run even at `--thinking high`: the level is requested and billed, with nothing to
+render. Anthropic and Google both return summarized thinking text.
 
 #### Clamping, in both directions
 
-Where a model can't represent the requested level, `runectl` clamps to the nearest
-supported one and records the clamp in the trace — never silently substituted. The
-resolved level is written to `run.started` (with `thinking_clamped_from` naming what was
-asked for) and to `run.json`.
+Where a model cannot represent the requested level, `runectl` clamps to the nearest
+supported one and records the clamp in the trace; a substitution is never silent. The
+resolved level is written to `run.started` — with `thinking_clamped_from` naming what was
+requested — and to `run.json`.
 
-Clamping goes **up** as well as down, which is the part worth reading. `off` means "do not
-request thinking". On a model where thinking is on by default, or cannot be turned off at
-all, that is not the same as no thinking happening: omitting the parameter leaves the
-provider's own default in force, which is usually the *most* expensive setting. So for
-those models — the `off` honored column in the registry table — `runectl` resolves `off`
-up to `low`, the cheapest level that is a real request, and records the clamp:
+Clamping goes up as well as down. `off` means "do not request thinking". On a model where
+thinking is on by default, or cannot be turned off at all, that is not the same as no
+thinking occurring: omitting the parameter leaves the provider's default in force, which is
+usually the most expensive setting. For those models — the `off` honored column in the
+registry table — `runectl` resolves `off` up to `low`, the cheapest level that constitutes
+a real request, and records the clamp:
 
 ```
 run.started  ... thinking_level='low' thinking_clamped_from='off'
 ```
 
-This was fixed on 2026-09-11. Before it, `--thinking off` (the default) on
-`claude-sonnet-5` produced a run that thought, billed for the reasoning tokens, and wrote
+Fixed 2026-09-11. Before the fix, `--thinking off` (the default) on `claude-sonnet-5`
+produced a run that thought, billed for the reasoning tokens, and wrote
 `thinking_level='off'` into its own trace with no clamp recorded. Every published bench
 result in [`../bench/results/README.md`](../bench/results/README.md) was scored under that
-behavior; the numbers there are what those runs actually cost, but they are not comparable
-with runs made after the fix.
+behavior: those numbers are what those runs cost, and they are not comparable with runs
+made after the fix.
 
-For Anthropic specifically, `runectl` does **not** send `thinking: {"type": "disabled"}`,
-even on Sonnet 5 where the API accepts it. Anthropic documents that disabling thinking on
-this model tier makes tool-heavy agentic workloads write tool calls into visible text,
-where they never execute and then pollute the conversation history — which is exactly this
-loop's shape. Their guidance is to leave thinking on and lower the effort instead, which is
-what the clamp does.
+For Anthropic, `runectl` does not send `thinking: {"type": "disabled"}` even on Sonnet 5,
+where the API accepts it. Anthropic documents that disabling thinking on this model tier
+makes tool-heavy agentic workloads write tool calls into visible text, where they never
+execute and then pollute the conversation history — the exact shape of this loop. The
+documented guidance is to leave thinking on and lower the effort, which is what the clamp
+does.
 
 **Adding a model:** add a `ModelInfo` entry to `MODEL_REGISTRY`; the cost ledger, prompt
 caching, and utility-model selection all read from that row. **Adding a provider:** a
@@ -204,22 +202,22 @@ the trace by a writer-level filter before anything hits disk — see
 
 ### The single call path
 
-Every LLM call — the main loop's and internal utility calls alike — goes through
-`providers.base.complete_with_retry`. Non-streaming (there's no live UI to feed, and it
-makes retries, caching, cassettes, and replay determinism straightforward — live
-watchability comes from per-step trace events instead). Retries: 4 attempts by default,
-exponential backoff (`2^n`) plus up to 1s jitter, on 429/5xx/connection/timeout errors;
-exhausting them raises `ProviderError` → exit **5**. Prompt caching is applied to the
-stable system prefix where the registry says the model supports it.
+Every LLM call, main-loop and internal utility alike, goes through
+`providers.base.complete_with_retry`. Non-streaming: there is no live UI to feed, and
+non-streaming keeps retries, caching, cassettes and replay determinism straightforward.
+Live watchability comes from per-step trace events instead. Retries are 4 attempts by
+default with exponential backoff (`2^n`) plus up to 1 s jitter, on 429/5xx/connection/
+timeout errors; exhausting them raises `ProviderError` → exit **5**. Prompt caching is
+applied to the stable system prefix where the registry records support.
 
 ### The utility model
 
-Internal summarization (oversized tool output, history compaction) uses a separate,
-cheaper model, through the same path into the same ledger. Default: the cheapest
-registered model of **the same provider** as `--model`. Override with
-`--utility-model <id>` — if it belongs to a different provider, that provider's key is
-resolved independently. No hardcoded utility model anywhere; utility tokens show up in
-`cost.updated` events like any other.
+Internal summarization — oversized tool output, history compaction — uses a separate,
+cheaper model through the same path into the same ledger. Default: the cheapest registered
+non-retired model of the same provider as `--model`. Override with `--utility-model <id>`;
+a model belonging to a different provider resolves that provider's key independently. There
+is no hardcoded utility model, and utility tokens appear in `cost.updated` events like any
+other.
 
 ### Cost accounting
 
@@ -237,15 +235,14 @@ uv run runectl replay <run_id> --check
 
 `RecordingProvider` wraps a real provider and appends `{request_hash, response}` to
 `cassette.jsonl` for every call. `ReplayProvider` reads that file and serves the recorded
-completion back for a matching hash, with no network call. The hash covers the system
-prompt, the full message list, tool names, `max_tokens`, and the resolved thinking
-configuration — a cassette recorded with thinking off is never served to a replay
-requesting thinking on. If the loop asks something the cassette doesn't contain, the
-replay raises rather than silently improvising.
+completion for a matching hash, with no network call. The hash covers the system prompt,
+the full message list, tool names, `max_tokens`, and the resolved thinking configuration,
+so a cassette recorded with thinking off is never served to a replay requesting thinking
+on. A request the cassette does not contain raises rather than improvising.
 
 `ScriptedProvider` is the test-only sibling: a fixed list of hand-written `Completion`
-objects returned in order. Together with `StubSandbox`, it's why the whole test suite
-runs with no daemon and no spend.
+objects returned in order. With `StubSandbox`, it is why the whole test suite runs with no
+daemon and no spend.
 
 ### Writing an adapter
 
@@ -263,20 +260,20 @@ class Provider(Protocol):
 ```
 
 `Message` is the canonical shape (`role`, `content`, `tool_call_id`, `tool_name`,
-`tool_calls`); each adapter derives its own wire format at the boundary. Tool schemas are
-derived from the single definition in `tools/schema.py` via `to_anthropic()`,
-`to_openai()`, or `to_google()` — never hand-written per provider. Map your SDK's
-rate-limit, connection, timeout, and 5xx exceptions onto `TransientProviderError` so
-`complete_with_retry` can back off; let everything else propagate. Return a `Completion`
-with `text`, `tool_calls`, `usage`, and `stop_reason`.
+`tool_calls`); each adapter derives its own wire format at the boundary. Tool schemas come
+from the single definition in `tools/schema.py` via `to_anthropic()`, `to_openai()` or
+`to_google()`, never hand-written per provider. Map the SDK's rate-limit, connection,
+timeout and 5xx exceptions onto `TransientProviderError` so `complete_with_retry` can back
+off, and let everything else propagate. Return a `Completion` carrying `text`,
+`tool_calls`, `usage` and `stop_reason`.
 
-> **All three adapters verified live — and all three had bugs when they were.**
-> **Anthropic**: the 2026-09-09 ten-challenge bench plus auth/error handling (rejected key
-> exits 6, bad request exits 5). **Google** and **OpenAI**: 2026-09-13, every registry row
-> called for real plus a full challenge run each. Each of those two passes turned up four
-> defects that typing, linting and a green unit suite had all missed. What is still not
-> covered: neither OpenAI nor Google has *solved* a challenge, and every published bench
-> number is Anthropic-only. See [`STATUS.md`](STATUS.md).
+> **All three adapters verified live; all three had defects when they were.** Anthropic:
+> the 2026-09-09 ten-challenge bench plus auth and error handling (rejected key exits 6,
+> bad request exits 5). Google and OpenAI: 2026-09-13, every registry row called for real
+> plus a full challenge run each. Each of those two passes turned up four defects that
+> typing, linting and a green unit suite had missed. Not covered: neither OpenAI nor Google
+> has solved a challenge, and every published bench number is Anthropic-only. See
+> [`STATUS.md`](STATUS.md).
 
 ---
 
@@ -294,21 +291,22 @@ uv run runectl run --model gpt-5 --name "sanity" --category web --description ".
 | Flag | Default | Meaning |
 |---|---|---|
 | `--model <id>` | **required** | Main model. Must be in the model registry — see [`ARCHITECTURE.md`](ARCHITECTURE.md#providers-models-and-keys). Never inferred. |
-| `--challenge <path>` | — | A challenge TOML file. Supplies name/category/description/files/flag_format in one file, so an agent driving `runectl` doesn't have to shell-quote a description. |
+| `--challenge <path>` | — | A challenge TOML file supplying name/category/description/files/flag_format together, so a driving agent need not shell-quote a description. |
 | `--name <str>` | — | Challenge name. Required unless `--challenge` is given. |
 | `--category <str>` | — | Category name; must match a shipped category TOML. Required unless `--challenge` is given. |
-| `--description <str>` | `""` | The challenge prompt as you were given it. |
+| `--description <str>` | `""` | The challenge prompt as issued. |
 | `--description-file <path>` | — | Read the description from a file instead. `--description` wins if both are given. |
 | `--file <path>` | — | A provided challenge file to copy into the sandbox. Repeatable. |
-| `--flag-format <regex>` | — | Expected flag shape. A candidate that does not match is held for approval rather than auto-finalized (D11). With no format supplied the check does not apply — it never blocks on its own absence. |
-| `--utility-model <id>` | cheapest model of `--model`'s provider | Model used for internal summarization calls. Its tokens land in the same cost ledger. |
-| `--api-key <str>` | — | Highest-precedence key source. Prefer `runectl keys set` or an env var. |
-| `--approval <gated\|strict\|auto>` | `gated` | What a cleared candidate becomes. `gated`: auto-finalize only if re-derived in the sandbox and matching `--flag-format`; otherwise exit 2. `strict`: never auto-finalize. `auto`: finalize on plausibility and provenance alone. Provenance and decoy checks apply under all three. Corroboration is reported on every candidate and gates nothing (D11, amended 2026-09-08); the disconfirmation review that once ran alongside it was removed outright 2026-09-10 for the same reason (D11/D15). Validated against those three since 2026-09-10 — anything else exits **6**; it used to fall through to `gated` silently, which quietly *relaxed* the flag gate on a typo. |
+| `--flag-format <regex>` | — | Expected flag shape. A non-matching candidate is held for approval rather than auto-finalized (D11). With no format supplied the check does not apply; it never blocks on its own absence. |
+| `--utility-model <id>` | cheapest non-retired model of `--model`'s provider | Model used for internal summarization calls. Its tokens land in the same cost ledger. |
+| `--api-key <str>` | — | Highest-precedence key source. `runectl keys set` or an environment variable is preferred. |
+| `--approval <gated\|strict\|auto>` | `gated`, or `[run] approval` from config | What a cleared candidate becomes. `gated`: auto-finalize only if re-derived in the sandbox and matching `--flag-format`; otherwise exit 2. `strict`: never auto-finalize. `auto`: finalize on plausibility and provenance alone. Provenance and decoy checks apply under all three. Corroboration is reported on every candidate and gates nothing (D11, amended 2026-09-08); the disconfirmation review that once ran alongside it was removed outright 2026-09-10 for the same reason (D11/D15). Validated against those three since 2026-09-10: anything else exits **6**. It previously fell through to `gated` silently, which relaxed the flag gate on a typo. |
 | `--network <none\|bridge>` | the category's value | Container network mode. `none` for offline categories. |
 | `--max-steps <int>` | the category's `step_limit` | Hard step backstop for this run. |
+| `--max-cost <usd>` | `0.50`, or `[run] max_cost` from config | Hard spend ceiling for this run. `0` disables it. On reaching the ceiling the run emits `budget.exhausted` and ends at exit 3 (D19). |
 | `--record` | off | Record provider request/response pairs to `cassette.jsonl` so the run can be replayed at zero spend. |
 | `--output <jsonl\|human>` | `human` on a TTY, `jsonl` otherwise | Render mode. See "Output contract" below. |
-| `--thinking <off\|low\|medium\|high\|xhigh\|max>` | the configured per-provider default (`runectl config`), or `off` | Extended thinking (D20). The *resolved* level (after any provider clamp) is written to `run.started` and `run.json`, so a run's reasoning spend is never invisible. See "Extended thinking" above. |
+| `--thinking <off\|low\|medium\|high\|xhigh\|max>` | the configured per-provider default (`runectl config`), or `off` | Extended thinking (D20). The resolved level, after any provider clamp, is written to `run.started` and `run.json`, so reasoning spend is never invisible. See *Extended thinking* above. |
 
 ### Challenge TOML
 
@@ -324,25 +322,26 @@ Ben has encrypted a message with the same value of 'e' for 3 public moduli...
 ```
 
 `name` and `category` are required; `description` defaults to empty, `files` to none,
-`flag_format` to unset. Paths in `files` are resolved relative to **the TOML file's own
-directory** (an absolute path is left alone) — not your current working directory. A
-challenge directory is a unit that gets moved and vendored as a whole:
-`runectl run --challenge bench/practice/easy-03/chal.toml` from the repo root finds
-`easy-03/files/enc.txt` even though you ran the command from elsewhere. See
-`challenge_from_file` in `src/runectl/cli/run_cmd.py`.
+`flag_format` to unset. Paths in `files` resolve relative to the TOML file's own directory,
+not the working directory; an absolute path is left alone. A challenge directory is
+therefore a unit that can be moved or vendored whole:
+`runectl run --challenge bench/practice/easy-03/chal.toml` from the repo root resolves
+`easy-03/files/enc.txt` regardless of where the command was issued. See
+`challenge_from_file` in `src/runectl/cli/run_cmd.py`, which also rejects a directory or a
+missing path with exit 6 rather than a traceback.
 
 ### Output contract
 
-This is what makes `runectl` scriptable by another agent.
+The contract that makes `runectl` scriptable by another agent.
 
-- **`--output jsonl`** (the default when stdout is not a TTY): every trace event is
-  written to **stdout** as a single-line JSON object, as it happens. The final line of
-  stdout is the run id. Nothing else goes to stdout.
-- **`--output human`** (the default on a TTY): the same event stream is rendered to
+- **`--output jsonl`** — the default when stdout is not a TTY. Every trace event is written
+  to **stdout** as a single-line JSON object as it happens. The final line of stdout is the
+  run id. Nothing else goes to stdout.
+- **`--output human`** — the default on a TTY. The same event stream is rendered to
   **stderr**. Only the run id goes to stdout.
 
-Either way, `stdout` is safe to pipe. The human renderer is a pure function of the event
-stream — it can never show you something the trace doesn't contain.
+Either way stdout is safe to pipe. The human renderer is a pure function of the event
+stream and cannot display anything the trace does not contain.
 
 ```bash
 # a driving agent's happy path
@@ -365,10 +364,10 @@ esac
 | 5 | provider failure after retries | yes |
 | 6 | usage / config error — including a provider account out of credit, which never clears on retry | yes |
 
-Codes 0, 2 and 3 are *outcomes* of a finished run — they are carried on the run's
-manifest and its `run.finished` event, and are not exceptions. Codes 4, 5 and 6 mean the
-run could not proceed at all, and correspond to `SandboxError`, `ProviderError` and
-`UsageError` in `errors.py`.
+Codes 0, 2 and 3 are outcomes of a finished run, carried on the run's manifest and its
+`run.finished` event rather than raised as exceptions. Codes 4, 5 and 6 mean the run could
+not proceed, and correspond to `SandboxError`, `ProviderError` and `UsageError` in
+`errors.py`.
 
 ---
 
@@ -379,8 +378,8 @@ uv run runectl trace show <run_id>
 uv run runectl trace show <run_id> --format jsonl
 ```
 
-`timeline` (the default) replays the run through the *same* renderer a live run uses, so
-what you read afterwards is exactly what you would have watched happen:
+`timeline`, the default, replays the run through the same renderer a live run uses, so the
+output after the fact is identical to what a live viewer saw:
 
 ```
   ▶ modern-clueless-child [crypto]  claude-sonnet-5
@@ -394,15 +393,14 @@ what you read afterwards is exactly what you would have watched happen:
     $0.0724 · 66s · exit 0
 ```
 
-Commands and outputs are clipped to one line each — an exploit script is thousands of
-characters and the live view has to stay watchable. The full text is always in
-`trace.jsonl`. `jsonl` prints the raw event stream, one JSON object per line.
+Commands and outputs are clipped to one line each, since an exploit script runs to
+thousands of characters and the live view must stay readable. Full text is always in
+`trace.jsonl`. `--format jsonl` prints the raw event stream, one JSON object per line.
 
 Exits 6 if the run id doesn't exist.
 
-If a run was killed mid-flight and the last line of its trace is torn, the reader stops
-at the last valid line and shows everything before it. You get a valid prefix, never a
-parse error about the tail.
+A run killed mid-flight leaves a torn final line. The reader stops at the last valid line
+and renders everything before it: a valid prefix, never a parse error about the tail.
 
 ---
 
@@ -422,15 +420,15 @@ A replay is itself a real run: it gets a **new run id** and writes its own trace
 `config_snapshot` records `{"replay_of": "<original run id>"}`. The new run id is printed
 to stdout.
 
-`--check` then compares two things and exits **1** on either divergence: the two runs'
-`tool.call` event sequences, and their **outcomes**. That's the regression test: change
-the loop, replay a recorded run, and find out immediately whether the agent would have
-done something different — or reached a different verdict on the same evidence.
+`--check` compares two things and exits **1** on either divergence: the two runs'
+`tool.call` event sequences, and their outcomes. That is the regression test — change the
+loop, replay a recorded run, and see immediately whether the agent would have acted
+differently or reached a different verdict on the same evidence.
 
-The outcome half was added 2026-09-10, after comparing only the sequence let a real defect
+The outcome comparison was added 2026-09-10, after comparing only the sequence let a defect
 hide for a milestone: an unrecorded sandbox call in the D15 judge desynchronized
-`ReplaySandbox`'s positional queue, so replays issued identical tool calls while silently
-ending `candidate` instead of `solved`, and `--check` reported OK throughout. See
+`ReplaySandbox`'s positional queue, so replays issued identical tool calls while ending
+`candidate` instead of `solved`, with `--check` reporting OK throughout. See
 [`ARCHITECTURE.md`](ARCHITECTURE.md) D3's 2026-09-10 amendment.
 
 Requires the original run to have been recorded with `--record`; exits 6 otherwise.
@@ -457,32 +455,42 @@ See "Key resolution" above for the full precedence order.
 
 ## `runectl config`
 
-Per-provider preferences, in `~/.config/runectl/config.toml`
-(overridable with `RUNECTL_CONFIG_HOME`). This is a discovery/convenience surface only —
-it does **not** relax D5. `--model` is still required on every `runectl run`; nothing
-here is read by the run path to silently choose a model. What it *does* prefill: the
-default level `--thinking` resolves to when omitted, and (for the TUI's launcher) a
-default model per provider.
+Defaults, in `~/.config/runectl/config.toml` (overridable with `RUNECTL_CONFIG_HOME`).
+This is a convenience surface and does not relax D5: `--model` remains required on every
+`runectl run`, and the run path never reads a model from here.
 
 ```bash
 uv run runectl config set anthropic.model claude-sonnet-5
 uv run runectl config set anthropic.thinking high
+uv run runectl config set run.approval strict
+uv run runectl config set run.max_cost 2.50
 uv run runectl config get anthropic.thinking
 uv run runectl config list
 uv run runectl config path
 ```
 
-An API key pasted into `SECTION.KEY` is rejected outright — `config.toml` is plain text,
-not the keyring; use `runectl keys set` instead. `config get` on an unset key prints
-nothing and exits 1, not an error.
+| Key | Read by | Effect |
+|---|---|---|
+| `<provider>.model` | TUI launcher | Preselected model for that provider |
+| `<provider>.thinking` | `runectl run` | Level `--thinking` resolves to when omitted |
+| `run.approval` | `runectl run`, `runectl bench run` | Policy `--approval` resolves to when omitted |
+| `run.max_cost` | `runectl run`, `runectl bench run` | Per-run ceiling `--max-cost` resolves to when omitted |
+
+Precedence for both `[run]` keys is explicit flag > config > built-in default. `run.max_cost`
+is what lifts the $0.50 per-run ceiling for an expensive model; `0` disables the ceiling
+entirely.
+
+An API key pasted into `SECTION.KEY` is rejected: `config.toml` is plain text, not the
+keyring, and `runectl keys set` is the route. `config get` on an unset key prints nothing
+and exits 1, which is not an error condition.
 
 ---
 
 ## `runectl models list`
 
-The model registry, joined with which providers have a key present on this machine and
-each model's thinking support — the discoverability answer to `--model` always being
-required (D5).
+The model registry joined with per-provider key presence on this machine and each model's
+thinking support — the discoverability counterpart to `--model` always being required
+(D5).
 
 ```bash
 uv run runectl models list
@@ -497,19 +505,19 @@ gpt-5.6-luna	provider=openai	key=yes	thinking=no	ctx=1050000	$0.20/$1.20 per 1M 
 ...
 ```
 
-All 37 rows, grouped by provider and ordered cheapest first. This is the list to reach
-for before a competition: `gpt-5-nano` at $0.05/$0.40 and `gemini-3.1-flash-lite` at
-$0.25/$1.50 are two orders of magnitude cheaper per run than the flagship tiers.
+All 37 rows, grouped by provider and ordered cheapest first. `gpt-5-nano` at $0.05/$0.40
+and `gemini-3.1-flash-lite` at $0.25/$1.50 are roughly two orders of magnitude cheaper per
+run than the flagship tiers.
 
-Read the `[RETIRED — ...]` marker before picking: seven rows are registered but unusable,
-each for a stated reason, and the marker is the only place that reason appears.
+The `[RETIRED — ...]` marker flags the seven rows that are registered but unusable, each
+with its reason. That marker is the only place the reason appears.
 
 ---
 
 ## `runectl runs`
 
-Discover, inspect, and attach to runs — read-only, on purpose (there is no `runs rm`;
-deleting a run's directory deletes the only record of what that run did, D3).
+Discover, inspect and attach to runs. Read-only by design: there is no `runs rm`, because
+deleting a run's directory deletes the only record of what that run did (D3).
 
 ```bash
 uv run runectl runs list [--limit N] [--category C] [--outcome O] [--json]
@@ -518,57 +526,54 @@ uv run runectl runs ps                       # live runectl-<run_id> containers
 uv run runectl runs attach <run_id> [--exec] # prints (or runs) docker exec -it ...
 ```
 
-`runs list` reads the derived SQLite index (`runectl index rebuild` regenerates it —
-D3, the index is never authoritative, so a stale or missing index just means an empty
-list, not an error). `runs ps` is the multi-instance visibility a Docker-per-run design
-otherwise lacks: it lists live `runectl-<run_id>` containers by filtering `docker ps` on
-the name prefix, exits 4 (with the same distinct message as `arena status`) if the
+`runs list` reads the derived SQLite index, regenerated by `runectl index rebuild`. Per D3
+the index is never authoritative, so a stale or missing index yields an empty list rather
+than an error. `runs ps` supplies the multi-instance visibility a Docker-per-run design
+otherwise lacks: it lists live `runectl-<run_id>` containers by filtering `docker ps` on the
+name prefix, and exits 4 — with the same distinct message as `arena status` — when the
 daemon is unreachable.
 
 ---
 
 ## `runectl tui`
 
-An interactive, in-terminal view over runs — `runectl`'s one screen-owning surface,
-added to D13 by a dated amendment rather than by drift (see [`ARCHITECTURE.md`](ARCHITECTURE.md) D13). It is a
-TUI, not a GUI: no server, no port, no browser involved, and every action it takes is
-composing and launching the exact non-interactive command a human would type.
+An interactive in-terminal view over runs: `runectl`'s one screen-owning surface, added to
+D13 by a dated amendment rather than by drift (see
+[`ARCHITECTURE.md`](ARCHITECTURE.md) D13). A TUI, not a GUI — no server, no port, no
+browser — and every action composes and launches the exact non-interactive command a person
+would type.
 
 ```bash
 uv run runectl tui                       # live: launch and watch runs, approve flags
 uv run runectl tui --replay <run_id>     # demo: animate through a finished run's trace
 ```
 
-**The one architectural idea**: the TUI never runs the agent loop in-process. Launching
-a run from its modal spawns `runectl run --output jsonl ...` as a subprocess and reads
-the same stdout-NDJSON stream any other driving agent reads (the "Output contract"
-above). `loop/runner.py` gained no threading or async to make this work; several runs
-watched at once are just several subprocesses, each with its own container (D2
-unchanged — still one container per run). The run itself stays exactly as
-non-interactive as it is when driven from a shell.
+**The architectural constraint:** the TUI never runs the agent loop in-process. Launching
+a run from its modal spawns `runectl run --output jsonl ...` as a subprocess and reads the
+same stdout NDJSON stream any driving agent reads (*Output contract*, above).
+`loop/runner.py` gained no threading or async to support it; several runs watched at once
+are several subprocesses, each with its own container (D2 unchanged — one container per
+run). The run remains exactly as non-interactive as when driven from a shell.
 
-**`--replay <run_id>`** is Phase 5's demo mode: it animates straight through a finished
-run's already-recorded `trace.jsonl` at a readable pace (`--playback-delay`, default
-0.6s between events) — "show the thought, show the command, show the output, show the
-next move" — the demo this project set out to build. This is deliberately **not**
-`runectl replay`,
-which re-executes the loop against `ReplayProvider`/`ReplaySandbox` to prove the
-tool-call sequence still matches; playback only reads what already happened, so it needs
-no sandbox, no provider, and spends nothing regardless of whether the original run did.
+**`--replay <run_id>`** animates a finished run's already-recorded `trace.jsonl` at a
+readable pace (`--playback-delay`, default 0.6 s between events). It is not `runectl
+replay`, which re-executes the loop against `ReplayProvider`/`ReplaySandbox` to prove the
+tool-call sequence still matches. Playback only reads what already happened, so it needs no
+sandbox and no provider, and spends nothing regardless of what the original run cost.
 
-`make demo` seeds a scratch run store with one solved, zero-spend fixture run (via
-`StubSandbox`/`ScriptedProvider` — no Docker, no key) and opens straight into its
+`make demo` seeds a scratch run store with one solved, zero-spend fixture run via
+`StubSandbox`/`ScriptedProvider` — no Docker, no key — and opens directly into its
 playback, so the demo works on a clean checkout.
 
-Arena preflight on startup only reports a missing image (pointing at `arena ensure`); it
-never builds one — D17's rule that a run must never kick off a 30-minute build behind
-your back applies to the TUI too.
+Arena preflight on startup reports a missing image and points at `arena ensure`; it never
+builds one. D17's rule that a run must never start a 30-minute build implicitly applies to
+the TUI as well.
 
 ### The rest of the CLI, one key away
 
-Watching and launching runs is not all the TUI does — every other command family below
-is reachable without leaving it, each one keyboard-bound and searchable through
-Textual's built-in command palette (`ctrl+p`):
+Every command family below is reachable without leaving the TUI, each keyboard-bound and
+searchable through Textual's command palette (`ctrl+p`). `tests/unit/test_cli_tui_parity.py`
+holds this table to the real CLI surface.
 
 | Key | Opens | Same as |
 |---|---|---|
@@ -579,45 +584,45 @@ Textual's built-in command palette (`ctrl+p`):
 | `b` | Bench — compose and run a suite | `runectl bench run` |
 | `x` | Attach to the selected run's container | `runectl runs attach --exec` |
 | `X` | Kill a run this session launched, still in flight | sends the subprocess `SIGTERM` |
-| `?` | Help overlay — what everything on the screen does, in plain English | — |
+| `i` | Rebuild the derived SQLite index | `runectl index rebuild` |
+| `R` | Replay-check the selected run at zero spend | `runectl replay <id> --check` |
+| `?` | Help overlay — what each element on the screen does, in plain language | — |
 
 Two dropdowns above the run list filter it by category and outcome.
 
 ### Reading the screen
 
-The **run list** on the left shows each run by the tail of its id — the full id is 22
-columns, which at pane width used to push the model and cost columns off the edge
-entirely. The **header line above the tabs** carries the selected run's full identity:
-challenge, category, model, thinking level, steps, cost so far, outcome, and the full run
-id to copy for a `trace show`. It keeps up with a live run rather than filling in only at
-the end. The **Flags tab** shows its pending-candidate count in the tab label, because a
-flag waiting on approval is the one thing on this screen that needs you to act.
+The **run list** on the left identifies each run by the tail of its id; the full id is 22
+columns, which at pane width pushed the model and cost columns off the edge. The **header
+line above the tabs** carries the selected run's full identity — challenge, category, model,
+thinking level, steps, cost so far, outcome, and the full run id for a `trace show`. It
+tracks a live run rather than filling in at the end. The **Flags tab** carries its
+pending-candidate count in the tab label, since a flag awaiting approval is the one item on
+the screen requiring action.
 
 The **model dropdown** in the launcher, bench and config screens lists every registered
-model cheapest-first within provider, with its price in the label and a `· no key` marker
-where that provider has no key configured. Textual's `Select` searches as you type, so 37
-entries are navigable by typing a few characters of the id.
+model cheapest-first within provider, with price in the label and a `· no key` marker where
+that provider has no key configured. Textual's `Select` searches as you type, so 37 entries
+are navigable from a few characters of the id.
 
-A splash screen shows the mark and wordmark for about a second on launch; any key
-dismisses it. It never appears under `--replay`, and `RunectlTUI(splash=False)` disables
-it outright, which is what the test suite and `scripts/capture_demo.py` use so decoration
-can never alter what either of them sees.
+A splash screen shows the mark and wordmark for about a second on launch and dismisses on
+any key. It never appears under `--replay`, and `RunectlTUI(splash=False)` disables it
+outright — what the test suite and `scripts/capture_demo.py` use, so decoration cannot
+alter what either observes.
 
-Every one of these follows the same rule the run launcher already does: it composes and
-runs the real `runectl <command>`, in a subprocess, never reimplementing what that
-command does. `k`/`c` capture the command's output and show it inline; `a`/`b`/`x`
-suspend the TUI (Textual's `App.suspend()`, which hands the real terminal to the child
-process and restores the TUI when it exits) and run it in the foreground instead, because
-their natural output — `docker build`'s progress, a bench suite's live report, an
-interactive shell — is a stream a person already knows how to read, not something worth
-re-parsing into a widget.
+Every action follows the launcher's rule: compose and run the real `runectl <command>` in a
+subprocess, never reimplementing it. `k`, `c`, `i` and `R` capture the command's output and
+show it inline. `a`, `b` and `x` suspend the TUI — Textual's `App.suspend()` hands the real
+terminal to the child process and restores the TUI on exit — and run in the foreground,
+because their natural output (`docker build` progress, a bench suite's live report, an
+interactive shell) is a stream already readable as-is.
 
 ---
 
 ## `runectl arena`
 
-The arena image (`runectl/arena:kali`) is the sandbox every challenge runs inside. It is
-the one piece of setup required before `runectl run` will do anything.
+The arena image (`runectl/arena:kali`) is the sandbox every challenge runs inside, and the
+one piece of setup required before `runectl run` does anything.
 
 ```bash
 uv run runectl arena ensure      # first-time setup, interactive on a TTY
@@ -627,7 +632,7 @@ uv run runectl arena status      # is it here, and is it current?
 
 ### `arena ensure`
 
-The first-run helper. With no flags on a TTY it asks which route you want:
+The first-run helper. With no flags on a TTY it offers three routes:
 
 ```
 The arena sandbox image (runectl/arena:kali) isn't on this machine yet.
@@ -642,7 +647,7 @@ Challenges run inside it, so runectl needs one before it can do anything.
 Which [1]:
 ```
 
-Every route also has a non-interactive form, so nothing here can block a script:
+Every route has a non-interactive form, so nothing here blocks a script:
 
 | Flag | What it does |
 |---|---|
@@ -651,10 +656,10 @@ Every route also has a non-interactive form, so nothing here can block a script:
 | `--from-registry <ref>` | `docker pull` a prebuilt image and tag it |
 | `--force` | Act even if a current image is already present |
 
-With no flags **and no TTY**, `ensure` prints the remedies and exits 4 rather than
-prompting. Nothing in `runectl` can ever block waiting on a human.
+With no flags and no TTY, `ensure` prints the remedies and exits 4 rather than prompting.
+No `runectl` command blocks waiting on a human.
 
-To move an arena image between machines, or keep one for an offline competition:
+Moving an arena image between machines, or keeping one for an offline competition:
 
 ```bash
 docker save runectl/arena:kali -o arena.tar            # on the machine that has it
@@ -670,22 +675,22 @@ runectl/arena:kali -> sha256:...
   architecture:                      amd64
 ```
 
-Exits 4 if the image isn't built (printing the remedies) and 4, with a different message,
-if the Docker daemon isn't reachable at all — the two are distinguishable on purpose.
+Exits 4 with the remedies when the image is not built, and 4 with a distinct message when
+the Docker daemon is unreachable. The two are deliberately distinguishable.
 
-If the two fingerprints differ, the image was built from an older Dockerfile and `status`
-says `STALE`. That's a warning, not a failure: the image still works, its toolset is just
-older than your checkout.
+Differing fingerprints mean the image was built from an older Dockerfile, and `status`
+reports `STALE`. That is a warning, not a failure: the image works, its toolset is older
+than the checkout.
 
 ### `arena build`
 
-Shells out to `docker build`, streaming Docker's output to your terminal, and returns
-Docker's exit code. It stamps the Dockerfile's fingerprint onto the image as a label,
-which is what makes the staleness check above possible.
+Shells out to `docker build`, streams Docker's output to the terminal, and returns Docker's
+exit code. It stamps the Dockerfile's fingerprint onto the image as a label, which is what
+makes the staleness check above possible.
 
 ### What `runectl run` does about all this
 
-Before creating a run directory or resolving your API key, `run` checks the image:
+Before creating a run directory or resolving an API key, `run` checks the image:
 
 - **Missing** → exit 4, printing every remedy. No run directory is created, nothing is
   spent.
@@ -695,27 +700,27 @@ Before creating a run directory or resolving your API key, `run` checks the imag
 
 ### Architecture
 
-The arena is always built and run as `linux/amd64`, whatever your host is. CTF challenge
-binaries are overwhelmingly x86-64, and an arm64 arena — what you get by default on Apple
-Silicon — cannot execute them; the failure looks like a broken challenge rather than a
-broken sandbox. Docker emulates, which is slower but correct. If you already have an arena
-built the wrong way, `arena status` says so.
+The arena is always built and run as `linux/amd64` regardless of host. CTF challenge
+binaries are overwhelmingly x86-64, and an arm64 arena — the default on Apple Silicon —
+cannot execute them; the failure presents as a broken challenge rather than a broken
+sandbox. Docker emulates, which is slower and correct. `arena status` reports an arena built
+the wrong way.
 
 ### Attaching to a live run
 
-Containers are named after the run, so you can take over from the agent while it works:
+Containers are named after the run, so a person can take over from the agent mid-run:
 
 ```bash
 docker exec -it runectl-<run_id> bash      # a shell in the live container
 tail -f /ctf/.agent_live.log               # or just watch every command it runs
 ```
 
-`runectl run` prints the exact command when it starts on a terminal.
+`runectl run` prints the exact command on startup when attached to a terminal.
 
-`run` never prompts you and never silently builds the image for you. That's deliberate
-([`ARCHITECTURE.md`](ARCHITECTURE.md) D2, D4, D17): a run that can block on a question isn't
-scriptable, and a run that quietly kicks off a 30-minute build when you asked it to solve
-a challenge isn't honest.
+`run` never prompts and never builds the image implicitly
+([`ARCHITECTURE.md`](ARCHITECTURE.md) D2, D4, D17): a run that can block on a question is
+not scriptable, and a run that starts a 30-minute build in response to a solve request is
+not honest about what it is doing.
 
 ## `runectl index rebuild`
 
@@ -724,18 +729,18 @@ uv run runectl index rebuild
 # rebuilt index from 12 run(s)
 ```
 
-Drops and regenerates `~/.local/share/runectl/index.db` purely from the run directories
-on disk. The database is a convenience index for cross-run questions and is **never**
-authoritative — deleting it loses nothing about any run's replayability.
+Drops and regenerates `~/.local/share/runectl/index.db` entirely from the run directories
+on disk. The database is a convenience index for cross-run queries and is never
+authoritative; deleting it costs nothing in any run's replayability.
 
 ---
 
 ## `runectl flag`
 
 The human half of D11. Under the default `gated` policy, a run that finds a candidate it
-cannot re-derive in the sandbox — or that does not match the `--flag-format` you supplied —
-exits **2** and leaves it in the trace instead of claiming a solve. These commands are what
-happens next.
+cannot re-derive in the sandbox, or that does not match a supplied `--flag-format`, exits
+**2** and leaves the candidate in the trace rather than claiming a solve. These commands
+handle what comes next.
 
 ### `runectl flag list <run_id>`
 
@@ -751,15 +756,15 @@ Exits **3** if the run held nothing.
 
 ### `runectl flag approve <run_id> [--flag <value>]`
 
-Finalizes a pending candidate: appends a `flag.decision` event (the trace is append-only,
-so the judge's original `pending` decision stays visible) and updates `run.json` to
-`outcome: solved`, `exit_code: 0`, with `approved_at` set. That timestamp is what keeps an
-approved solve distinguishable from one the judge cleared unattended — `runectl bench`
-scores them apart.
+Finalizes a pending candidate: appends a `flag.decision` event — the trace is append-only,
+so the judge's original `pending` decision stays visible — and updates `run.json` to
+`outcome: solved`, `exit_code: 0`, with `approved_at` set. That timestamp keeps an approved
+solve distinguishable from one the judge cleared unattended; `runectl bench` scores them
+apart.
 
-`--flag` is required only when a run held more than one candidate. Exits **6** if the run
-has no pending candidate, which also makes approving twice a no-op rather than a way to
-invent a second solve.
+`--flag` is required only when a run held more than one candidate. Exits **6** when the run
+has no pending candidate, which makes approving twice a no-op rather than a route to a
+second solve.
 
 ---
 
@@ -778,27 +783,27 @@ runectl bench run --suite bench/practice --model claude-sonnet-5 --max-total-cos
 | `--suite <dir>` | `bench/practice` | Directory of challenge directories. |
 | `--model <id>` | **required** | As for `runectl run`. |
 | `--only <name>` | — | Challenge name or directory name. Repeatable. |
-| `--max-cost <usd>` | `0.50` | Ceiling for **one** run. |
-| `--max-total-cost <usd>` | `0` (off) | Ceiling for the **whole suite**. It stops cleanly between challenges, and never lets one run overshoot what is left. |
+| `--max-cost <usd>` | `0.50`, or `[run] max_cost` from config | Ceiling for one run. `0` disables it. |
+| `--max-total-cost <usd>` | `0` (off) | Ceiling for the whole suite. Stops cleanly between challenges and never lets one run overshoot the remainder. |
 | `--max-steps`, `--approval`, `--utility-model`, `--api-key`, `--record` | as `runectl run` | Passed through to every run. |
-| `--thinking <level>` | `off` | As for `runectl run` (D20) — **defaults to `off` here, not the configured per-provider default**: a suite runs unattended and repeatably, and a reasoning-cost surprise across ten challenges is a worse place to discover a config default than one run. |
+| `--thinking <level>` | `off` | As for `runectl run` (D20). Defaults to `off` here rather than to the configured per-provider default: a suite runs unattended and repeatably, and a reasoning-cost surprise across ten challenges is a worse place to discover a config default than a single run. |
 | `--report <path>` | — | Also write the JSON report to a file. |
 | `--output <human\|json>` | `human` | `json` prints the report object on stdout. |
 | `--dry-run` | off | List what would run and exit. Spends nothing. |
 
-**Exit codes.** `0` normally — including when nothing solved, because that is a result.
-`1` if any run **finalized a wrong flag**: a false flag is the one outcome worse than
-failing, so it fails the command. `6` for a malformed or missing suite.
+**Exit codes.** `0` normally, including when nothing solved, since that is a result. `1`
+when any run finalized a wrong flag: a false flag is the one outcome worse than failing, so
+it fails the command. `6` for a malformed or missing suite.
 
-A wrong flag that was *held* for approval is not a false flag and does not fail the
-command — holding it is the D15 subsystem working.
+A wrong flag that was held for approval is not a false flag and does not fail the command.
+Holding it is the D15 subsystem operating as specified.
 
 The report carries per-case `status` (`solved`, `false_flag`, `candidate`, `unsolved`,
 `error`), steps, progress ratio and cost, plus suite totals and `gate_met` — the V1 gate
 of 2 solved with 0 false flags.
 
-Note the shape: it is `runectl bench run`, a subcommand, not the bare `runectl bench` the
-D4 command-surface sketch used.
+Note the shape: `runectl bench run`, a subcommand, not the bare `runectl bench` of the D4
+command-surface sketch.
 
 ---
 
@@ -812,8 +817,7 @@ D4 command-surface sketch used.
 | `OPENAI_API_KEY` | OpenAI key, second in the resolution order |
 | `GOOGLE_API_KEY` | Google key, second in the resolution order |
 
-`RUNECTL_HOME` is the clean way to keep experimental or benchmark runs out of your real
-store:
+`RUNECTL_HOME` keeps experimental or benchmark runs out of the real store:
 
 ```bash
 RUNECTL_HOME=/tmp/scratch-runs uv run runectl run --model gpt-5-mini --challenge chal.toml

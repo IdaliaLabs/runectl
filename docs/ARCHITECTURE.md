@@ -1,21 +1,20 @@
 # Architecture
 
 What `runectl` is, what each module owns, what happens during a run, the trace and
-category file formats, and — in one place — the design decisions that shaped all of it
-and why. This file used to be split across `ARCHITECTURE.md`, `TRACE.md`, `CATEGORIES.md`
-and a separate `DECISIONS.md`; they're combined here so the *what* and the *why* sit next
-to each other instead of across four files. In-code comments cite these decisions by
-number (`D3`, `D13`, …) — grep this file for the number.
+category file formats, and the design decisions that shaped all of it. This file was
+previously split across `ARCHITECTURE.md`, `TRACE.md`, `CATEGORIES.md` and a separate
+`DECISIONS.md`, combined here so the *what* and the *why* sit together. In-code comments
+cite these decisions by number (`D3`, `D13`, …); grep this file for the number.
 
 ## What runectl is
 
-`runectl` hands an AI agent a CTF challenge — name, category, the description you were
-given, any provided files — plus your own provider API key, and it works the challenge
-inside a disposable Docker sandbox, one shell command at a time, until it finds a flag or
-runs out of budget. Every step is written to an append-only trace as it happens, so a run
-is checkable after the fact regardless of whether it succeeded. It is a CLI, not a
-service: no server, nothing that listens on a port, and (with one narrow, subprocess-only
-exception — the TUI, see D13) nothing that keeps state outside the files it writes.
+`runectl` hands an AI agent a CTF challenge — name, category, description, any provided
+files — plus a caller-supplied provider API key, and works the challenge inside a
+disposable Docker sandbox one shell command at a time, until it finds a flag or exhausts
+its budget. Every step is written to an append-only trace as it happens, so a run is
+checkable after the fact whether or not it succeeded. It is a CLI, not a service: no
+server, nothing listening on a port, and — with one narrow subprocess-only exception, the
+TUI (D13) — no state outside the files it writes.
 
 ## File structure
 
@@ -27,7 +26,7 @@ src/runectl/
 
     cli/                the ONLY package allowed to print
         app.py          Typer root; wires subcommands; hosts `replay`, `index`, `tui`
-        run_cmd.py      `runectl run` — resolves everything, runs the loop, exits honestly
+        run_cmd.py      `runectl run` — resolves config, runs the loop, maps outcome to exit code
         trace_cmd.py    `runectl trace show`
         keys_cmd.py     `runectl keys set|list|rm`
         arena_cmd.py    `runectl arena build|status`
@@ -54,7 +53,7 @@ src/runectl/
         store.py        run directories and the run.json manifest
         index.py        the derived, rebuildable SQLite index
 
-    sandbox/            where commands actually run
+    sandbox/            where commands execute
         base.py         the Sandbox Protocol + ExecResult. Zero Docker imports.
         docker.py       DockerSandbox — one container per run
         stub.py         StubSandbox — in-process fake, no daemon
@@ -137,12 +136,11 @@ Every one of those steps that emits something writes through the same path:
 `TraceWriter.emit` redacts known key shapes from every string in the payload, spills any
 string over 8KB to `artifacts/<digest>.txt` and replaces it in-line with a reference,
 then appends the line to `trace.jsonl` and `fsync`s. Nothing else ever writes to that
-file. `render.py` reads the same event stream that just got written — to stderr as a
-human-readable line, or to stdout as the raw JSON, depending on `--output` — so the human
-view can never show you something the trace doesn't contain. `index.db` (SQLite) is
-rebuilt from `runs/` on disk whenever `runectl index rebuild` runs; it answers cross-run
-questions and can be deleted without losing anything, because `trace.jsonl` is what's
-authoritative.
+file. `render.py` reads the same event stream that was just written — to stderr as a
+human-readable line, or to stdout as raw JSON, depending on `--output` — so the human view
+cannot display anything absent from the trace. `index.db` (SQLite) is rebuilt from `runs/`
+on disk by `runectl index rebuild`; it answers cross-run queries and can be deleted without
+loss, because `trace.jsonl` is authoritative.
 
 **The TUI's data path is one hop removed.** `runectl tui` never touches the loop, the
 sandbox, or a provider directly. Launching a run from its modal spawns
@@ -150,18 +148,18 @@ sandbox, or a provider directly. Launching a run from its modal spawns
 other driving agent would read from stdout; browsing a finished run reads
 `trace.jsonl` straight off disk through the same `TraceReader` the CLI itself uses.
 `runectl tui --replay <run_id>` is a third mode — no subprocess, no sandbox, no provider —
-that just re-plays an already-written trace at a fixed pace for a live demo.
+replaying an already-written trace at a fixed pace.
 
 ## The three rules that shape everything
 
-**1. Only `cli/` prints.** Core code emits typed events into the trace and returns
-values. It never writes to stdout or stderr. This is what keeps the loop testable and
-scriptable — and it's why the human renderer is a pure function of the event stream: it
-literally cannot show you something that isn't in the trace.
+**1. Only `cli/` prints.** Core code emits typed events into the trace and returns values.
+It never writes to stdout or stderr. This keeps the loop testable and scriptable, and makes
+the human renderer a pure function of the event stream: it cannot display anything absent
+from the trace.
 
 **2. Files are the source of truth.** `trace.jsonl` is the record. SQLite is a derived
-index you can delete and rebuild. If the process is SIGKILLed, whatever reached disk is
-still a valid, replayable prefix.
+index, deletable and rebuildable. On SIGKILL, whatever reached disk remains a valid,
+replayable prefix.
 
 **3. Every LLM call goes through one path.** Main loop calls and internal utility calls
 (summarization) both go through `complete_with_retry`, into the same cost ledger. There
@@ -309,7 +307,7 @@ see D11/D15's 2026-09-10 amendments).
 | `progress.scored` | `step`, `family`, `fingerprint`, `delta`, `signal` — emitted after every executed tool call; a repeated fingerprint scores 0 regardless of exit code (D16: progress means new information). |
 | `budget.blocked` | `step`, `family`, `reason` — a command rejected *before* it ran, so it costs no sandbox time. |
 | `strategy.shift` | `step`, `reason`, `evidence_summary` — forced after a no-progress threshold. |
-| `flag.candidate` | `step`, `flag`, `how_found`, `provenance_seq` — `provenance_seq` points at the `seq` of the `tool.result` where the flag was actually observed (D15 §1); the agent cites it via the `[observation seq=N]` header every tool result carries. |
+| `flag.candidate` | `step`, `flag`, `how_found`, `provenance_seq` — `provenance_seq` points at the `seq` of the `tool.result` where the flag was observed (D15 §1); the agent cites it via the `[observation seq=N]` header every tool result carries. |
 | `flag.reviewed` *(legacy, no longer emitted)* | `step`, `flag`, `sound`, `reason` — the disconfirmation pass's verdict (D15 §2, removed 2026-09-10: `_apply_policy` never read it, so it cost a provider call per candidate and moved no decision). |
 | `flag.rederived` | `step`, `source_seq`, `command`, `matched`, `stdout`, `stderr`, `exit_code`, `duration_s`, `truncated`, `errored` — added 2026-09-10 because D15 mechanism 2 calls `Sandbox.exec` directly rather than through the dispatcher, so a re-derivation command executed inside the container and left no trace record of having done so. Without it, `ReplaySandbox`'s positional exec queue desynchronized after a gated finalize, and a replay would silently end `candidate` instead of `solved`. `errored: true` means `exec` raised rather than returned — still recorded, since an unrecorded failure desyncs the queue the same way a success would. |
 | `flag.decision` | `step`, `flag`, `decision` (`finalized`/`pending`/`rejected`), `reason` — a run can carry two decisions for the same flag (`pending` from the judge, then `finalized` from `runectl flag approve`); the last one wins. |
@@ -361,7 +359,7 @@ Written only with `--record`. One line per provider call:
 ```
 
 `ReplayProvider` loads these into a hash → list map and serves them in order per hash.
-A request whose hash isn't in the cassette raises — which is the point: it means the loop
+A request whose hash is absent from the cassette raises, which is the intent: it means the loop
 would have asked the model something different, so the replay is no longer faithful.
 
 ### `index.db`
@@ -392,7 +390,7 @@ for event in events:
         print(payload.outcome, payload.cost_usd)
 ```
 
-`load_run` takes an optional `store=Store(...)` if you're reading from somewhere other
+`load_run` takes an optional `store=Store(...)` for reading from somewhere other
 than the default home. The reader is lazy and stops at the first unparseable line.
 
 ---
@@ -415,7 +413,7 @@ with a message listing what *is* available.
 brief = "One or two lines: how this category should be approached."
 
 playbook = """
-Longer prose the model actually reads. A decision order, the common traps, and
+Longer prose supplied to the model. A decision order, the common traps, and
 the specific things that are and aren't progress in this category.
 """
 
@@ -463,7 +461,7 @@ Regexes are Python `re` syntax; TOML basic strings need backslashes doubled, or 
 step (`progress/`): the command is classified into a family, its output is normalized and
 fingerprinted, the signal patterns score it, and the budgets decide whether the next call
 on the same idea runs at all. A blocked call is rejected *before* execution — it costs no
-sandbox time and no further tokens on a dead hypothesis. Two consequences worth knowing
+sandbox time and no further tokens on a dead hypothesis. Two consequences follow
 when writing a category: a `signal_low` pattern that is too broad makes real findings
 score as noise, spending the family budget faster and forcing an early strategy shift; a
 `tactic_families` regex that matches nothing leaves every command in `other`, where they
@@ -497,7 +495,7 @@ default, and `--network none` is one flag away for offline work. `crypto` and `m
 ### Writing a good playbook
 
 1. **Give a decision order, not a tool list.** "Recon headers and robots.txt before
-   fuzzing; test injection on endpoints you actually found before spraying parameters" is
+   fuzzing; test injection on endpoints already found before spraying parameters" is
    useful. "Use ffuf, sqlmap, and curl" is not.
 2. **Name what is not progress.** Web's playbook says repeated 404/403 bodies are the
    single most common way the category burns steps for nothing.
@@ -592,7 +590,7 @@ Forecloses any command that can hang a script waiting on a human.
 ### D5 — Provider layer: BYO keys, multi-provider with no default, non-streaming, retried
 
 Locked. Anthropic, OpenAI, and Google all ship with no "primary" — the product promise is
-bring whatever model you want, because different models are better at different
+any registered model of any provider, because different models are better at different
 categories. `--model` is always required; nothing is inferred. Key precedence:
 `--api-key` > env var > OS keyring > `~/.config/runectl/keys.json` (mode 0600). Keys are
 never written to project config, never logged, redacted from the trace by a writer-level
@@ -613,8 +611,8 @@ read only where the user explicitly set them, and the TUI always composes and sh
 explicit `--model` before launching. **Amended 2026-09-11:** the registry grew from 7
 rows to 37, covering every cheap tier a competition realistically runs on — the old table
 had no `gpt-5-nano`, no `gemini-2.5-flash-lite`, no `gpt-5.6-luna`, which meant the
-product promise of "bring whatever model you want" was true only for the expensive half of
-each provider's lineup. Two of the old OpenAI prices were also simply wrong (`gpt-5` at
+product promise of free model choice held only for the expensive half of each provider's
+lineup. Two of the old OpenAI prices were also simply wrong (`gpt-5` at
 $5/$15 against an actual $1.25/$10; `gpt-5-mini` at $0.50/$1.50 against $0.25/$2). Every
 provider block in the registry now carries the date and source URL it was checked against,
 because this table has now been wrong twice and both times it corrupted cost reports
@@ -785,7 +783,7 @@ keep tuning web first. **Built 2026-09-09 (M7):** the remaining five categories
 coupled changes: the arena grew the toolset the new playbooks name (this changes the
 Dockerfile fingerprint, D17 — an existing arena warns as stale until rebuilt, expected);
 the five default to `network = "bridge"`, not `none` (remote-target pwn, live osint, and
-network challenges that hand you a host all want egress by default; `crypto`/`misc` stay
+network challenges targeting a remote host all want egress by default; `crypto`/`misc` stay
 `none`); the bench grew from 5 to 10 cases, one per new category, with `pwn`/`osint`
 scored outside the V1 gate for structural reasons (pwn's local flag file is directly
 readable by the agent's shell; osint's answer lives in rotted live-internet state).
@@ -848,7 +846,7 @@ detected and warns rather than silently running old tooling; an image with no la
 "unknown provenance," not "stale." Three non-interactive remedies:
 `arena ensure --build`, `--from-file PATH` (load a `docker save` tarball — the
 offline/air-gapped path), `--from-registry REF`. `arena ensure` with no flags on a TTY is
-the one interactive surface in the product — it asks which route you want; with no TTY it
+the one interactive surface in the product, offering the three routes; with no TTY it
 prints the remedies and exits 4 rather than prompting. `runectl run` itself still never
 prompts and never silently builds.
 
@@ -916,8 +914,7 @@ the model's reasoning becomes a first-class trace event (`llm.thinking`) instead
 discarded. Default is `off` — thinking is billed as output tokens against the same D19
 ceiling, so a run that didn't ask for it doesn't pay for it; `off` is also the safe
 default for an unattended `bench run` suite. The *resolved* level is always written to
-`run.started` and `run.json`, never only implied by a flag the user might not remember
-passing. One shared six-value scale maps per provider via `ModelInfo.thinking_style`
+`run.started` and `run.json`, never implied by a flag alone. One shared six-value scale maps per provider via `ModelInfo.thinking_style`
 (Anthropic: adaptive thinking + `output_config.effort`; OpenAI: `reasoning.effort`;
 Google: a thinking-token budget); where a provider or model can't represent a requested
 level, `runectl` clamps and **records the clamp in the trace** — the same "loud, not
@@ -940,8 +937,7 @@ reasoning models default to `medium` effort unless told `none`. So `--thinking o
 in `bench/results/` was scored under that behavior, on `claude-sonnet-5`.
 
 The fix reuses this decision's existing machinery rather than adding a second reporting
-channel. A new `ModelInfo.thinking_off_supported` says whether a model can actually be
-stopped; where it cannot, `resolve_thinking_level` clamps `off` **up** to `low` — the
+channel. A new `ModelInfo.thinking_off_supported` records whether a model can be stopped at all; where it cannot, `resolve_thinking_level` clamps `off` **up** to `low` — the
 cheapest level that is a real request — and returns the same `was_clamped` flag that
 already populates `thinking_clamped_from`. The CLI semantic is now stated plainly in
 `CLI.md`: `off` means "do not request thinking", and on a model that thinks anyway,
