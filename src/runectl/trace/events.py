@@ -101,6 +101,9 @@ class LlmResponse(EventPayload):
     tool_call: ToolCallSummary | None = None
     input_tokens: int
     output_tokens: int
+    # See CostUpdated below — same D18 rationale, same 2026-09-13 addition.
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
     cost_usd: float
 
 
@@ -255,6 +258,14 @@ class CostUpdated(EventPayload):
     model: str
     input_tokens: int
     output_tokens: int
+    # D18 — cached input is billed at a fraction of the uncached rate (a tenth
+    # on most models, a quarter or a half on some OpenAI families), so these are
+    # what make `cost_usd` re-derivable from the trace rather than merely
+    # asserted by it. Added 2026-09-13: the ledger had tracked them since D18,
+    # but they stopped at the ledger, and a live OpenAI run that was 95% cache
+    # hits recorded no evidence of it. Default 0 keeps every older trace valid.
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
     cost_usd: float
     cumulative_cost_usd: float
 

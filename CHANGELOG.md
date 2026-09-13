@@ -4,6 +4,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Version
 [SemVer](https://semver.org/); `0.x` means the CLI contract can still change between
 minor versions — see [`docs/CLI.md`](docs/CLI.md)'s Stability note.
 
+## [0.1.4] — 2026-09-13
+
+The last provider gets its first real call. An OpenAI key drove every one of the 18
+registered OpenAI models plus a full 40-step run of `bench/practice/easy-03` on
+`gpt-5-nano` ($0.0137, exit 3). Four more defects fell out — the same pattern as the
+Gemini pass earlier the same day, in code that was typed, linted and covered by a green
+suite throughout. All three providers have now been exercised live; all three had bugs
+the moment they were.
+
+### Fixed
+- **`--thinking max` was a 400 on every OpenAI model.** Eight registry rows claimed a
+  ceiling of `max`, so `resolve_thinking_level` passed it straight through. No OpenAI
+  model accepts that value at all; the real ceiling is `xhigh`, or `high` on `gpt-5.1`
+  and the original `gpt-5` family.
+- **`--thinking off` killed a run 18 steps in on the `gpt-5` family.** Those models
+  refuse `reasoning_effort: "none"` — the registry comment claimed the exact opposite.
+  The adapter keyed that value on `supports_thinking` rather than on the separate
+  `thinking_off_supported` fact, so the registry's clamp only protected callers that went
+  through `resolve_thinking_level`. The utility summarizer does not, and a healthy
+  `gpt-5-nano` run died on a routine context-compaction call.
+- **Cached tokens never reached the trace.** The ledger had priced them since D18, but
+  `cost.updated` and `llm.response` carried only uncached counts — so a run that was 95%
+  cache hits left no evidence of it, and `cost_usd` could not be re-derived from the
+  record beside it. Both events now carry the split (defaulting to 0, so older traces
+  stay valid).
+- **Pointing `--challenge` at a challenge *directory* raised a traceback** instead of a
+  usage error. The directory is the unit a challenge is vendored as, so it is the natural
+  thing to type. Now exit 6 with a message naming the `chal.toml` it wanted.
+
+### Changed
+- **Four OpenAI models retired as unusable**: `gpt-6-astra` and the `gpt-5.6` family
+  reject function tools on `v1/chat/completions` at every reasoning setting, *including*
+  omitting the setting. Every `runectl` step sends tools. `gpt-5.6-luna` was this
+  README's recommended cheap OpenAI pick; the recommendation is now `gpt-5-mini`.
+  `gpt-5.4*` and `gpt-5.5` keep working, registered as non-thinking models.
+- **`retired` became `retired_reason`**, and `models list` prints the reason per row —
+  two unrelated causes of unusability now exist (a 404 for new accounts, and the tools
+  conflict above), and one hardcoded message was wrong for four rows.
+- Registry capability columns for OpenAI are now live-probed rather than read from
+  documentation, and `docs/CLI.md`'s table is generated from the registry.
+
 ## [0.1.3] — 2026-09-13
 
 The first release where a second provider has actually been run. A live Gemini key drove

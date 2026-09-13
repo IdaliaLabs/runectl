@@ -1,18 +1,19 @@
 """OpenAI adapter (D5).
 
-NOTE for reviewers: this adapter's shape was verified against the installed
-`openai` SDK (chat completion / usage field names, `chat.completions.create`
-signature, exception hierarchy) but was never exercised against the live API —
-no OpenAI key was available in the build environment. See the M4 handoff
-report before trusting it for a real run.
+Exercised against the live API on **2026-09-13** — every registry row called for
+real, plus a full 30-step challenge run. Until that day this file carried a note
+saying the opposite, and the note was the most important thing in it: four
+separate defects were sitting here that no amount of reading the SDK had found.
+See `docs/STATUS.md` for what live verification does and does not now cover.
 
-Extended thinking (D20, added 2026-09-09): **request-side only, unverified
-against a live service, same as the rest of this adapter.** The installed SDK
-(3.8.0) exposes a top-level `reasoning_effort` parameter on
-`chat.completions.create` accepting `none`/`minimal`/`low`/`medium`/`high`/
-`xhigh`/`max`, which `low`/`medium`/`high`/`xhigh`/`max` here map onto
-directly (`off` sends nothing, leaving the model's own default). **This API
-surface never returns reasoning content** — `ChatCompletionMessage` has no
+Extended thinking (D20, added 2026-09-09; corrected 2026-09-13): the SDK exposes
+a top-level `reasoning_effort` on `chat.completions.create`, but which values a
+given model accepts is **narrower than the SDK's type suggests and narrower
+again once tools are attached** — no model takes `max`, the `gpt-5` family
+refuses `none`, and several models refuse every real level when function tools
+are present. The registry's per-row levels are live-probed rather than derived
+from the docs; see its openai block. **This API surface never returns reasoning
+content** — `ChatCompletionMessage` has no
 `reasoning`/`thinking` field, unlike the Responses API's encrypted reasoning
 items. `Completion.thinking_text` is therefore always empty for this adapter
 even when a level was requested and honored server-side; a switch to the
@@ -38,7 +39,7 @@ from runectl.providers.base import (
     api_error,
     auth_error,
 )
-from runectl.providers.registry import ThinkingLevel
+from runectl.providers.registry import MIN_REAL_THINKING_LEVEL, ThinkingLevel
 from runectl.tools.schema import ToolSchema, to_openai
 
 _TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
@@ -112,6 +113,7 @@ class OpenAIProvider:
         api_key: str,
         client: openai.OpenAI | None = None,
         supports_thinking: bool = False,
+        thinking_off_supported: bool = True,
     ) -> None:
         self._model_id = model_id
         self._client = client or openai.OpenAI(api_key=api_key)
@@ -121,6 +123,14 @@ class OpenAIProvider:
         # rejects the parameter outright. Mirrors how `prompt_cache` is already
         # passed down from the registry row by `run_cmd._build_provider`.
         self._supports_thinking = supports_thinking
+        # Whether this model accepts `reasoning_effort: "none"` at all. NOT the
+        # same fact as `supports_thinking`, and conflating them cost a live run
+        # on 2026-09-13: the original `gpt-5` family thinks but refuses `none`,
+        # so a summarizer call — which passes `thinking="off"` straight down
+        # without going through `resolve_thinking_level` — 400'd eighteen steps
+        # into an otherwise healthy run. The main loop was fine; the clamp only
+        # protects callers that ask it to.
+        self._thinking_off_supported = thinking_off_supported
 
     def complete(
         self,
@@ -143,7 +153,13 @@ class OpenAIProvider:
         if thinking != "off":
             extra["reasoning_effort"] = thinking
         elif self._supports_thinking:
-            extra["reasoning_effort"] = "none"
+            # "off" on a reasoning model means saying so — omitting the
+            # parameter leaves the model's own default (medium) in force. But
+            # only if this model takes "none": the `gpt-5` family rejects it
+            # outright, and there the cheapest real level is the honest floor.
+            extra["reasoning_effort"] = (
+                "none" if self._thinking_off_supported else MIN_REAL_THINKING_LEVEL
+            )
         try:
             response = self._client.chat.completions.create(
                 model=self._model_id,

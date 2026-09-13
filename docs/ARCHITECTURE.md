@@ -620,6 +620,28 @@ provider block in the registry now carries the date and source URL it was checke
 because this table has now been wrong twice and both times it corrupted cost reports
 silently.
 
+**Amended 2026-09-13 — the registry's capability columns are live-probed, not read.** A
+real call to every row on OpenAI and Google (the first either provider had ever received)
+contradicted the published documentation on twelve of them, in three ways that no amount
+of re-reading a pricing page would have caught: seven rows named models that exist, are
+listed by their own provider's `models.list()`, and cannot be used — three Gemini rows
+404 for new accounts, and four OpenAI rows refuse function tools on `v1/chat/completions`
+at every reasoning setting, including omitting the setting. Eight rows claimed a thinking
+ceiling of `max`, which **no OpenAI model accepts at all**. And the `gpt-5` family refuses
+`reasoning_effort: "none"` — the registry comment had asserted the exact opposite.
+
+Two consequences are structural rather than data. `retired` became `retired_reason`: a
+second, unrelated cause of unusability arrived the same day, and one hardcoded message
+("closed to new accounts") would have been a lie for the four OpenAI rows. And
+`cheapest_model_for` skipping retired rows stopped being a nicety — on both providers the
+*cheapest row was among the dead ones*, so the default `--utility-model` was a model
+nobody could call.
+
+The standing rule this adds: a registry row's **prices** may come from a dated page, but
+its **capabilities** must come from a call. The two failure modes are not comparable — a
+wrong capability fails loudly at the first request, while a wrong price never fails and
+silently corrupts every cost report downstream.
+
 ### D6 — Run state: one explicit object, no mixins
 
 Locked. The predecessor tool's six mixins sharing ~30 implicit `self` attributes was the
@@ -862,6 +884,20 @@ reports outside `candidates_token_count`; reasoning spend was invisible to the l
 the understatement grew with the setting that makes a run expensive. Anthropic's adapter
 had been correct since this decision was written, which is why the gap survived a
 milestone: the only provider anyone had run live was the one that worked.
+
+**Amended 2026-09-13 — the split now reaches the trace.** The 2026-09-11 fix above made
+the *ledger* price cached tokens correctly, and stopped there: `cost.updated` and
+`llm.response` carried only `input_tokens` and `output_tokens`, so the cached half never
+appeared in the record at all. A live OpenAI run that was ~95% cache hits (a 4,571-token
+prompt returning as 4,352 cached + 219 uncached, verified against the API) wrote a trace
+in which nothing distinguished it from a run with no caching whatsoever.
+
+That is a D3 problem more than a D18 one. The trace is the source of truth and the reason
+this tool claims a solve is checkable; a cost figure that cannot be re-derived from the
+events beside it is asserted, not evidenced — and the multiplier between the two readings
+is up to 10x. Both events now carry `cache_read_tokens` and `cache_write_tokens`,
+defaulting to 0 so every trace recorded before today stays valid and reads as
+"no cache information," which is exactly what it is.
 
 ### D19 — Every run has a hard spend ceiling
 

@@ -118,7 +118,10 @@ def _build_provider(model: ModelInfo, api_key: str) -> Provider:
         )
     if model.provider == "openai":
         return OpenAIProvider(
-            model_id=model.id, api_key=api_key, supports_thinking=model.supports_thinking
+            model_id=model.id,
+            api_key=api_key,
+            supports_thinking=model.supports_thinking,
+            thinking_off_supported=model.thinking_off_supported,
         )
     return GoogleProvider(model_id=model.id, api_key=api_key)
 
@@ -167,7 +170,20 @@ def challenge_from_file(path: Path) -> Challenge:
     `easy-03/files/enc.txt` — not `./files/enc.txt`. Absolute paths are left
     alone so a one-off challenge can still point anywhere.
     """
-    raw = tomllib.loads(path.read_text())
+    # D4: a mistyped path is a usage error with an actionable message, not a
+    # traceback. Pointing --challenge at the challenge *directory* is the
+    # obvious slip (the directory is the unit you think in), and it used to
+    # raise a raw IsADirectoryError through the whole Typer stack.
+    if path.is_dir():
+        candidate = path / "chal.toml"
+        hint = f" — did you mean {candidate}?" if candidate.is_file() else ""
+        raise UsageError(f"--challenge wants the TOML file, not the directory {path}{hint}")
+    if not path.is_file():
+        raise UsageError(f"no such challenge file: {path}")
+    try:
+        raw = tomllib.loads(path.read_text())
+    except tomllib.TOMLDecodeError as exc:
+        raise UsageError(f"{path} is not valid TOML: {exc}") from exc
     base = path.parent
     files = tuple(
         Path(f) if Path(f).is_absolute() else (base / f) for f in raw.get("files", [])

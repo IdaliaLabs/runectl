@@ -66,3 +66,26 @@ def test_the_flag_format_matches_the_expected_flag(case: BenchCase) -> None:
     flag_format = raw.get("flag_format")
     if flag_format:
         assert re.search(flag_format, case.expected_flag), case.name
+
+
+def test_pointing_challenge_at_the_directory_is_a_usage_error_not_a_traceback() -> None:
+    """D4: honest exit codes, no tracebacks at a user for a mistyped path.
+
+    Hit for real on 2026-09-13 — `--challenge bench/practice/easy-03` is the
+    natural thing to type, since the directory is the unit a challenge is
+    vendored as, and it raised a raw IsADirectoryError through the whole Typer
+    stack. A driving agent (D4's premise) cannot act on a traceback.
+    """
+    from runectl.errors import UsageError
+
+    directory = Path(__file__).resolve().parents[2] / "bench" / "practice" / "easy-03"
+    assert directory.is_dir()
+
+    with pytest.raises(UsageError) as caught:
+        challenge_from_file(directory)
+    assert caught.value.exit_code == 6
+    assert "chal.toml" in str(caught.value)  # names the file it wanted
+
+    with pytest.raises(UsageError) as missing:
+        challenge_from_file(directory / "does-not-exist.toml")
+    assert missing.value.exit_code == 6

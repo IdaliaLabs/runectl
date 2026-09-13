@@ -106,14 +106,26 @@ class ModelInfo(BaseModel):
     # a model never thinks in the first place.
     thinking_off_supported: bool = True
 
-    # Added 2026-09-13 after a live probe: the provider still lists this model
-    # and existing accounts may still call it, but it is closed to new ones and
-    # returns 404 for them. Kept registered rather than deleted — deleting it
-    # would break the accounts that *do* have access, and the provider's own 404
-    # names the replacement more helpfully than an "unknown model" error would.
-    # Excluded from `cheapest_model_for`, because a default nobody new can use
-    # is not a default.
-    retired: bool = False
+    # Why this model cannot be used by runectl, or "" if it can. Added
+    # 2026-09-13 after a live probe, as a plain bool; widened to a reason the
+    # same day, when a second probe turned up a second, unrelated cause of
+    # unusability and the one-size message would have been a lie for it:
+    #
+    #   * Google — the provider still lists the model and existing accounts may
+    #     still call it, but it is closed to new ones and 404s for them.
+    #   * OpenAI — the model exists and answers, but rejects *function tools* on
+    #     `v1/chat/completions` at every reasoning setting, including omitting
+    #     the setting entirely. Every runectl step sends tools, so the model is
+    #     reachable and still unusable here.
+    #
+    # Kept registered rather than deleted: deleting breaks whoever does have
+    # access, and a named reason beats an "unknown model" error. Excluded from
+    # `cheapest_model_for` — a default nobody can use is not a default.
+    retired_reason: str = ""
+
+    @property
+    def retired(self) -> bool:
+        return bool(self.retired_reason)
 
 
 MODEL_REGISTRY: dict[str, ModelInfo] = {
@@ -181,18 +193,55 @@ MODEL_REGISTRY: dict[str, ModelInfo] = {
     # Checked 2026-09-11 against https://developers.openai.com/api/docs/pricing
     # and, for the rows whose capabilities matter, that model's own page. Each
     # row below is served by `v1/chat/completions`, which is the endpoint this
-    # adapter uses — verified directly for `gpt-6-astra`, `gpt-5.6-luna` and
-    # `gpt-5-nano`.
+    # adapter uses — confirmed 2026-09-13 by a real call to **every** row here,
+    # not just a spot check: all 18 answered, with a tool call, on that endpoint.
     #
     # Deliberately absent: the `-pro` reasoning tiers (`gpt-5-pro`,
     # `gpt-5.4-pro`, `gpt-5.5-pro`) are Responses-API-only and priced at
     # 15/120 to 30/180, which is the wrong shape for an agent loop that makes a
     # call per step; and `gpt-3.5-turbo`, which wastes steps on agentic work.
     #
-    # `reasoning_effort: "none"` is what actually turns thinking off here, and
-    # only the `gpt-5*` families accept it — `gpt-6-astra` does not, so it is
-    # `thinking_off_supported=False`. `gpt-4o*` and `gpt-4.1*` are not reasoning
-    # models at all.
+    # Thinking levels below are **live-probed, 2026-09-13**: one real call per
+    # model per level against this endpoint, keeping what did not 400. Doing it
+    # by hand was not optional — the previous values were written from the docs
+    # and three of their claims were wrong in a way that only a real call shows:
+    #
+    #   * **No OpenAI model accepts `max`.** Eight rows claimed
+    #     `max_thinking_level="max"`, so `resolve_thinking_level` passed `max`
+    #     straight through and the call 400'd. The real ceiling is `xhigh`
+    #     (`high` on `gpt-5.1` and the original `gpt-5` family).
+    #   * **`reasoning_effort: "none"` is refused by the original `gpt-5`
+    #     family** (`gpt-5`, `-mini`, `-nano`) as well as by `gpt-6-astra`;
+    #     the comment here used to assert the exact opposite. Those four are
+    #     `thinking_off_supported=False` and clamp up to `low` instead.
+    #   * `gpt-5.4-mini` / `gpt-5.4-nano` under-claimed at `high`; both take
+    #     `xhigh`.
+    #
+    # The `gpt-5` family also offers a `minimal` level below `low`, which would
+    # be the cheaper clamp target for a `--thinking off` run. Not modelled: it
+    # would mean a seventh level in `THINKING_LEVELS` for one family's cost
+    # edge, and `low` is correct, just not the cheapest possible.
+    #
+    # `gpt-4o*` and `gpt-4.1*` are not reasoning models at all.
+    #
+    # **Function tools and reasoning collide on this endpoint**, live-probed the
+    # same day and the reason four rows above are retired and four more say
+    # `supports_thinking=False`. `v1/chat/completions` answers
+    # "Function tools with reasoning_effort are not supported for <model> ...
+    # use /v1/responses" for:
+    #
+    #   * `gpt-6-astra` and the whole `gpt-5.6` family, at **every** setting —
+    #     omitting `reasoning_effort` entirely still 400s, because their own
+    #     default effort is what collides. Every runectl step sends tools, so
+    #     these four are unreachable here at any configuration: retired.
+    #   * `gpt-5.4*` and `gpt-5.5`, at every setting *except* `none` (or the
+    #     parameter omitted). They work fine as non-thinking models, so they
+    #     stay, with `supports_thinking=False` — accurate for what this adapter
+    #     can actually ask of them, not a claim about the model.
+    #
+    # The `gpt-5`, `gpt-5.1` and `gpt-5.2` rows have no such conflict and think
+    # normally with tools attached. Moving the adapter to `v1/responses` would
+    # lift the whole restriction and is the obvious future call (D5 note).
     #
     # Context windows are the documented total window. OpenAI caps *input* below
     # that (272K on the `gpt-5` family); the field is display-only, so the
@@ -200,68 +249,74 @@ MODEL_REGISTRY: dict[str, ModelInfo] = {
     "gpt-6-astra": ModelInfo(
         id="gpt-6-astra", provider="openai", context_window=1_050_000,
         supports_prompt_cache=True, price_in=10.0, price_out=50.0,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
-        thinking_off_supported=False,
+        supports_thinking=False, thinking_style="none", max_thinking_level="off",
+        retired_reason="rejects function tools on v1/chat/completions",
     ),
     "gpt-5.6-sol": ModelInfo(
         id="gpt-5.6-sol", provider="openai", context_window=1_050_000,
         supports_prompt_cache=True, price_in=4.0, price_out=20.0,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
+        supports_thinking=False, thinking_style="none", max_thinking_level="off",
+        retired_reason="rejects function tools on v1/chat/completions",
     ),
     "gpt-5.6-terra": ModelInfo(
         id="gpt-5.6-terra", provider="openai", context_window=1_050_000,
         supports_prompt_cache=True, price_in=2.0, price_out=12.0,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
+        supports_thinking=False, thinking_style="none", max_thinking_level="off",
+        retired_reason="rejects function tools on v1/chat/completions",
     ),
     "gpt-5.6-luna": ModelInfo(
         id="gpt-5.6-luna", provider="openai", context_window=1_050_000,
         supports_prompt_cache=True, price_in=0.20, price_out=1.20,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
+        supports_thinking=False, thinking_style="none", max_thinking_level="off",
+        retired_reason="rejects function tools on v1/chat/completions",
     ),
     "gpt-5.5": ModelInfo(
         id="gpt-5.5", provider="openai", context_window=272_000,
         supports_prompt_cache=True, price_in=5.0, price_out=30.0,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
+        supports_thinking=False, thinking_style="none", max_thinking_level="off",
     ),
     "gpt-5.4": ModelInfo(
         id="gpt-5.4", provider="openai", context_window=272_000,
         supports_prompt_cache=True, price_in=2.50, price_out=15.0,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
+        supports_thinking=False, thinking_style="none", max_thinking_level="off",
     ),
     "gpt-5.4-mini": ModelInfo(
         id="gpt-5.4-mini", provider="openai", context_window=400_000,
         supports_prompt_cache=True, price_in=0.75, price_out=4.50,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="high",
+        supports_thinking=False, thinking_style="none", max_thinking_level="off",
     ),
     "gpt-5.4-nano": ModelInfo(
         id="gpt-5.4-nano", provider="openai", context_window=400_000,
         supports_prompt_cache=True, price_in=0.20, price_out=1.25,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="high",
+        supports_thinking=False, thinking_style="none", max_thinking_level="off",
     ),
     "gpt-5.2": ModelInfo(
         id="gpt-5.2", provider="openai", context_window=400_000,
         supports_prompt_cache=True, price_in=1.75, price_out=14.0,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
+        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="xhigh",
     ),
     "gpt-5.1": ModelInfo(
         id="gpt-5.1", provider="openai", context_window=400_000,
         supports_prompt_cache=True, price_in=1.25, price_out=10.0,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
+        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="high",
     ),
     "gpt-5": ModelInfo(
         id="gpt-5", provider="openai", context_window=400_000,
         supports_prompt_cache=True, price_in=1.25, price_out=10.0,
-        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="max",
+        supports_thinking=True, thinking_style="openai_effort", max_thinking_level="high",
+        thinking_off_supported=False,
     ),
     "gpt-5-mini": ModelInfo(
         id="gpt-5-mini", provider="openai", context_window=400_000,
         supports_prompt_cache=True, price_in=0.25, price_out=2.0,
         supports_thinking=True, thinking_style="openai_effort", max_thinking_level="high",
+        thinking_off_supported=False,
     ),
     "gpt-5-nano": ModelInfo(
         id="gpt-5-nano", provider="openai", context_window=400_000,
         supports_prompt_cache=True, price_in=0.05, price_out=0.40,
         supports_thinking=True, thinking_style="openai_effort", max_thinking_level="high",
+        thinking_off_supported=False,
     ),
     # The 4.x families are not reasoning models, and their cached input is
     # billed at 0.25x (4.1) and 0.50x (4o) rather than the 0.10x everything
@@ -353,20 +408,20 @@ MODEL_REGISTRY: dict[str, ModelInfo] = {
         supports_prompt_cache=True, price_in=1.25, price_out=10.0,
         supports_thinking=True, thinking_style="google_budget", max_thinking_level="high",
         thinking_off_supported=False,
-        retired=True,
+        retired_reason="closed to new accounts (404)",
     ),
     "gemini-2.5-flash": ModelInfo(
         id="gemini-2.5-flash", provider="google", context_window=1_000_000,
         supports_prompt_cache=False, price_in=0.30, price_out=2.50,
         supports_thinking=True, thinking_style="google_budget", max_thinking_level="high",
         thinking_off_supported=False,
-        retired=True,
+        retired_reason="closed to new accounts (404)",
     ),
     "gemini-2.5-flash-lite": ModelInfo(
         id="gemini-2.5-flash-lite", provider="google", context_window=1_000_000,
         supports_prompt_cache=False, price_in=0.10, price_out=0.40,
         supports_thinking=True, thinking_style="google_budget", max_thinking_level="high",
-        retired=True,
+        retired_reason="closed to new accounts (404)",
     ),
 }
 

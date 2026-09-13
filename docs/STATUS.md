@@ -75,10 +75,42 @@ none of which could have been caught without a real call:
   ~35s; four exponential retries wait about seven in total, so a limit that was about to
   lift looked like a hard failure. `TransientProviderError` now carries `retry_after`.
 
-**The OpenAI adapter remains unexercised.** Its cache-token fix and its `reasoning_effort`
-mapping are still unverified against a live service. On the evidence above — two of the
-three adapters had real bugs the moment a real call was made, in code that was typed,
-linted and unit-tested — treat it as untested, not as probably-fine.
+**2026-09-13 (later the same day) — the OpenAI adapter, live.** Every one of its 18
+registry rows called for real with a function tool attached, then a full 40-step run of
+`bench/practice/easy-03` on `gpt-5-nano`: exit 3 (exhausted, honest), $0.0137, 15 steps
+with progress, tool calls dispatched and results returned. It did not solve the challenge.
+Prompt caching was verified separately against a real cache hit — a 4,571-token prompt
+came back as 4,352 cached + 219 uncached, which is the split D18 prices on. Four more
+defects surfaced, and the shape of them is the finding:
+
+- **No OpenAI model accepts `--thinking max`.** Eight rows claimed `max_thinking_level="max"`,
+  so `resolve_thinking_level` passed it straight through and the call 400'd. The real
+  ceiling is `xhigh`, or `high` on `gpt-5.1` and the original `gpt-5` family.
+- **The `gpt-5` family refuses `reasoning_effort: "none"`** — the exact opposite of what
+  the registry comment asserted. Worse, the adapter keyed that value on `supports_thinking`
+  rather than on `thinking_off_supported`, so the clamp only protected callers that went
+  through `resolve_thinking_level`. The utility summarizer does not: a healthy `gpt-5-nano`
+  run died at step 18 on a context-compaction call. Both facts are now separate fields and
+  both reach the adapter.
+- **Four models cannot be used at all.** `gpt-6-astra` and the whole `gpt-5.6` family
+  reject function tools on `v1/chat/completions` at every reasoning setting — *including*
+  omitting the setting, since their own default effort is what collides. Every runectl step
+  sends tools. `gpt-5.6-luna` was the README's recommended cheap OpenAI pick. Now retired
+  with a reason; `gpt-5.4*`/`gpt-5.5` keep working as non-thinking models.
+- **Cache tokens never reached the trace.** The ledger had tracked them since D18, but
+  `cost.updated` and `llm.response` carried only the uncached counts, so a run that was
+  95% cache hits left no evidence of it and `cost_usd` could not be re-derived from the
+  record. Both events now carry the split.
+
+Moving the adapter to `v1/responses` would lift the tools/reasoning restriction entirely
+and is the obvious future call; it would also be the only way to surface OpenAI's
+reasoning text, which Chat Completions never returns.
+
+**What that pass means for trusting this table.** All three adapters have now made real
+calls, and all three had bugs the moment they did — in code that was typed, linted and
+unit-tested throughout. Live verification is the only kind that counted here. What is
+still *not* covered: no OpenAI or Google run has solved a challenge, so their prompt
+behaviour end-to-end is unmeasured; and the bench numbers below are Anthropic-only.
 
 **2026-09-13 — a spilled tool output silently truncated the trace.** The writer moves any
 string over 8KB into `artifacts/` and leaves a reference behind (D3). Nothing resolved it
@@ -164,42 +196,23 @@ which fails on four separate assertions if the event is removed.
   has actually run; the `docker load` / `docker pull` argument construction is tested
   against a stubbed `subprocess` but has never moved a real image. The daemon-down and
   image-missing paths *were* exercised by hand.
-- **The OpenAI and Google adapters.** Each was written against its installed SDK's actual
-  types and exception hierarchy, but no OpenAI or Google key has ever talked to the live
-  service. Treat the first real run on each as its smoke test. This is not a formality:
-  on 2026-09-11 both were found to be dropping cached tokens on the floor — assigning the
-  provider's total prompt count to `Usage.input_tokens`, whose contract is uncached input
-  only, so every cache hit billed at the full rate — and Google was additionally ignoring
-  `thoughts_token_count`, which it bills as output but reports separately. Both are fixed
-  and unit-tested against fake usage objects (`tests/unit/test_cost_accounting.py`), and
-  **both fixes are themselves unverified against a live service**, same caveat one level
-  deeper. Anthropic's adapter was correct throughout, which is exactly why the gap
-  survived a milestone: the only provider anyone had run live was the one that worked.
+- **Every registry row's *price*.** All 37 rows have now been called for real (Google and
+  OpenAI on 2026-09-13), so ids, endpoint support and thinking capability are observed
+  facts rather than documentation claims — and the observation corrected a dozen of them.
+  Prices were not, and cannot be, checked this way: a wrong price does not fail, it just
+  reports the wrong number. Each provider block in `providers/registry.py` carries the
+  dated page it was read from; treat those as the weakest claims in the file.
 
-- **35 of the 37 registry rows.** Only `claude-sonnet-5` and `claude-opus-5` have ever
-  been used for a real run. Every other row's id, pricing and capability flags come from
-  the provider's published documentation on 2026-09-11 (sources and dates are in
-  `providers/registry.py` and [`CLI.md`](CLI.md)), not from a call that succeeded. An id
-  that has been renamed or retired since, or a model that turns out not to be served by
-  `v1/chat/completions`, will fail at the first request with a clean provider error — but
-  it will fail. Prices are the more insidious risk, because a wrong one does not fail at
-  all; it just reports the wrong number.
+- **A completed solve on OpenAI or Google.** Both adapters now drive the loop correctly
+  end to end, but neither has *solved* a challenge — the two live runs exhausted their
+  step budget on cheap models. Every published bench number remains Anthropic-only, and
+  nothing here measures how well the prompts work on a non-Anthropic model.
 
-- **`--thinking off` on OpenAI and Google.** The 2026-09-11 D20 amendment maps `off` onto
-  `reasoning_effort: "none"` for OpenAI reasoning models and clamps to `low` where a model
-  thinks regardless. The clamp arithmetic is unit-tested across every registry row; what
-  the providers actually do with those requests has not been observed.
-- **Thinking on OpenAI and Google (D20).** Written against the installed SDKs'
-  documented shapes (`reasoning_effort` on OpenAI's Chat Completions; `ThinkingConfig`
-  with `include_thoughts=True` on `google-genai`) and covered by the same
-  fakes-over-mocks unit tests as everything else in `providers/`, but neither has run
-  against a live service — same caveat as the adapters themselves, one level deeper.
-  Two things worth knowing before the first real run: OpenAI's Chat Completions surface
-  has no reasoning-content field at all, so `Completion.thinking_text` is always empty
-  for that adapter even when a level was honored server-side (a Responses API migration
-  would be needed to render it — out of scope here); Google's `ThinkingLevel` enum tops
-  out at `HIGH` (no `xhigh`/`max`), which the registry's `max_thinking_level="high"` for
-  both Gemini models already reflects.
+- **OpenAI reasoning text.** Chat Completions has no reasoning-content field at all, so
+  `Completion.thinking_text` is always empty for that adapter even when a level was
+  honored and billed server-side. Confirmed live, not just assumed. Rendering it would
+  mean moving to `v1/responses` — which would also lift that endpoint's refusal to mix
+  function tools with reasoning, and is the obvious next call for this adapter.
 - **The TUI's live-run path** (launching a real `runectl run` subprocess from the
   launcher modal, watching multiple runs concurrently, approving a flag through it). The
   subprocess/NDJSON-parsing mechanism (`runner_proc.run_streaming`) is unit-tested

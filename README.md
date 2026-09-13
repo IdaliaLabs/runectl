@@ -224,8 +224,8 @@ required and never inferred; these are the ones worth knowing:
 | Model | Provider | In / Out per 1M | Good for |
 |---|---|---|---|
 | `gpt-5-nano` | openai | $0.05 / $0.40 | the cheapest thing that can drive the loop at all |
+| `gpt-5-mini` | openai | $0.25 / $2.00 | the same loop with noticeably better reasoning |
 | `gemini-3.1-flash-lite` | google | $0.25 / $1.50 | cheapest Google model still open to new accounts |
-| `gpt-5.6-luna` | openai | $0.20 / $1.20 | cheap *and* current-generation reasoning |
 | `claude-haiku-4-5` | anthropic | $1.00 / $5.00 | the default utility/summarizer model |
 | `claude-sonnet-5` | anthropic | $2.00 / $10.00 | what every published bench number here was scored with |
 | `claude-opus-5` | anthropic | $5.00 / $25.00 | when a challenge is genuinely hard |
@@ -234,15 +234,18 @@ required and never inferred; these are the ones worth knowing:
 uv run runectl models list     # all 37, with price, context, thinking support, key presence
 ```
 
-Three things to know. **The OpenAI path has never run against a live service** — that
-adapter is written against the SDK's documented shapes and is unverified
-([`docs/STATUS.md`](docs/STATUS.md)); Anthropic and Google have both been exercised for
-real. **Some registered models are closed to new accounts** — the `gemini-2.5-*` rows in
-particular — and are marked `retired` in `runectl models list`; they stay registered for
-accounts that kept access, and are never chosen as a default. And **`--thinking off`
-cannot always be honored**: most current models think by default and some cannot be
-stopped at all, so `runectl` requests the cheapest real level instead and records the
-clamp in the trace, rather than letting the provider's default run unreported.
+Three things to know. **All three providers have now been exercised against a live
+service** — every registry row called for real on 2026-09-13, plus a full challenge run
+each. That pass is also why some rows are marked `[RETIRED]` in `runectl models list`:
+a model can be registered, listed by its own provider, and still unusable here — the
+`gemini-2.5-*` rows are closed to new accounts, and four OpenAI rows refuse function
+tools on the endpoint this adapter uses. They stay registered for whoever does have
+access, and are never chosen as a default. **What a model will accept is narrower than
+its docs suggest**, so the registry's per-model thinking levels are probed rather than
+read off a page. And **`--thinking off` cannot always be honored**: most current models
+think by default and some cannot be stopped at all, so `runectl` requests the cheapest
+real level instead and records the clamp in the trace, rather than letting the
+provider's default run unreported.
 
 ## The TUI
 

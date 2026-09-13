@@ -36,7 +36,7 @@ def models_list() -> None:
         # worse than no row. Retired models stay listed because accounts
         # that kept access can still name them explicitly.
         if model.retired:
-            marker += " [RETIRED — closed to new accounts]"
+            marker += f" [RETIRED — {model.retired_reason}]"
         typer.echo(
             f"{model.id}\tprovider={model.provider}\tkey={has_key}\tthinking={thinking}\t"
             f"ctx={model.context_window}\t${model.price_in:.2f}/${model.price_out:.2f} per 1M{marker}"

@@ -44,24 +44,24 @@ is not a column. Rows are grouped by provider, cheapest first.
 | `claude-opus-4-6` | anthropic | 1M | ✓ 0.1x | to `high` | yes | 5.00 | 25.00 |
 | `claude-fable-5-1` | anthropic | 1M | ✓ 0.1x | to `max` | **no** | 10.00 | 50.00 |
 | `claude-fable-5` | anthropic | 1M | ✓ 0.1x | to `max` | **no** | 10.00 | 50.00 |
-| `gpt-5-nano` | openai | 400K | ✓ 0.1x | to `high` | yes | 0.05 | 0.40 |
+| `gpt-5-nano` | openai | 400K | ✓ 0.1x | to `high` | **no** | 0.05 | 0.40 |
 | `gpt-4.1-nano` | openai | 1.05M | ✓ 0.25x | — | n/a | 0.10 | 0.40 |
 | `gpt-4o-mini` | openai | 128K | ✓ 0.5x | — | n/a | 0.15 | 0.60 |
-| `gpt-5.6-luna` | openai | 1.05M | ✓ 0.1x | to `max` | yes | 0.20 | 1.20 |
-| `gpt-5.4-nano` | openai | 400K | ✓ 0.1x | to `high` | yes | 0.20 | 1.25 |
+| `gpt-5.6-luna` ⚠️ | openai | 1.05M | ✓ 0.1x | — | n/a | 0.20 | 1.20 |
+| `gpt-5.4-nano` | openai | 400K | ✓ 0.1x | — | n/a | 0.20 | 1.25 |
+| `gpt-5-mini` | openai | 400K | ✓ 0.1x | to `high` | **no** | 0.25 | 2.00 |
 | `gpt-4.1-mini` | openai | 1.05M | ✓ 0.25x | — | n/a | 0.40 | 1.60 |
-| `gpt-5-mini` | openai | 400K | ✓ 0.1x | to `high` | yes | 0.25 | 2.00 |
-| `gpt-5.4-mini` | openai | 400K | ✓ 0.1x | to `high` | yes | 0.75 | 4.50 |
+| `gpt-5.4-mini` | openai | 400K | ✓ 0.1x | — | n/a | 0.75 | 4.50 |
+| `gpt-5.1` | openai | 400K | ✓ 0.1x | to `high` | yes | 1.25 | 10.00 |
+| `gpt-5` | openai | 400K | ✓ 0.1x | to `high` | **no** | 1.25 | 10.00 |
+| `gpt-5.2` | openai | 400K | ✓ 0.1x | to `xhigh` | yes | 1.75 | 14.00 |
 | `gpt-4.1` | openai | 1.05M | ✓ 0.25x | — | n/a | 2.00 | 8.00 |
-| `gpt-5.1` | openai | 400K | ✓ 0.1x | to `max` | yes | 1.25 | 10.00 |
-| `gpt-5` | openai | 400K | ✓ 0.1x | to `max` | yes | 1.25 | 10.00 |
+| `gpt-5.6-terra` ⚠️ | openai | 1.05M | ✓ 0.1x | — | n/a | 2.00 | 12.00 |
 | `gpt-4o` | openai | 128K | ✓ 0.5x | — | n/a | 2.50 | 10.00 |
-| `gpt-5.6-terra` | openai | 1.05M | ✓ 0.1x | to `max` | yes | 2.00 | 12.00 |
-| `gpt-5.2` | openai | 400K | ✓ 0.1x | to `max` | yes | 1.75 | 14.00 |
-| `gpt-5.4` | openai | 272K | ✓ 0.1x | to `max` | yes | 2.50 | 15.00 |
-| `gpt-5.6-sol` | openai | 1.05M | ✓ 0.1x | to `max` | yes | 4.00 | 20.00 |
-| `gpt-5.5` | openai | 272K | ✓ 0.1x | to `max` | yes | 5.00 | 30.00 |
-| `gpt-6-astra` | openai | 1.05M | ✓ 0.1x | to `max` | **no** | 10.00 | 50.00 |
+| `gpt-5.4` | openai | 272K | ✓ 0.1x | — | n/a | 2.50 | 15.00 |
+| `gpt-5.6-sol` ⚠️ | openai | 1.05M | ✓ 0.1x | — | n/a | 4.00 | 20.00 |
+| `gpt-5.5` | openai | 272K | ✓ 0.1x | — | n/a | 5.00 | 30.00 |
+| `gpt-6-astra` ⚠️ | openai | 1.05M | ✓ 0.1x | — | n/a | 10.00 | 50.00 |
 | `gemini-2.5-flash-lite` ⚠️ | google | 1M | ✗ | to `high` | yes | 0.10 | 0.40 |
 | `gemini-3.1-flash-lite` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.25 | 1.50 |
 | `gemini-3.5-flash-lite` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.30 | 2.50 |
@@ -69,16 +69,26 @@ is not a column. Rows are grouped by provider, cheapest first.
 | `gemini-3.8-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.75 | 3.75 |
 | `gemini-3.7-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.75 | 3.75 |
 | `gemini-3.6-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 0.75 | 3.75 |
-| `gemini-3.5-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 1.50 | 9.00 |
 | `gemini-2.5-pro` ⚠️ | google | 1M | ✓ 0.1x | to `high` | **no** | 1.25 | 10.00 |
+| `gemini-3.5-flash` | google | 1M | ✓ 0.1x | to `high` | **no** | 1.50 | 9.00 |
 | `gemini-3.1-pro-preview` | google | 1M | ✓ 0.1x | to `high` | **no** | 2.00 | 12.00 |
 
-**⚠️ marks a retired model** — one the provider has closed to new accounts. It stays in
-the registry because accounts that already had access can still name it, and because the
-provider's own 404 ("no longer available to new users, please use X") is more useful than
-an unknown-model error. It is never chosen as a default: `cheapest_model_for` skips
-retired rows, so `--utility-model` never lands on one. Confirmed by a live probe on
-2026-09-13, which is the only way to know — `models.list()` still *lists* all three.
+**⚠️ marks a retired model** — one `runectl` cannot actually use, for one of two reasons,
+both found by live probe on 2026-09-13 and both stated per-row in `models list`:
+
+- **Closed to new accounts** (the three `gemini-2.5-*` rows). The model still exists and
+  existing accounts can still call it; a new key gets a 404. `models.list()` still
+  *lists* all three, which is why only a real call settles it.
+- **Rejects function tools** (`gpt-6-astra` and the three `gpt-5.6-*` rows). These answer
+  normally — until you attach a function tool, which `v1/chat/completions` refuses to mix
+  with reasoning on these models at *any* setting, including omitting the setting. Every
+  `runectl` step sends tools, so the model is reachable and still unusable here. A move
+  to `v1/responses` would lift this.
+
+Retired rows stay registered because whoever does have access can still name them
+explicitly, and because a specific reason beats an unknown-model error. They are never
+chosen as a default: `cheapest_model_for` skips them, so `--utility-model` never lands on
+one.
 
 **The `off` honored column** is the one people are surprised by. On most current models,
 sending no thinking configuration does not mean the model does not think — Anthropic
@@ -86,6 +96,12 @@ documents Sonnet 5 and Opus 5 as thinking by default and the Fable family as alw
 Gemini 3.x and 2.5 think by default except `flash-lite`, and OpenAI's reasoning models
 default to `medium` effort. Where `off` cannot be honored, `runectl` requests the cheapest
 real level (`low`) instead and records the clamp; see *Extended thinking* below.
+
+The OpenAI rows in both columns are **live-probed, not read off a page** — one real call
+per model per level, with a tool attached. That mattered: the docs implied eight rows
+accepted `max` (none do — `xhigh` is the real ceiling), and implied the `gpt-5` family
+accepted `reasoning_effort: "none"` (it does not, and the registry comment asserted the
+exact opposite until a real call proved it).
 
 **The prompt-cache column** carries the cache-read multiplier, because it is not uniform:
 a cached input token costs 0.10x a fresh one on everything current, but 0.25x on
@@ -119,7 +135,15 @@ Anthropic uses adaptive thinking (`thinking: {"type": "adaptive"}`) plus
 API's own default (`"omitted"`) returns thinking blocks with empty text. `budget_tokens`
 is rejected outright on Opus 5 and Sonnet 5. OpenAI and Google map onto their own
 reasoning-effort/thinking-budget parameters through the same `ModelInfo.thinking_style`
-field; **both are unverified against a live service** — see [`STATUS.md`](STATUS.md).
+field; both were verified live on 2026-09-13 — see [`STATUS.md`](STATUS.md).
+
+Two OpenAI-specific limits worth knowing, both live-confirmed. `reasoning_effort` accepts
+a **narrower set of values per model than the SDK's type suggests**, and narrower again
+once function tools are attached — which is why four rows are retired and four more are
+registered as non-thinking. And Chat Completions returns **no reasoning content at all**,
+so `llm.thinking` events never appear on an OpenAI run even at `--thinking high`: the
+level is requested and billed, but there is nothing to render. Anthropic and Google both
+return summarized thinking text.
 
 #### Clamping, in both directions
 
@@ -246,12 +270,13 @@ rate-limit, connection, timeout, and 5xx exceptions onto `TransientProviderError
 `complete_with_retry` can back off; let everything else propagate. Return a `Completion`
 with `text`, `tool_calls`, `usage`, and `stop_reason`.
 
-> **Anthropic verified; OpenAI and Google not yet.** All three adapters were written and
-> type-checked against their installed SDKs. The **Anthropic** adapter has since run
-> against the live API — the 2026-09-09 ten-challenge bench and its auth/error handling (a
-> rejected key exits 6, a bad request exits 5). The **OpenAI** and **Google** adapters have
-> never talked to their real services; treat the first run on each as its smoke test. See
-> [`STATUS.md`](STATUS.md).
+> **All three adapters verified live — and all three had bugs when they were.**
+> **Anthropic**: the 2026-09-09 ten-challenge bench plus auth/error handling (rejected key
+> exits 6, bad request exits 5). **Google** and **OpenAI**: 2026-09-13, every registry row
+> called for real plus a full challenge run each. Each of those two passes turned up four
+> defects that typing, linting and a green unit suite had all missed. What is still not
+> covered: neither OpenAI nor Google has *solved* a challenge, and every published bench
+> number is Anthropic-only. See [`STATUS.md`](STATUS.md).
 
 ---
 
@@ -466,14 +491,18 @@ uv run runectl models list
 ```
 claude-haiku-4-5	provider=anthropic	key=yes	thinking=no	ctx=200000	$1.00/$5.00 per 1M
 claude-sonnet-5	provider=anthropic	key=yes	thinking=yes (max max)	ctx=1000000	$2.00/$10.00 per 1M
-gemini-2.5-flash-lite	provider=google	key=no	thinking=yes (max high)	ctx=1000000	$0.10/$0.40 per 1M
-gpt-5-nano	provider=openai	key=no	thinking=yes (max high)	ctx=400000	$0.05/$0.40 per 1M
+gemini-3.1-flash-lite	provider=google	key=no	thinking=yes (max high)	ctx=1000000	$0.25/$1.50 per 1M
+gpt-5-nano	provider=openai	key=yes	thinking=yes (max high)	ctx=400000	$0.05/$0.40 per 1M
+gpt-5.6-luna	provider=openai	key=yes	thinking=no	ctx=1050000	$0.20/$1.20 per 1M [RETIRED — rejects function tools on v1/chat/completions]
 ...
 ```
 
 All 37 rows, grouped by provider and ordered cheapest first. This is the list to reach
-for before a competition: `gpt-5-nano` at $0.05/$0.40 and `gemini-2.5-flash-lite` at
-$0.10/$0.40 are two orders of magnitude cheaper per run than the flagship tiers.
+for before a competition: `gpt-5-nano` at $0.05/$0.40 and `gemini-3.1-flash-lite` at
+$0.25/$1.50 are two orders of magnitude cheaper per run than the flagship tiers.
+
+Read the `[RETIRED — ...]` marker before picking: seven rows are registered but unusable,
+each for a stated reason, and the marker is the only place that reason appears.
 
 ---
 

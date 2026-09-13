@@ -261,6 +261,8 @@ class Runner:
                     model=state.model.id,
                     input_tokens=completion.usage.input_tokens,
                     output_tokens=completion.usage.output_tokens,
+                    cache_read_tokens=completion.usage.cache_read_tokens,
+                    cache_write_tokens=completion.usage.cache_write_tokens,
                     cost_usd=last_cost,
                     cumulative_cost_usd=state.cost_usd,
                 )
@@ -307,6 +309,8 @@ class Runner:
                     tool_call=tool_call_summary,
                     input_tokens=completion.usage.input_tokens,
                     output_tokens=completion.usage.output_tokens,
+                    cache_read_tokens=completion.usage.cache_read_tokens,
+                    cache_write_tokens=completion.usage.cache_write_tokens,
                     cost_usd=last_cost,
                 )
             )

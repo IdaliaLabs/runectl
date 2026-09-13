@@ -73,3 +73,60 @@ def test_unknown_model_is_an_error_not_a_guess() -> None:
     """D5: providers are never inferred from a string prefix."""
     with pytest.raises(UnknownModelError):
         resolve("claude-sonnet-5-turbo-ultra")
+
+
+# The 2026-09-13 live probe of `v1/chat/completions`, one real call per model
+# per level with a function tool attached — which is what every runectl step
+# sends. Written down because the docs did not predict any of it: `max` is
+# accepted by no OpenAI model, `none` is refused by the original `gpt-5`
+# family, and reasoning collides with function tools outright on four rows.
+_OPENAI_LIVE = {
+    # model: (max usable level with tools, can be told not to think, usable at all)
+    "gpt-5-nano": ("high", False, True),
+    "gpt-5-mini": ("high", False, True),
+    "gpt-5": ("high", False, True),
+    "gpt-5.1": ("high", True, True),
+    "gpt-5.2": ("xhigh", True, True),
+    "gpt-5.4": ("off", True, True),
+    "gpt-5.4-mini": ("off", True, True),
+    "gpt-5.4-nano": ("off", True, True),
+    "gpt-5.5": ("off", True, True),
+    "gpt-5.6-luna": ("off", True, False),
+    "gpt-5.6-terra": ("off", True, False),
+    "gpt-5.6-sol": ("off", True, False),
+    "gpt-6-astra": ("off", True, False),
+}
+
+
+def test_openai_rows_match_what_the_live_api_accepts() -> None:
+    """Every OpenAI row's thinking claim is what a real call proved, not what
+    the pricing page implied. Eight rows used to claim `max`, which no OpenAI
+    model accepts at all — `resolve_thinking_level` passed it straight through
+    and the call 400'd."""
+    for model_id, (max_level, off_ok, usable) in _OPENAI_LIVE.items():
+        model = MODEL_REGISTRY[model_id]
+        assert model.max_thinking_level == max_level, model_id
+        assert model.thinking_off_supported == off_ok, model_id
+        assert model.retired is not usable, model_id
+        assert model.supports_thinking == (max_level != "off"), model_id
+
+
+def test_no_openai_row_claims_a_level_the_api_rejects() -> None:
+    """`max` is in runectl's vocabulary because Anthropic has it. Asking any
+    OpenAI model for it is a 400, so no OpenAI row may claim it."""
+    for model in MODEL_REGISTRY.values():
+        if model.provider == "openai":
+            assert model.max_thinking_level != "max", model.id
+
+
+def test_every_retired_row_says_why() -> None:
+    """Two different causes now retire a model — a 404 for new accounts, and a
+    tools/reasoning conflict on a model that answers fine otherwise. A single
+    hardcoded reason in the CLI was wrong for the second kind."""
+    retired = [m for m in MODEL_REGISTRY.values() if m.retired]
+    assert len(retired) >= 7
+    for model in retired:
+        assert model.retired_reason.strip(), model.id
+    # and the flag is exactly the presence of a reason
+    for model in MODEL_REGISTRY.values():
+        assert model.retired == bool(model.retired_reason), model.id

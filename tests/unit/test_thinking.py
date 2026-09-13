@@ -9,6 +9,7 @@ all (no daemon, no key — CONTRIBUTING.md).
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any, cast
 
 import pytest
 
@@ -243,3 +244,58 @@ def test_user_config_round_trips_and_rejects_key_shaped_values(  # type: ignore[
 
     with pytest.raises(UsageError):
         set_value("anthropic", "api_key", "sk-ant-abcdefghijklmnopqrstuvwxyz")
+
+
+def test_openai_off_does_not_send_none_to_a_model_that_rejects_it() -> None:
+    """Found live on 2026-09-13, eighteen steps into a healthy `gpt-5-nano` run.
+
+    `reasoning_effort: "none"` is refused by the original `gpt-5` family. The
+    main loop never hit it, because `resolve_thinking_level` clamps `off` up to
+    `low` for those models — but the utility summarizer calls `complete()`
+    directly with the default `thinking="off"`, bypassing the clamp, and the
+    adapter keyed its `"none"` on `supports_thinking` instead of on
+    `thinking_off_supported`. The run died on a context-compaction call.
+    """
+    from runectl.providers.openai import OpenAIProvider
+    from runectl.providers.registry import MIN_REAL_THINKING_LEVEL
+
+    class _Recorder:
+        def __init__(self) -> None:
+            self.kwargs: dict[str, object] = {}
+
+        class _Completions:
+            def __init__(self, outer: _Recorder) -> None:
+                self._outer = outer
+
+            def create(self, **kwargs: object) -> object:
+                self._outer.kwargs = kwargs
+                raise _Stop
+
+        @property
+        def chat(self) -> _Recorder:
+            return self
+
+        @property
+        def completions(self) -> _Recorder._Completions:
+            return _Recorder._Completions(self)
+
+    class _Stop(Exception):
+        pass
+
+    def effort_for(*, off_supported: bool) -> object:
+        recorder = _Recorder()
+        provider = OpenAIProvider(
+            model_id="gpt-5-nano",
+            api_key="k",
+            client=cast(Any, recorder),
+            supports_thinking=True,
+            thinking_off_supported=off_supported,
+        )
+        with pytest.raises(_Stop):
+            provider.complete(system="s", messages=[], tools=(), max_tokens=10, thinking="off")
+        return recorder.kwargs.get("reasoning_effort")
+
+    # a model that takes "none" is still told "none" — the cheap path is intact
+    assert effort_for(off_supported=True) == "none"
+    # one that doesn't gets the cheapest real level, never the 400
+    assert effort_for(off_supported=False) == MIN_REAL_THINKING_LEVEL
