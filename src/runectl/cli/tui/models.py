@@ -58,4 +58,10 @@ def preferred_model(options: list[tuple[str, str]]) -> str | None:
     configured = default_model("anthropic")
     if configured and any(value == configured for _, value in options):
         return configured
+    # Never preselect a retired row. On both Google and OpenAI the *cheapest*
+    # model turned out to be one of the dead ones (2026-09-13), so "first in
+    # cheapest-first order" is exactly where a retired default hides.
+    for label, value in options:
+        if "· retired" not in label:
+            return value
     return options[0][1] if options else None

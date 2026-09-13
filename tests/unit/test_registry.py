@@ -130,3 +130,15 @@ def test_every_retired_row_says_why() -> None:
     # and the flag is exactly the presence of a reason
     for model in MODEL_REGISTRY.values():
         assert model.retired == bool(model.retired_reason), model.id
+
+
+def test_the_tui_never_preselects_a_retired_model() -> None:
+    """Cheapest-first ordering puts a retired row first whenever the cheapest
+    model is the dead one — which, on 2026-09-13, was true of both Google and
+    OpenAI at once."""
+    from runectl.cli.tui.models import model_options, preferred_model
+
+    options = model_options(mark_missing_keys=False)
+    chosen = preferred_model(options)
+    assert chosen is not None
+    assert not MODEL_REGISTRY[chosen].retired
