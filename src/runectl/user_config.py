@@ -12,11 +12,22 @@ model. What reads this file is discovery/convenience surfaces only:
 *prefill* a field the user still sees and can change before it composes an
 explicit ``--model``/``--thinking`` command line).
 
-Only ``model`` and ``thinking`` are read by anything. ``runectl config`` will
-happily store other keys, and readers for ``approval``/``max_cost`` existed
-here for a while without ever being wired into the run path — removed
-2026-09-09 rather than left standing as an unkept promise. Setting those keys
-today does nothing.
+Four keys are read: ``model`` and ``thinking`` per provider section, and
+``approval`` and ``max_cost`` in a run-wide ``[run]`` section.
+
+The two run-wide keys have a history worth knowing. Readers for them existed
+here briefly and were never wired into the run path; on 2026-09-09 they were
+removed rather than left standing as an unkept promise — but ``runectl
+config``'s own ``--help`` went on advertising "run-wide defaults (approval,
+max_cost)" the whole time, so ``config set run.max_cost 5`` succeeded, wrote
+the file, and changed nothing. A silent no-op behind a documented promise is
+worse than either honest option. Wired up properly on 2026-09-13.
+
+Precedence is **explicit flag > config > built-in default**, which is what
+keeps this from touching D5: ``--model`` is still required on every ``runectl
+run``, and nothing here can make a run cheaper, more permissive, or
+differently-modelled than what the command line says. A stored value is only
+consulted when the flag is absent.
 """
 
 from __future__ import annotations
@@ -29,6 +40,7 @@ from typing import Any
 
 from runectl.config import runectl_config_dir
 from runectl.errors import UsageError
+from runectl.flags.judge import APPROVAL_POLICIES, ApprovalPolicy
 from runectl.providers.registry import THINKING_LEVELS, ProviderName, ThinkingLevel
 
 # The same "looks like a secret" shapes trace/writer.py redacts on the way out
@@ -131,3 +143,48 @@ def default_thinking(provider: ProviderName) -> ThinkingLevel:
             f"{', '.join(THINKING_LEVELS)}"
         )
     return raw
+
+
+# Run-wide defaults live in their own `[run]` section rather than under a
+# provider: a spend ceiling and an approval policy are properties of how you
+# want runs to behave, not of who serves the model.
+_RUN_SECTION = "run"
+
+
+def default_approval() -> ApprovalPolicy | None:
+    """The configured default approval policy, or None if unset.
+
+    Loud on a bad value, like `default_thinking` — a typo in a config file
+    must not quietly hand a run a *more permissive* policy than intended.
+    That asymmetry is why this raises rather than falling back to "gated".
+    """
+    raw = get(_RUN_SECTION, "approval")
+    if raw is None:
+        return None
+    if raw not in APPROVAL_POLICIES:
+        raise UsageError(
+            f"{config_path()}: [run] approval = {raw!r} is not one of "
+            f"{', '.join(APPROVAL_POLICIES)}"
+        )
+    return raw
+
+
+def default_max_cost() -> float | None:
+    """The configured default spend ceiling in USD, or None if unset.
+
+    0 is a meaningful stored value (D19's "no ceiling"), so it is returned as
+    0.0 and must not be confused with None by callers — hence the explicit
+    Optional rather than a 0 sentinel.
+    """
+    raw = get(_RUN_SECTION, "max_cost")
+    if raw is None:
+        return None
+    try:
+        value = float(raw)
+    except ValueError as exc:
+        raise UsageError(
+            f"{config_path()}: [run] max_cost = {raw!r} is not a number"
+        ) from exc
+    if value < 0:
+        raise UsageError(f"{config_path()}: [run] max_cost = {raw!r} is negative")
+    return value

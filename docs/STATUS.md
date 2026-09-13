@@ -1,10 +1,11 @@
 # Status
 
-Last updated **2026-09-10** (the replay-fidelity fix below, and `--approval`
-validation). The M9 entries — thinking capture, `config`/`models`/`runs`, and the TUI —
-landed 2026-09-09, the same day as the M7/M8 entries this file already described.
+Last updated **2026-09-13** — the day both remaining providers were pointed at a live
+service for the first time (Google in the morning, OpenAI in the afternoon) and eight
+defects fell out between them. Those two entries are below and are the most important
+thing in this file.
 
-M0–M9 are built, typed, and green: 240 tests passing, `mypy --strict` clean,
+M0–M9 are built, typed, and green: 300 tests passing, `mypy --strict` clean,
 `ruff` clean. What that means precisely — and what it does *not* mean — is below. The
 point of this file is that nothing here should surprise you at run time.
 

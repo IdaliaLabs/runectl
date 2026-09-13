@@ -44,6 +44,10 @@ from runectl.sandbox.base import sandbox_session
 from runectl.sandbox.docker import DockerSandbox
 from runectl.trace.store import Store
 from runectl.trace.writer import TraceWriter
+from runectl.user_config import (
+    default_approval,
+    default_max_cost,
+)
 from runectl.user_config import default_thinking as configured_default_thinking
 
 
@@ -160,6 +164,32 @@ def _preflight_arena() -> None:
             err=True,
         )
 
+
+def resolve_approval(flag: str | None) -> ApprovalPolicy:
+    """Explicit flag > `[run] approval` in config > "gated".
+
+    The precedence order is the whole point: config may fill a gap the command
+    line left, never override what it said. Note that a *more* permissive
+    stored policy still applies when no flag is given — which is why
+    `user_config.default_approval` raises on an unrecognized value instead of
+    falling back to something safe-looking.
+    """
+    if flag is not None:
+        return parse_approval(flag)
+    return default_approval() or "gated"
+
+
+def resolve_max_cost(flag: float | None) -> float:
+    """Explicit flag > `[run] max_cost` in config > `DEFAULT_MAX_COST_USD`.
+
+    `0.0` is a real stored value meaning "no ceiling" (D19), so this tests
+    `is not None` rather than truthiness at every level — a configured 0 must
+    survive, not silently become $0.50.
+    """
+    if flag is not None:
+        return flag
+    configured = default_max_cost()
+    return configured if configured is not None else DEFAULT_MAX_COST_USD
 
 def challenge_from_file(path: Path) -> Challenge:
     """Load a challenge TOML, resolving its `files` relative to the TOML itself.
@@ -345,15 +375,22 @@ def run_command(
     model: str = typer.Option(..., "--model"),
     utility_model: str | None = typer.Option(None, "--utility-model"),
     api_key: str | None = typer.Option(None, "--api-key"),
-    approval: str = typer.Option(
-        "gated", "--approval", help="gated|strict|auto — what a cleared candidate becomes"
+    # Both default to None rather than to their built-in value, so that "not
+    # passed" is distinguishable from "passed the same value the default
+    # happens to be". Without that distinction a stored `[run]` default could
+    # never be honored: `--max-cost 0.5` and no flag at all would look
+    # identical here.
+    approval: str | None = typer.Option(
+        None,
+        "--approval",
+        help="gated|strict|auto — what a cleared candidate becomes [config: run.approval]",
     ),
     network: str | None = typer.Option(None, "--network"),
     max_steps: int | None = typer.Option(None, "--max-steps"),
-    max_cost: float = typer.Option(
-        DEFAULT_MAX_COST_USD,
+    max_cost: float | None = typer.Option(
+        None,
         "--max-cost",
-        help="Hard spend ceiling in USD for this run; 0 disables it",
+        help="Hard spend ceiling in USD for this run; 0 disables it [config: run.max_cost]",
     ),
     record: bool = typer.Option(False, "--record"),
     output: str | None = typer.Option(None, "--output", help="jsonl | human"),
@@ -373,10 +410,10 @@ def run_command(
                 model=model,
                 utility_model=utility_model,
                 api_key=api_key,
-                approval=parse_approval(approval),
+                approval=resolve_approval(approval),
                 network=network,
                 max_steps=max_steps,
-                max_cost=max_cost,
+                max_cost=resolve_max_cost(max_cost),
                 record=record,
                 output=output,
                 thinking=parse_thinking(thinking),

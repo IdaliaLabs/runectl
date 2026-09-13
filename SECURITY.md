@@ -10,8 +10,11 @@ Open a [private security advisory](https://github.com/IdaliaLabs/runectl/securit
 on this repository. Please do not open a public issue for anything that would
 give someone else a working attack before there is a fix.
 
-There is no dedicated security mailbox yet. When there is, it will be listed
-here and at `/.well-known/security.txt` on the project's site.
+If you would rather not use GitHub, email **hello@idalia.dev** — the same
+address published at
+[`idalia.dev/.well-known/security.txt`](https://idalia.dev/.well-known/security.txt)
+(RFC 9116). It is not a dedicated security mailbox; it reaches the same person
+either way.
 
 Expect an acknowledgement within a few days. This is a solo project, so that is
 a statement of intent rather than a service level agreement.

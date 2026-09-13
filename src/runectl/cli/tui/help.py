@@ -47,6 +47,9 @@ until you say yes.
   k  API keys           a  arena sandbox image     c  config defaults
   m  model registry      b  run the bench suite      x  attach to a run's container
   X  kill a live run (one this session started)
+  i  rebuild the derived index   R  replay the selected run from its cassette
+Every command `runectl` offers on the CLI is reachable from here; nothing is
+terminal-only.
 Or press [b]ctrl+p[/b] for the command palette — type a few letters of any of the
 above and hit enter, faster than remembering the key.
 

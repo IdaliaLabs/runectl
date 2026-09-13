@@ -37,7 +37,7 @@ from textual.widgets import (
 
 from runectl.cli.render import event_line
 from runectl.cli.tui import data as tui_data
-from runectl.cli.tui.actions import approve_flag
+from runectl.cli.tui.actions import approve_flag, rebuild_index, replay_check
 from runectl.cli.tui.arena_screen import ArenaScreen
 from runectl.cli.tui.bench_screen import BenchScreen
 from runectl.cli.tui.commands import RunectlCommands
@@ -218,6 +218,8 @@ class RunectlTUI(App[None]):
         ("b", "bench", "Bench"),
         ("x", "attach", "Attach"),
         ("X", "kill_run", "Kill"),
+        ("i", "rebuild_index", "Reindex"),
+        ("R", "replay_check", "Replay-check"),
         ("question_mark", "help", "Help"),
     ]
 
@@ -444,6 +446,32 @@ class RunectlTUI(App[None]):
             return
         with self.suspend():
             run_foreground(["docker", "exec", "-it", f"{CONTAINER_NAME_PREFIX}{run_id}", "bash"])
+
+    def action_rebuild_index(self) -> None:
+        self.run_worker(self._rebuild_index(), exclusive=False)
+
+    async def _rebuild_index(self) -> None:
+        self.notify("rebuilding the derived index…")
+        exit_code, output = await rebuild_index()
+        self.notify(
+            output.strip()[:200] or "index rebuilt",
+            severity="information" if exit_code == 0 else "error",
+        )
+
+    def action_replay_check(self) -> None:
+        run_id = self._selected_run_id
+        if run_id is None:
+            self.notify("select a run first", severity="warning")
+            return
+        self.run_worker(self._replay_check(run_id), exclusive=False)
+
+    async def _replay_check(self, run_id: str) -> None:
+        self.notify(f"replaying {_short_id(run_id)} from its cassette — no spend…")
+        exit_code, output = await replay_check(run_id)
+        self.notify(
+            output.strip()[:200] or ("replay matched" if exit_code == 0 else "replay differed"),
+            severity="information" if exit_code == 0 else "error",
+        )
 
     def action_kill_run(self) -> None:
         run_id = self._selected_run_id

@@ -30,10 +30,10 @@ from runectl.cli.run_cmd import (
     RunRequest,
     challenge_from_file,
     execute_run,
-    parse_approval,
     parse_thinking,
+    resolve_approval,
+    resolve_max_cost,
 )
-from runectl.config import DEFAULT_MAX_COST_USD
 from runectl.errors import ProviderError, RunectlError, SandboxError, UsageError
 
 app = typer.Typer(
@@ -48,12 +48,16 @@ def bench_run(
     model: str = typer.Option(..., "--model"),
     utility_model: str | None = typer.Option(None, "--utility-model"),
     api_key: str | None = typer.Option(None, "--api-key"),
-    approval: str = typer.Option(
-        "gated", "--approval", help="gated|strict|auto — what a cleared candidate becomes"
+    approval: str | None = typer.Option(
+        None,
+        "--approval",
+        help="gated|strict|auto — what a cleared candidate becomes [config: run.approval]",
     ),
     only: list[str] = typer.Option([], "--only", help="Challenge name or directory; repeatable"),
     max_steps: int | None = typer.Option(None, "--max-steps"),
-    max_cost: float = typer.Option(DEFAULT_MAX_COST_USD, "--max-cost", help="USD ceiling per run"),
+    max_cost: float | None = typer.Option(
+        None, "--max-cost", help="USD ceiling per run [config: run.max_cost]"
+    ),
     max_total_cost: float = typer.Option(
         0.0, "--max-total-cost", help="USD ceiling for the whole suite; 0 disables it"
     ),
@@ -74,7 +78,8 @@ def bench_run(
     # costs real money.
     try:
         resolved_thinking = parse_thinking(thinking)
-        policy = parse_approval(approval)
+        policy = resolve_approval(approval)
+        resolved_max_cost = resolve_max_cost(max_cost)
     except UsageError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=6) from exc
@@ -108,7 +113,11 @@ def bench_run(
             approval=policy,
             max_steps=max_steps,
             # Never let one run overshoot what is left of the suite ceiling.
-            max_cost=min(max_cost, max_total_cost - spent) if max_total_cost > 0 else max_cost,
+            max_cost=(
+                min(resolved_max_cost, max_total_cost - spent)
+                if max_total_cost > 0
+                else resolved_max_cost
+            ),
             record=record,
             output="jsonl" if output == "json" else "human",
             thinking=resolved_thinking,
