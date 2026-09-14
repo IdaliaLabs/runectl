@@ -2,14 +2,10 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="brand/png/mark-white.png">
-  <img src="brand/png/mark-black.png" alt="runectl mark — a stem splitting in two" width="96">
+  <img src="brand/png/mark-black.png" alt="runectl mark — a stem splitting in two" width="72">
 </picture>
 
 # runectl
-
-**Agentic CTF solver. Works a challenge in a Docker sandbox, records every step to an append-only trace.**
-
-CLI-only. Bring your own API key and model. No server, no browser, no account.
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml)
@@ -18,24 +14,15 @@ CLI-only. Bring your own API key and model. No server, no browser, no account.
 [![Bench: 6-7/10](https://img.shields.io/badge/bench-6%E2%80%937%2F10%20across%20runs-E8C16B.svg)](bench/results/README.md)
 [![Models: 37](https://img.shields.io/badge/models-37%20across%203%20providers-4FA8E8.svg)](docs/CLI.md)
 
-<sub>from [Idalia Labs](https://github.com/IdaliaLabs) · founded by JMU students</sub>
-
 </div>
 
----
+Agentic CTF solver. Takes a challenge (name, category, description, any provided files) and
+a provider API key, and works it autonomously inside a disposable Docker container, one
+shell command at a time, recording every prompt, command, result, cost update and flag
+decision to an append-only event log. CLI-only — no server, no browser, no account. Bring
+your own API key and model.
 
-![runectl solving a challenge end to end: the agent reasons, runs a command in the sandbox, reads the output, and the judge re-derives the flag before finalizing it](docs/demo/runectl-demo.gif)
-
-<div align="center"><sub>One whole run in five seconds — reasoning, two sandboxed commands, re-derivation, exit 0. Replayed from its own recorded trace at zero spend (<code>runectl tui --replay</code>), not staged footage. Reproduce it with <code>make demo</code>.</sub></div>
-
----
-
-## What it does
-
-Input: a CTF challenge (name, category, description, any provided files) and a provider API
-key. `runectl` works the challenge autonomously inside a disposable Docker container, one
-shell command at a time, and records every prompt, command, result, cost update and flag
-decision to an append-only event log.
+## Overview
 
 The flag is the deliverable. The log is what makes it checkable: it replays for free, so a
 solve can be verified rather than taken on trust, and a failed run can be read to find out
@@ -50,7 +37,7 @@ Driving `runectl` from another agent is a supported use, not an afterthought.
 permitted by a dated amendment to that decision — it is a second consumer of the same event
 stream, and every run it launches is a plain non-interactive `runectl run` subprocess.
 
-## How one run works
+## Execution flow
 
 ```mermaid
 flowchart TD
@@ -70,6 +57,12 @@ flowchart TD
 
 Dotted lines are writes to the trace. Nothing in the diagram executes without an event
 recording it, including the judge's own re-derivation.
+
+![runectl solving a challenge end to end: the agent reasons, runs a command in the sandbox, reads the output, and the judge re-derives the flag before finalizing it](docs/demo/runectl-demo.gif)
+
+One whole run in five seconds — reasoning, two sandboxed commands, re-derivation, exit 0.
+Replayed from its own recorded trace at zero spend (`runectl tui --replay`), not staged
+footage. Reproduce it with `make demo`.
 
 ## Properties
 
