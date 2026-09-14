@@ -37,8 +37,9 @@ key. `runectl` works the challenge autonomously inside a disposable Docker conta
 shell command at a time, and records every prompt, command, result, cost update and flag
 decision to an append-only event log.
 
-The log is the deliverable alongside the flag: it replays for free and makes an answer
-checkable rather than merely reported.
+The flag is the deliverable. The log is what makes it checkable: it replays for free, so a
+solve can be verified rather than taken on trust, and a failed run can be read to find out
+why.
 
 Output is machine-readable and non-interactive throughout — NDJSON event streams, no
 prompts, and exit codes that distinguish a solve from a candidate from an exhausted run.
