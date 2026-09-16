@@ -27,7 +27,7 @@ OnEmit = Callable[[Event], None]
 _REDACT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"sk-ant-[A-Za-z0-9_-]{10,}"),
     re.compile(r"sk-proj-[A-Za-z0-9_-]{10,}"),
-    re.compile(r"sk-[A-Za-z0-9]{20,}"),
+    re.compile(r"sk-[A-Za-z0-9_-]{20,}"),  # incl. sk-svcacct-*/sk-admin-* (hyphen)
     re.compile(r"AIza[A-Za-z0-9_-]{20,}"),
     re.compile(r"(?i)authorization:\s*bearer\s+\S+"),
 )

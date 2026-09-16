@@ -36,6 +36,9 @@ def status_cmd() -> None:
     except SandboxError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=exc.exit_code) from exc
+    except OSError as exc:
+        typer.echo(f"could not run docker: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
 
     if not current.present:
         typer.echo(f"arena image {current.tag} is not built", err=True)
@@ -64,7 +67,14 @@ def status_cmd() -> None:
 @app.command("build")
 def build_cmd() -> None:
     """Build the arena image from arena/Dockerfile."""
-    code = arena_build.build()
+    try:
+        code = arena_build.build()
+    except SandboxError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=exc.exit_code) from exc
+    except OSError as exc:
+        typer.echo(f"could not run docker: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
     raise typer.Exit(code=code)
 
 
@@ -125,6 +135,9 @@ def ensure_cmd(
     except SandboxError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=exc.exit_code) from exc
+    except OSError as exc:
+        typer.echo(f"could not run docker: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
 
     final = arena_build.inspect()
     if not final.present:

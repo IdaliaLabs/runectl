@@ -65,6 +65,10 @@ SANDBOX_CPUS = 2.0
 # here, and `search_flag` greps SANDBOX_WORKDIR — a live log *inside* /ctf let
 # an earlier echoed guess resurface as fresh provenance. Still `tail -f`-able.
 SANDBOX_LIVE_LOG_PATH = "/tmp/.agent_live.log"
+# D2 — cap per-stream captured output. `container.exec_run` reads the whole
+# stream into host memory with no bound, so a command emitting gigabytes
+# (`base64 /dev/urandom`, `yes`) would OOM the host from inside the sandbox.
+SANDBOX_OUTPUT_CAP_BYTES = 1_000_000
 SANDBOX_WORKDIR = "/ctf"
 
 # The arena is pinned to x86-64 regardless of the host's own architecture.

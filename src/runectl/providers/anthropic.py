@@ -32,16 +32,16 @@ from collections.abc import Sequence
 from typing import Any, cast
 
 import anthropic
-from anthropic.types import TextBlock, ThinkingBlock, ToolUseBlock
+from anthropic.types import RedactedThinkingBlock, TextBlock, ThinkingBlock, ToolUseBlock
 
 from runectl.providers.base import (
     Completion,
     Message,
     ToolCallRequest,
-    TransientProviderError,
     Usage,
     api_error,
     auth_error,
+    transient_or_billing,
 )
 from runectl.providers.registry import ThinkingLevel
 from runectl.tools.schema import ToolSchema, to_anthropic
@@ -64,6 +64,11 @@ def _to_anthropic_messages(messages: Sequence[Message]) -> list[dict[str, Any]]:
         if message.role == "user":
             out.append({"role": "user", "content": message.content})
         elif message.role == "assistant":
+            # Skip a wholly empty assistant turn (no text, no tool call, no
+            # thinking): it serializes to content:[] which the API 400s. The
+            # user nudge that follows it is a valid next turn on its own.
+            if not message.content and not message.tool_calls and not message.thinking_blocks:
+                continue
             content: list[dict[str, Any]] = []
             # D20 — thinking blocks must come first in the assistant content
             # list, before text and tool_use, replayed back exactly as the API
@@ -102,7 +107,10 @@ class AnthropicProvider:
         prompt_cache: bool = True,
     ) -> None:
         self._model_id = model_id
-        self._client = client or anthropic.Anthropic(api_key=api_key)
+        # max_retries=0: runectl owns retry/backoff (D5). The SDK default of 2
+        # would nest inside complete_with_retry's 4, making up to 12 requests and
+        # billing a timed-out-but-completed call more than once.
+        self._client = client or anthropic.Anthropic(api_key=api_key, max_retries=0)
         self._prompt_cache = prompt_cache
 
     def complete(
@@ -142,7 +150,7 @@ class AnthropicProvider:
                 **cast(Any, extra),
             )
         except _TRANSIENT_ERRORS as exc:
-            raise TransientProviderError(str(exc)) from exc
+            raise transient_or_billing("Anthropic", exc) from exc
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
             raise auth_error("Anthropic", exc) from exc
         except anthropic.APIError as exc:
@@ -161,6 +169,12 @@ class AnthropicProvider:
                 thinking_parts.append(block.thinking)
                 # Stored verbatim (as the API returned it) for replay — see
                 # _to_anthropic_messages, which puts these back first.
+                thinking_blocks.append(block.model_dump())
+            elif isinstance(block, RedactedThinkingBlock):
+                # The API requires redacted_thinking replayed back unmodified,
+                # ahead of tool_use, exactly like a visible thinking block —
+                # otherwise the next request 400s on a turn that starts on
+                # tool_use. No text to extract; round-trip the block itself.
                 thinking_blocks.append(block.model_dump())
             elif isinstance(block, ToolUseBlock):
                 raw_input = block.input

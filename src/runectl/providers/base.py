@@ -158,6 +158,23 @@ def billing_error(provider: str, exc: Exception) -> UsageError:
     )
 
 
+def transient_or_billing(
+    provider: str, exc: Exception, retry_after: float | None = None
+) -> TransientProviderError | UsageError:
+    """Classify a would-be transient error, splitting out quota exhaustion.
+
+    OpenAI and Google report an account out of credit as a 429, which every
+    adapter otherwise treats as a rate limit and retries — the exact exit-5
+    retry-loop-against-a-wall that :func:`billing_error` was written to prevent,
+    reproduced on a different provider (STATUS 2026-09-12). Checked before the
+    error is allowed to become transient.
+    """
+    text = str(exc).lower()
+    if any(marker in text for marker in _BILLING_MARKERS):
+        return billing_error(provider, exc)
+    return TransientProviderError(str(exc), retry_after)
+
+
 def api_error(provider: str, exc: Exception) -> ProviderError | UsageError:
     """A non-transient, non-auth API failure (a 400/404/422, an unexpected 4xx).
 

@@ -26,6 +26,8 @@ import base64
 import re
 from collections.abc import Sequence
 
+import httpx
+import httpx2
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types
@@ -34,10 +36,10 @@ from runectl.providers.base import (
     Completion,
     Message,
     ToolCallRequest,
-    TransientProviderError,
     Usage,
     api_error,
     auth_error,
+    transient_or_billing,
 )
 from runectl.providers.registry import ThinkingLevel
 from runectl.tools.schema import ToolSchema, to_google
@@ -56,6 +58,17 @@ def _is_transient(exc: genai_errors.APIError) -> bool:
 
 
 _RETRY_DELAY_RE = re.compile(r"'retryDelay':\s*'(\d+(?:\.\d+)?)s'|retry in (\d+(?:\.\d+)?)s")
+
+
+# google-genai wraps HTTP *responses* as APIError but lets a transport failure
+# (timeout, connection reset) propagate raw from whichever httpx it used. Retry
+# those like any other transient error rather than crashing the run.
+_TRANSPORT_ERRORS: tuple[type[Exception], ...] = (
+    httpx.TimeoutException,
+    httpx.TransportError,
+    httpx2.TimeoutException,
+    httpx2.TransportError,
+)
 
 
 def _retry_after(exc: Exception) -> float | None:
@@ -104,6 +117,9 @@ def _to_google_contents(messages: Sequence[Message]) -> list[types.Content]:
         if message.role == "user":
             out.append(types.Content(role="user", parts=[types.Part(text=message.content)]))
         elif message.role == "assistant":
+            # Skip a wholly empty assistant turn — parts=[] is a 400.
+            if not message.content and not message.tool_calls and not message.thinking_blocks:
+                continue
             parts: list[types.Part] = []
             # D20 — thought parts must be replayed back first, ahead of the
             # visible text and function calls, for continuity across turns.
@@ -188,7 +204,11 @@ def _usage(usage: types.GenerateContentResponseUsageMetadata | None) -> Usage:
 class GoogleProvider:
     def __init__(self, *, model_id: str, api_key: str, client: genai.Client | None = None) -> None:
         self._model_id = model_id
-        self._client = client or genai.Client(api_key=api_key)
+        # The SDK defaults to no request timeout, so a stalled connection would
+        # hang the run indefinitely; 120s matches the long-running tool timeout.
+        self._client = client or genai.Client(
+            api_key=api_key, http_options=types.HttpOptions(timeout=120_000)
+        )
 
     def complete(
         self,
@@ -216,10 +236,19 @@ class GoogleProvider:
                 contents=_to_google_contents(messages),
                 config=config,
             )
+        except _TRANSPORT_ERRORS as exc:
+            raise transient_or_billing("Google", exc, _retry_after(exc)) from exc
         except genai_errors.APIError as exc:
             if _is_transient(exc):
-                raise TransientProviderError(str(exc), _retry_after(exc)) from exc
-            if isinstance(exc, genai_errors.ClientError) and exc.code in (401, 403):
+                raise transient_or_billing("Google", exc, _retry_after(exc)) from exc
+            # A bad Gemini key comes back as a 400 API_KEY_INVALID, not a 401/403,
+            # so match the text too or it would exit 5 (retryable) instead of 6.
+            text = str(exc).lower()
+            if isinstance(exc, genai_errors.ClientError) and (
+                exc.code in (401, 403)
+                or "api key not valid" in text
+                or "api_key_invalid" in text
+            ):
                 raise auth_error("Google", exc) from exc
             # Any other API error (400/404/422, an unexpected client/server error):
             # a clean ProviderError, never a raw traceback.
@@ -265,7 +294,7 @@ class GoogleProvider:
             text="".join(text_parts),
             tool_calls=tuple(tool_calls),
             usage=_usage(usage),
-            stop_reason=str(finish_reason) if finish_reason is not None else "unknown",
+            stop_reason=finish_reason.name if finish_reason is not None else "unknown",
             thinking_text="\n".join(thinking_parts),
             thinking_blocks=tuple(thinking_blocks),
         )

@@ -25,6 +25,10 @@ _ENV_VAR: dict[str, str] = {
     "openai": "OPENAI_API_KEY",
     "google": "GOOGLE_API_KEY",
 }
+# Alternative env var names honored on lookup. Google's own SDK and docs use
+# GEMINI_API_KEY interchangeably, so a user who set that would otherwise be told
+# no key was found.
+_ENV_VAR_ALT: dict[str, tuple[str, ...]] = {"google": ("GEMINI_API_KEY",)}
 _KEYRING_SERVICE = "runectl"
 
 
@@ -64,6 +68,11 @@ def resolve_key(provider: ProviderName, *, cli_flag: str | None = None) -> str:
     if cli_flag:
         return cli_flag
     env_value = os.environ.get(_ENV_VAR[provider])
+    if not env_value:
+        for alt in _ENV_VAR_ALT.get(provider, ()):
+            env_value = os.environ.get(alt)
+            if env_value:
+                break
     if env_value:
         return env_value
     keyring_value = _try_keyring_get(provider)

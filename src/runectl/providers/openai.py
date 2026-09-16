@@ -34,10 +34,10 @@ from runectl.providers.base import (
     Completion,
     Message,
     ToolCallRequest,
-    TransientProviderError,
     Usage,
     api_error,
     auth_error,
+    transient_or_billing,
 )
 from runectl.providers.registry import MIN_REAL_THINKING_LEVEL, ThinkingLevel
 from runectl.tools.schema import ToolSchema, to_openai
@@ -74,6 +74,10 @@ def _to_openai_messages(system: str, messages: Sequence[Message]) -> list[dict[s
                     ],
                 }
             )
+        elif message.role == "assistant" and not message.content and not message.tool_calls:
+            # Skip a wholly empty assistant turn: it 400s the same way it does on
+            # Anthropic, and the user nudge that follows is a valid turn alone.
+            continue
         else:
             out.append({"role": message.role, "content": message.content})
     return out
@@ -116,7 +120,8 @@ class OpenAIProvider:
         thinking_off_supported: bool = True,
     ) -> None:
         self._model_id = model_id
-        self._client = client or openai.OpenAI(api_key=api_key)
+        # max_retries=0: runectl owns retry (D5); the SDK default of 2 would nest.
+        self._client = client or openai.OpenAI(api_key=api_key, max_retries=0)
         # D20 amendment 2026-09-11 — needed to tell two different "off"s apart:
         # a reasoning model must be told `reasoning_effort: "none"` to stop
         # thinking (its own default is `medium`), while a non-reasoning model
@@ -171,7 +176,7 @@ class OpenAIProvider:
                 **extra,
             )
         except _TRANSIENT_ERRORS as exc:
-            raise TransientProviderError(str(exc)) from exc
+            raise transient_or_billing("OpenAI", exc) from exc
         except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
             raise auth_error("OpenAI", exc) from exc
         except openai.APIError as exc:

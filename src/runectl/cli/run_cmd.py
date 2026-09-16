@@ -90,6 +90,22 @@ def parse_approval(value: str) -> ApprovalPolicy:
     return value  # narrowed to ApprovalPolicy by the membership check above
 
 
+_NETWORKS = ("none", "bridge")
+
+
+def parse_network(value: str) -> str:
+    """Validate --network against D2's closed set.
+
+    The category schema constrains network to none|bridge, but the flag bypassed
+    it and reached Docker as a free string — `--network host` handed the agent's
+    container the host network namespace, defeating the containment SECURITY.md
+    claims. Rejected here as a usage error.
+    """
+    if value not in _NETWORKS:
+        raise UsageError(f"--network {value!r} is not one of {', '.join(_NETWORKS)}")
+    return value
+
+
 def finish(store: Store, writer: TraceWriter, run_id: str, outcome: RunOutcome) -> None:
     """Close the trace and write the run's terminal manifest.
 
@@ -271,6 +287,8 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
         model_info = resolve_model(request.model)
     except UnknownModelError as exc:
         raise UsageError(str(exc)) from exc
+    if model_info.retired_reason:
+        raise UsageError(f"{model_info.id} is retired and cannot be used: {model_info.retired_reason}")
 
     # D20 — an explicit --thinking always wins; otherwise fall back to the
     # provider's configured default (runectl config, Phase 2), or "off" if
@@ -288,11 +306,18 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
     # D5: utility calls (context/history summarization) default to the
     # cheapest model of the same provider and share the main loop's cost
     # ledger — never a hardcoded model, never untracked tokens.
-    utility_model_info = (
-        resolve_model(request.utility_model)
-        if request.utility_model
-        else cheapest_model_for(model_info.provider)
-    )
+    if request.utility_model:
+        try:
+            utility_model_info = resolve_model(request.utility_model)
+        except UnknownModelError as exc:
+            raise UsageError(str(exc)) from exc
+        if utility_model_info.retired_reason:
+            raise UsageError(
+                f"--utility-model {utility_model_info.id} is retired: {utility_model_info.retired_reason}"
+            )
+    else:
+        # cheapest_model_for already skips retired rows (D5, 2026-09-13).
+        utility_model_info = cheapest_model_for(model_info.provider)
     utility_key = (
         key
         if utility_model_info.provider == model_info.provider
@@ -328,12 +353,20 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
             err=True,
         )
 
+    category_updates: dict[str, object] = {}
+    if request.max_steps:
+        category_updates["step_limit"] = request.max_steps
+    if request.network:
+        # Validate before model_copy — model_copy does not re-run validation, so
+        # an unchecked value would reach Docker and the trace unchanged.
+        category_updates["network"] = parse_network(request.network)
     effective_category = (
-        category_data.model_copy(update={"step_limit": request.max_steps})
-        if request.max_steps
-        else category_data
+        category_data.model_copy(update=category_updates) if category_updates else category_data
     )
-    sandbox = DockerSandbox(network=request.network or effective_category.network, run_id=run_id)
+    # One value now: the runner reads state.category.network for the run.started
+    # event, and the sandbox reads the same, so an overridden network is recorded
+    # honestly rather than the category default.
+    sandbox = DockerSandbox(network=effective_category.network, run_id=run_id)
 
     ledger = CostLedger()
     summarizer = make_utility_summarizer(utility_provider, utility_model_info, ledger)

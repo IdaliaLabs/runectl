@@ -62,14 +62,19 @@ RUN python3 -m pip install --break-system-packages --no-cache-dir \
         volatility3 \
         requests
 
-# pwndbg: batch-mode-friendly GDB plugin (D2 — run_gdb is batch-only, never interactive)
+# pwndbg: batch-mode-friendly GDB plugin (D2 — run_gdb is batch-only, never interactive).
+# No `|| true`: a swallowed failure shipped an image with stock gdb that looked
+# fine until run_gdb produced worse output than the playbooks assume.
 RUN git clone --depth 1 https://github.com/pwndbg/pwndbg /opt/pwndbg \
-    && /opt/pwndbg/setup.sh || true
+    && /opt/pwndbg/setup.sh
 
-# Non-root, no-privileged execution user (D2 posture)
+# Non-root, no-privileged execution user (D2 posture). pwndbg's setup writes its
+# gdbinit into root's home; run_gdb runs as `ctf`, so ctf needs its own that
+# sources the plugin, or the plugin never loads for the agent.
 RUN useradd -m -s /bin/bash ctf \
     && mkdir -p /ctf \
-    && chown -R ctf:ctf /ctf /opt/pwndbg
+    && echo "source /opt/pwndbg/gdbinit.py" > /home/ctf/.gdbinit \
+    && chown -R ctf:ctf /ctf /opt/pwndbg /home/ctf/.gdbinit
 
 USER ctf
 WORKDIR /ctf

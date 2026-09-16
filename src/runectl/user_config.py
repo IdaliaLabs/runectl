@@ -49,7 +49,7 @@ from runectl.providers.registry import THINKING_LEVELS, ProviderName, ThinkingLe
 # plaintext file no code path was written to guard (D5's "never written to
 # project config" — this file *is* project/user config).
 _KEY_SHAPED = re.compile(
-    r"^(sk-ant-[A-Za-z0-9_-]{10,}|sk-proj-[A-Za-z0-9_-]{10,}|sk-[A-Za-z0-9]{20,}|AIza[A-Za-z0-9_-]{20,})$"
+    r"^(sk-ant-[A-Za-z0-9_-]{10,}|sk-proj-[A-Za-z0-9_-]{10,}|sk-[A-Za-z0-9_-]{20,}|AIza[A-Za-z0-9_-]{20,})$"
 )
 
 

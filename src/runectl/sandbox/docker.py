@@ -1,9 +1,9 @@
 """Real Docker sandbox: one container per run (D2).
 
-NOTE for reviewers: this module could not be exercised against a live Docker
-daemon while building the skeleton (no daemon was available in the build
-environment). It is implemented to spec and type-checks, but needs a live-Docker
-smoke test before it is trusted — see the M4 handoff report.
+Exercised against a live daemon since 2026-09-07 (STATUS "Live verification"):
+real containers build and run, triage and agent commands execute inside the
+amd64 arena, and the security posture below is applied and functional. Its
+isolation is asserted by configuration, not by adversarial testing (SECURITY.md).
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import cast
 
 import docker
+import requests
 from docker.errors import APIError, DockerException, ImageNotFound, NotFound
 from docker.models.containers import Container
 
@@ -27,6 +28,7 @@ from runectl.config import (
     SANDBOX_ENV,
     SANDBOX_LIVE_LOG_PATH,
     SANDBOX_MEM_LIMIT,
+    SANDBOX_OUTPUT_CAP_BYTES,
     SANDBOX_PIDS_LIMIT,
     SANDBOX_PLATFORM,
     SANDBOX_WORKDIR,
@@ -58,6 +60,11 @@ class DockerSandbox:
         self._name = f"{CONTAINER_NAME_PREFIX}{run_id}" if run_id else None
         self._client_override = client
         self._client: docker.DockerClient | None = None
+        # The container user's uid/gid, learned in _verify_non_root and applied
+        # to files copied in so the agent (`ctf`) can read and chmod them rather
+        # than finding them root-owned. 1000 is the arena's `ctf` uid by default.
+        self._uid = 1000
+        self._gid = 1000
         self._container: Container | None = None
 
     @property
@@ -89,6 +96,7 @@ class DockerSandbox:
                 mem_limit=SANDBOX_MEM_LIMIT,
                 nano_cpus=int(SANDBOX_CPUS * 1_000_000_000),
                 security_opt=["no-new-privileges"],
+                cap_drop=["ALL"],  # non-root already; dropping caps costs nothing here
                 privileged=False,
                 pids_limit=SANDBOX_PIDS_LIMIT,
                 environment=dict(SANDBOX_ENV),
@@ -111,10 +119,15 @@ class DockerSandbox:
         the container plus a kernel escape is a materially worse position than
         an unprivileged user, so this is checked rather than assumed.
         """
-        probe = self._raw_exec("id -u", timeout_s=10)
+        probe = self._raw_exec("id -u; id -g", timeout_s=10)
         if not probe.ok:
             raise SandboxError(f"could not determine the sandbox user: {probe.stderr}")
-        if probe.stdout.strip() == "0":
+        ids = probe.stdout.split()
+        if ids and ids[0].isdigit():
+            self._uid = int(ids[0])
+        if len(ids) > 1 and ids[1].isdigit():
+            self._gid = int(ids[1])
+        if ids and ids[0] == "0":
             raise SandboxError(
                 f"the arena image {self._image!r} runs as root. runectl executes "
                 "model-authored code in this container and will not do so as root. "
@@ -170,31 +183,53 @@ class DockerSandbox:
     def exec(self, argv_or_script: str, *, timeout_s: int) -> ExecResult:
         """Mirrors combined output to the live log via process substitution (D2 item 12)
         while still returning stdout/stderr separately for the structured result."""
+        # `head -c CAP` bounds each stream before it reaches both the live log and
+        # the exec socket, so a runaway command can neither OOM the host reader nor
+        # fill the container disk; when head closes, the command takes SIGPIPE and
+        # stops. `timeout -k 5` escalates to SIGKILL if the command ignores the
+        # SIGTERM at the deadline.
+        cap = SANDBOX_OUTPUT_CAP_BYTES
         inner = (
             f"{{ {argv_or_script}\n }} "
-            f"> >(tee -a {SANDBOX_LIVE_LOG_PATH}) "
-            f"2> >(tee -a {SANDBOX_LIVE_LOG_PATH} >&2)"
+            f"1> >(head -c {cap} | tee -a {SANDBOX_LIVE_LOG_PATH}) "
+            f"2> >(head -c {cap} | tee -a {SANDBOX_LIVE_LOG_PATH} >&2)"
         )
-        wrapped = f"timeout {timeout_s} bash -c {shlex.quote(inner)}"
+        # ponytail: `timeout` signals only its direct child, so a command that
+        # backgrounds a process (`nc -lvnp 4444 &`) and exits can still leave the
+        # child holding the exec stream open. Upgrade path if that bites: run under
+        # `setsid` and kill the session on a Python-side deadline.
+        wrapped = f"timeout -k 5 {timeout_s} bash -c {shlex.quote(inner)}"
         container = self._require_container()
         start = time.monotonic()
         try:
             result = container.exec_run(["bash", "-lc", wrapped], workdir=SANDBOX_WORKDIR, demux=True)
-        except APIError as exc:
+        except (DockerException, OSError, requests.RequestException) as exc:
             raise SandboxError(f"exec failed: {exc}") from exc
         duration = time.monotonic() - start
         # The installed stub doesn't model demux=True's (bytes|None, bytes|None) return;
         # this is the documented shape for that mode (docker-py's exec_run docstring).
         output = cast("tuple[bytes | None, bytes | None]", result.output)
         stdout_raw, stderr_raw = output if output else (None, None)
+        stdout_bytes = stdout_raw or b""
+        stderr_bytes = stderr_raw or b""
         exit_code = result.exit_code
         return ExecResult(
             ok=exit_code == 0,
-            stdout=(stdout_raw or b"").decode("utf-8", "replace"),
-            stderr=(stderr_raw or b"").decode("utf-8", "replace"),
+            stdout=stdout_bytes.decode("utf-8", "replace"),
+            stderr=stderr_bytes.decode("utf-8", "replace"),
             exit_code=exit_code,
             duration_s=duration,
+            truncated=len(stdout_bytes) >= cap or len(stderr_bytes) >= cap,
         )
+
+    def _own(self, info: tarfile.TarInfo) -> tarfile.TarInfo:
+        """Copy files in owned by the container user, not root/the host uid, so
+        the agent can read, chmod, and append to what it is given (D2)."""
+        info.uid = self._uid
+        info.gid = self._gid
+        info.uname = ""
+        info.gname = ""
+        return info
 
     def write_file(self, rel_path: str, content: bytes) -> None:
         container = self._require_container()
@@ -203,17 +238,38 @@ class DockerSandbox:
             info = tarfile.TarInfo(name=rel_path)
             info.size = len(content)
             info.mtime = int(time.time())
+            info.mode = 0o755  # agent-authored: runnable, and writable by its owner
+            self._own(info)
             tar.addfile(info, io.BytesIO(content))
-        if not container.put_archive(SANDBOX_WORKDIR, tar_buf.getvalue()):
+        try:
+            ok = container.put_archive(SANDBOX_WORKDIR, tar_buf.getvalue())
+        except (DockerException, OSError, requests.RequestException) as exc:
+            raise SandboxError(f"failed to write file into sandbox: {rel_path}: {exc}") from exc
+        if not ok:
             raise SandboxError(f"failed to write file into sandbox: {rel_path}")
 
     def put_inputs(self, files: Sequence[Path]) -> list[str]:
         container = self._require_container()
         tar_buf = io.BytesIO()
-        with tarfile.open(fileobj=tar_buf, mode="w") as tar:
-            for file in files:
-                tar.add(file, arcname=file.name)
-        if not container.put_archive(SANDBOX_WORKDIR, tar_buf.getvalue()):
+        try:
+            with tarfile.open(fileobj=tar_buf, mode="w") as tar:
+                for file in files:
+
+                    def _own_input(info: tarfile.TarInfo) -> tarfile.TarInfo:
+                        info.mode |= 0o600  # the owner can always read/write it
+                        return self._own(info)
+
+                    tar.add(file, arcname=file.name, filter=_own_input)
+        except OSError as exc:
+            # A missing or unreadable --file / challenge `files` entry: a usage
+            # problem surfaced as a clean SandboxError, not a raw traceback after
+            # the container is already up.
+            raise SandboxError(f"could not read an input file to upload: {exc}") from exc
+        try:
+            ok = container.put_archive(SANDBOX_WORKDIR, tar_buf.getvalue())
+        except (DockerException, requests.RequestException) as exc:
+            raise SandboxError(f"failed to upload input files into sandbox: {exc}") from exc
+        if not ok:
             raise SandboxError("failed to upload input files into sandbox")
         landed: list[str] = []
         for file in files:

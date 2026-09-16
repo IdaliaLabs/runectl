@@ -46,18 +46,22 @@ BASE_IMAGE = "kalilinux/kali-rolling:latest"
 _LOADED_IMAGE_RE = re.compile(r"Loaded image(?: ID)?:\s*(\S+)")
 
 
-def arena_fingerprint(context_dir: Path | None = None) -> str:
-    """A stable short hash of the arena build context.
+def arena_fingerprint(context_dir: Path | None = None) -> str | None:
+    """A stable short hash of the arena build context, or ``None`` when the
+    Dockerfile is not present in this install.
 
     Only the Dockerfile is hashed: it is the entire build context today, and
     hashing it means "the recipe changed" is detectable without depending on
-    anything Docker records about layers.
+    anything Docker records about layers. A wheel install ships only
+    ``src/runectl`` (pyproject), not ``arena/``, so on that path the file is
+    absent — reported as unknown provenance so `runectl run` still works against
+    an already-built image, rather than raising and failing every run at preflight.
     """
     dockerfile = (context_dir or _ARENA_DIR) / "Dockerfile"
     try:
         content = dockerfile.read_bytes()
-    except OSError as exc:
-        raise SandboxError(f"cannot read the arena Dockerfile at {dockerfile}: {exc}") from exc
+    except OSError:
+        return None
     return hashlib.sha256(content).hexdigest()[:16]
 
 
@@ -68,7 +72,7 @@ class ArenaStatus:
     tag: str
     image_id: str | None
     built_fingerprint: str | None
-    expected_fingerprint: str
+    expected_fingerprint: str | None
     architecture: str | None = None
     expected_architecture: str = SANDBOX_PLATFORM.split("/")[-1]
 
@@ -84,8 +88,11 @@ class ArenaStatus:
         reported as unknown provenance, not as stale, so an existing working
         image doesn't start nagging after an update.
         """
-        return self.present and self.built_fingerprint is not None and (
-            self.built_fingerprint != self.expected_fingerprint
+        return (
+            self.present
+            and self.built_fingerprint is not None
+            and self.expected_fingerprint is not None
+            and self.built_fingerprint != self.expected_fingerprint
         )
 
     @property
@@ -156,6 +163,12 @@ def build(*, tag: str = ARENA_IMAGE, context_dir: Path | None = None) -> int:
     """
     context = context_dir or _ARENA_DIR
     fingerprint = arena_fingerprint(context_dir)
+    if fingerprint is None:
+        raise SandboxError(
+            f"no arena Dockerfile at {context / 'Dockerfile'} — this install does not ship "
+            "the build context. Use `runectl arena ensure --from-file PATH` or "
+            "`--from-registry REF`, or build from a clone of the repository."
+        )
     result = subprocess.run(
         [
             "docker", "build",
@@ -207,7 +220,9 @@ def load_archive(archive: Path, *, tag: str = ARENA_IMAGE) -> None:
 
 def pull_image(reference: str, *, tag: str = ARENA_IMAGE) -> None:
     """Pull a prebuilt image from a registry and tag it as the arena image."""
-    result = subprocess.run(["docker", "pull", reference], check=False)
+    result = subprocess.run(
+        ["docker", "pull", "--platform", SANDBOX_PLATFORM, reference], check=False
+    )
     if result.returncode != 0:
         raise SandboxError(f"docker pull {reference} failed with exit code {result.returncode}")
     if reference == tag:
