@@ -18,7 +18,7 @@ from typing import Literal
 
 from runectl.categories.schema import Category
 from runectl.config import DEFAULT_MAX_COST_USD
-from runectl.errors import ProviderError, SandboxError
+from runectl.errors import ProviderError, RunectlError, SandboxError, UsageError
 from runectl.flags.judge import ApprovalPolicy, FlagJudge, ToolObservation
 from runectl.loop import nudges
 from runectl.loop.context import ContextBuilder, build_system_prompt
@@ -87,6 +87,17 @@ def _command_text(arguments: dict[str, object]) -> str:
 
 Outcome = Literal["solved", "candidate", "exhausted", "error"]
 Decision = Literal["finalized", "pending", "rejected"]
+
+
+def _error_kind(exc: RunectlError) -> str:
+    """The `error` event's `kind`, from the exception that ended the run."""
+    if isinstance(exc, SandboxError):
+        return "sandbox"
+    if isinstance(exc, ProviderError):
+        return "provider"
+    if isinstance(exc, UsageError):
+        return "usage"
+    return "error"
 
 
 @dataclass(frozen=True)
@@ -195,6 +206,29 @@ class Runner:
             )
         )
 
+        # A run must always end with a terminal event and an honest run.json (D3).
+        # The main provider call has its own ProviderError handling below; this
+        # outer guard catches everything else that can end a run mid-flight —
+        # triage/dispatch SandboxError, a billing/auth UsageError raised by an
+        # adapter, a ProviderError from the utility summarizer in maybe_compact —
+        # none of which reached a terminal event before.
+        try:
+            return self._execute(state, started)
+        except RunectlError as exc:
+            self._writer.emit(
+                ErrorEvent(
+                    step=state.step or None, kind=_error_kind(exc),
+                    message=str(exc), recoverable=False,
+                )
+            )
+            return self._finish(started, outcome="error", exit_code=exc.exit_code)
+        except Exception as exc:  # last resort: an unexpected error is still a finished run
+            self._writer.emit(
+                ErrorEvent(step=state.step or None, kind="internal", message=repr(exc), recoverable=False)
+            )
+            return self._finish(started, outcome="error", exit_code=1)
+
+    def _execute(self, state: RunState, started: float) -> RunOutcome:
         if state.challenge.files:
             try:
                 self._sandbox.put_inputs(list(state.challenge.files))
@@ -223,6 +257,20 @@ class Runner:
         exit_code = 3
 
         for step in range(1, state.max_steps + 1):
+            # D19: stop before the next paid call once cumulative spend (main loop
+            # *and* utility summarizer) has crossed the ceiling. Checked at the top
+            # of the iteration, before `state.step` advances, so the previous
+            # completion was fully recorded and judged and the run reports the last
+            # step that actually ran rather than a phantom one.
+            if self._max_cost_usd > 0 and self._ledger.total_usd >= self._max_cost_usd:
+                state.cost_usd = self._ledger.total_usd
+                self._writer.emit(
+                    BudgetExhausted(
+                        step=state.step, limit_usd=self._max_cost_usd, spent_usd=state.cost_usd
+                    )
+                )
+                outcome, exit_code = "exhausted", 3
+                break
             state.step = step
             # D12: compaction is a context-pressure trigger, not a step counter —
             # it runs before every request and no-ops until history is actually long.
@@ -267,17 +315,6 @@ class Runner:
                     cumulative_cost_usd=state.cost_usd,
                 )
             )
-
-            # D19: check immediately after the ledger updates, so the run stops
-            # before paying for another call rather than one call too late.
-            if self._max_cost_usd > 0 and state.cost_usd >= self._max_cost_usd:
-                self._writer.emit(
-                    BudgetExhausted(
-                        step=step, limit_usd=self._max_cost_usd, spent_usd=state.cost_usd
-                    )
-                )
-                outcome, exit_code = "exhausted", 3
-                break
 
             # D20 — emitted before llm.response so a live or replayed timeline
             # shows the reasoning ahead of what it produced. Nothing is emitted

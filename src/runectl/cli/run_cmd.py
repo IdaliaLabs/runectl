@@ -8,6 +8,7 @@ callback, attached to the writer, is the only thing that does.
 
 from __future__ import annotations
 
+import signal
 import sys
 import tomllib
 from dataclasses import dataclass
@@ -42,6 +43,7 @@ from runectl.providers.replay import RecordingProvider
 from runectl.sandbox import arena_build
 from runectl.sandbox.base import sandbox_session
 from runectl.sandbox.docker import DockerSandbox
+from runectl.trace.events import RunFinished
 from runectl.trace.store import Store
 from runectl.trace.writer import TraceWriter
 from runectl.user_config import (
@@ -187,6 +189,8 @@ def resolve_max_cost(flag: float | None) -> float:
     survive, not silently become $0.50.
     """
     if flag is not None:
+        if flag < 0:
+            raise UsageError("--max-cost cannot be negative (use 0 to disable the ceiling)")
         return flag
     configured = default_max_cost()
     return configured if configured is not None else DEFAULT_MAX_COST_USD
@@ -351,17 +355,47 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
     try:
         with sandbox_session(sandbox):
             outcome = runner.run()
-    except RunectlError as exc:
-        # Any run-ending error (sandbox/provider failure, or a UsageError such as
-        # an invalid API key surfaced mid-loop): finalize the trace as an error
-        # and close the writer before re-raising, so no half-written run is left
-        # behind. run_command/bench map the exit_code.
-        writer.close()
-        store.finish_run(run_id, outcome="error", exit_code=exc.exit_code)
+    except BaseException as exc:
+        # A failure around the loop (arena/daemon down, an interrupt) still has to
+        # leave a terminal event and an honest manifest — the run directory is
+        # already on disk (D3). In-loop errors do not reach here: runner.run()
+        # emits its own error/run.finished and returns. run_command/bench map the
+        # exit_code from the re-raised exception.
+        exit_code = exc.exit_code if isinstance(exc, RunectlError) else 1
+        _finalize_error(store, writer, run_id, runner, exit_code)
         raise
 
     finish(store, writer, run_id, outcome)
     return RunResult(run_id=run_id, outcome=outcome)
+
+
+def _finalize_error(store: Store, writer: TraceWriter, run_id: str, runner: Runner, exit_code: int) -> None:
+    """Write a terminal `run.finished` event and manifest for a run that raised
+    before/around the loop, carrying whatever spend and steps did happen."""
+    state = runner.state
+    writer.emit(
+        RunFinished(
+            outcome="error",
+            flag=state.flag,
+            steps_used=state.step,
+            progress_steps=state.progress_steps,
+            blocked_steps=state.blocked_steps,
+            cost_usd=state.cost_usd,
+            duration_s=0.0,
+            exit_code=exit_code,
+        )
+    )
+    writer.close()
+    store.finish_run(
+        run_id,
+        outcome="error",
+        exit_code=exit_code,
+        flag=state.flag,
+        cost_usd=state.cost_usd,
+        steps_used=state.step,
+        progress_steps=state.progress_steps,
+        blocked_steps=state.blocked_steps,
+    )
 
 
 def run_command(
@@ -402,6 +436,10 @@ def run_command(
     ),
 ) -> None:
     """Solve one challenge end-to-end, writing a replayable trace."""
+    # D2/D4: a SIGTERM (the TUI kill action, or any supervisor) unwinds the
+    # sandbox session's `finally` instead of killing Python outright, so the
+    # run's container is removed rather than leaked and the trace is finalized.
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(143))
     try:
         chal = _resolve_challenge(challenge, name, category, description, description_file, file, flag_format)
         result = execute_run(

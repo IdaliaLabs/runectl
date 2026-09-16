@@ -226,7 +226,9 @@ class DockerSandbox:
 
     def stop(self) -> None:
         if self._container is not None:
-            try:
+            # Best-effort: a remove() that raises (e.g. the daemon was restarted
+            # mid-run) must not replace the SandboxError the run is already
+            # unwinding with a raw docker/requests exception.
+            with contextlib.suppress(Exception):
                 self._container.remove(force=True)
-            finally:
-                self._container = None
+            self._container = None

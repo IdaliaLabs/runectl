@@ -41,9 +41,15 @@ class Sandbox(Protocol):
 
 @contextmanager
 def sandbox_session(sandbox: Sandbox) -> Iterator[Sandbox]:
-    """Guarantee ``stop()`` runs even if the caller raises."""
-    sandbox.start()
+    """Guarantee ``stop()`` runs even if the caller raises.
+
+    ``start()`` is *inside* the try: a start that creates the container and then
+    fails its workdir or non-root check would otherwise leak that container,
+    since nothing would call ``stop()``. ``stop()`` no-ops when no container was
+    created, so the extra coverage is free.
+    """
     try:
+        sandbox.start()
         yield sandbox
     finally:
         sandbox.stop()
