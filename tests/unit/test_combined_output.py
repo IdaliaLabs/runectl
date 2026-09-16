@@ -5,7 +5,9 @@ def test_combined_output_shows_stderr_and_exit_code() -> None:
     from runectl.loop.runner import _combined_output
     from runectl.sandbox.base import ExecResult
 
-    failing = ExecResult(ok=False, stdout="partial\n", stderr="Traceback: boom\n", exit_code=2, duration_s=0.1)
+    failing = ExecResult(
+        ok=False, stdout="partial\n", stderr="Traceback: boom\n", exit_code=2, duration_s=0.1
+    )
     combined = _combined_output(failing)
     assert "partial" in combined and "Traceback" in combined and "[exit code 2]" in combined
 
