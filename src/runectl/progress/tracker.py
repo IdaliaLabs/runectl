@@ -47,7 +47,7 @@ class ProgressTracker:
     _no_progress_run: int = 0
     _consecutive_errors: int = 0
     _recent: list[str] = field(default_factory=list)
-    _step: int = 0
+    _last_shift_kind: Literal["errors", "no-progress"] = "no-progress"
 
     def __post_init__(self) -> None:
         self._ledger = BudgetLedger(
@@ -59,7 +59,6 @@ class ProgressTracker:
         return self._ledger.check(command, classify(command, overrides=self.category.tactic_families))
 
     def record(self, command: str, output: str, *, ok: bool, step: int) -> ProgressAssessment:
-        self._step = step
         family = classify(command, overrides=self.category.tactic_families)
         digest = fingerprint(output)
         repeated = digest in self._seen
@@ -95,7 +94,6 @@ class ProgressTracker:
         forced strategy shift could never fire in exactly the situation it
         exists for: an agent hammering an idea that is already exhausted.
         """
-        self._step = step
         self._no_progress_run += 1
         self._recent.append(f"step {step} [{family}] BLOCKED: {reason}")
         del self._recent[:-6]
@@ -109,13 +107,20 @@ class ProgressTracker:
         """
         budgets = self.category.budgets
         reason: str | None = None
+        kind: Literal["errors", "no-progress"] = "no-progress"
         if self._consecutive_errors >= budgets.consecutive_error_shift:
             reason = f"{self._consecutive_errors} commands in a row failed"
+            kind = "errors"
         elif self._no_progress_run >= budgets.no_progress_shift:
             reason = f"{self._no_progress_run} steps in a row produced no new signal"
+            kind = "no-progress"
         if reason is None:
             return None
 
+        # Captured before the reset below, so `shift_reason_kind` (read by the loop
+        # right after this returns) reports the threshold that actually fired
+        # rather than "no-progress" every time (the counters are now zero).
+        self._last_shift_kind = kind
         self._no_progress_run = 0
         self._consecutive_errors = 0
         evidence = "\n".join(f"  - {line}" for line in self._recent) or "  - (nothing yet)"
@@ -133,4 +138,4 @@ class ProgressTracker:
 
     @property
     def shift_reason_kind(self) -> Literal["errors", "no-progress"]:
-        return "errors" if self._consecutive_errors else "no-progress"
+        return self._last_shift_kind

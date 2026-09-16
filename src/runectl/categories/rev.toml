@@ -29,14 +29,14 @@ is. Prefer reading the check to brute-forcing inputs against it.
 required_tools = ["file", "checksec", "rizin", "radare2", "ltrace", "strace", "upx", "angr", "z3-solver", "python3"]
 
 signal_low = ['command not found', 'No such file', '^$', 'wrong', 'incorrect']
-signal_high = ['flag\{', 'FLAG\{', 'picoCTF\{', 'strcmp', 'correct']
+signal_high = ['flag\{', 'FLAG\{', 'picoCTF\{', 'strcmp', '\bcorrect\b']
 
 step_limit = 100
 network = "bridge"
 
 [tactic_families]
 triage = '^file |^strings |ltrace|strace|checksec'
-static = 'rizin|radare2|r2 |objdump|pdf @|afl|iz'
+static = '\b(rizin|radare2|r2|objdump|angr|afl|iz[zj]?)\b|pdf @'
 symbolic = 'angr|simgr|explore'
 constraint = 'z3|Solver\(|BitVec|claripy'
 unpack = 'upx|unpack|packed'

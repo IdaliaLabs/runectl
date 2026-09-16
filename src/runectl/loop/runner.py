@@ -417,9 +417,13 @@ class Runner:
 
             # D8 mechanism 4: budgets block *before* execution. A blocked call
             # costs no sandbox time and no further tokens on a dead idea.
+            # write_file is setup, not a solve attempt: budgeting it froze the
+            # write-then-run loop (the same filename is one hypothesis, so the
+            # third rewrite blocked), so it is exempt from budgets and scoring.
             command_text = _command_text(primary.arguments)
-            verdict = self._progress.check_budget(command_text)
-            if verdict.blocked:
+            is_hypothesis = primary.name != "write_file"
+            verdict = self._progress.check_budget(command_text) if is_hypothesis else None
+            if verdict is not None and verdict.blocked:
                 self._writer.emit(
                     BudgetBlocked(step=step, family=verdict.family, reason=verdict.reason)
                 )
@@ -483,21 +487,25 @@ class Runner:
             )
 
             # D8 mechanisms 1-3: classify, fingerprint, score. "Progress" means
-            # new information, not a zero exit code (D16).
-            assessment = self._progress.record(
-                command_text, combined_output, ok=result.ok, step=step
-            )
-            self._writer.emit(
-                ProgressScored(
-                    step=step,
-                    family=assessment.family,
-                    fingerprint=assessment.fingerprint,
-                    delta=assessment.delta,
-                    signal=assessment.signal,
+            # new information, not a zero exit code (D16). write_file is not scored
+            # (see above): a neutral event keeps the "one progress.scored per tool
+            # call" invariant without feeding the no-progress counters.
+            if is_hypothesis:
+                assessment = self._progress.record(
+                    command_text, combined_output, ok=result.ok, step=step
                 )
-            )
-            if assessment.progressed:
-                state.progress_steps += 1
+                self._writer.emit(
+                    ProgressScored(
+                        step=step, family=assessment.family, fingerprint=assessment.fingerprint,
+                        delta=assessment.delta, signal=assessment.signal,
+                    )
+                )
+                if assessment.progressed:
+                    state.progress_steps += 1
+            else:
+                self._writer.emit(
+                    ProgressScored(step=step, family="write", fingerprint="", delta=0.0, signal="none")
+                )
             if result.kind == "blocked":
                 state.blocked_steps += 1
 
