@@ -42,7 +42,11 @@ def exec_results_from_trace(trace_path: Path, artifacts_dir: Path) -> list[ExecR
     results: list[ExecResult] = []
     for event in TraceReader(trace_path, artifacts_dir):
         payload = event.payload()
-        if isinstance(payload, ToolResultEvent) and payload.tool in _EXEC_BACKED_TOOLS:
+        if (
+            isinstance(payload, ToolResultEvent)
+            and payload.tool in _EXEC_BACKED_TOOLS
+            and payload.kind != "blocked"
+        ):
             results.append(
                 ExecResult(
                     ok=payload.ok,

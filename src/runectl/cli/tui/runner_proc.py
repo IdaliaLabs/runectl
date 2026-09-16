@@ -74,6 +74,9 @@ async def run_streaming(
         *argv,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        # A trace event can exceed asyncio's default 64 KiB line limit; without
+        # this the reader raises and the child hangs forever holding its container.
+        limit=16 * 1024 * 1024,
     )
     if on_start is not None:
         on_start(process)
@@ -104,7 +107,12 @@ async def run_streaming(
                 # `run_id` below even if it's the *only* line the process ever
                 # wrote (e.g. it failed before emitting a single event).
                 continue
-            on_event(event)
+            try:
+                on_event(event)
+            except Exception:
+                # A callback that raises must not kill this reader and hang the
+                # child on a full stdout pipe; drop the event and keep draining.
+                continue
         return last_line
 
     stdout_task = asyncio.ensure_future(_drain_stdout())

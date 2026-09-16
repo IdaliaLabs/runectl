@@ -16,6 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from runectl.errors import ProviderError
 from runectl.providers.base import Completion, Message, Provider
 from runectl.providers.registry import ThinkingLevel
 from runectl.tools.schema import ToolSchema
@@ -106,7 +107,17 @@ class ReplayProvider:
         key = request_hash(system, messages, tools, max_tokens, thinking)
         candidates = self._by_hash.get(key)
         if not candidates:
-            raise KeyError(f"ReplayProvider: no recorded response for request hash {key}")
-        index = min(self._cursor.get(key, 0), len(candidates) - 1)
-        self._cursor[key] = index + 1
-        return candidates[index]
+            # The loop asked the model something the cassette never recorded — the
+            # replay is no longer faithful. A clean ProviderError (exit 5), not a
+            # raw KeyError traceback.
+            raise ProviderError(
+                "replay diverged: no recorded response for this request. The loop "
+                "asked the model something different from the recorded run."
+            )
+        cursor = self._cursor.get(key, 0)
+        if cursor >= len(candidates):
+            raise ProviderError(
+                "replay diverged: more calls with this request than were recorded."
+            )
+        self._cursor[key] = cursor + 1
+        return candidates[cursor]

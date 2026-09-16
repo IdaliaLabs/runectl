@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from typing import cast, get_args
 
 import typer
@@ -21,7 +22,15 @@ def _validate_provider(provider: str) -> ProviderName:
 
 
 @app.command("set")
-def set_cmd(provider: str, api_key: str) -> None:
+def set_cmd(provider: str, api_key: str | None = typer.Argument(None)) -> None:
+    """Store a provider key. Omit the key argument to read it from stdin, so it
+    never appears on the command line (`ps`, shell history)."""
+    if api_key is None:
+        if sys.stdin.isatty():
+            raise typer.BadParameter("provide the key as an argument or pipe it on stdin")
+        api_key = sys.stdin.read().strip()
+    if not api_key:
+        raise typer.BadParameter("empty API key")
     set_key(_validate_provider(provider), api_key)
     typer.echo(f"stored key for {provider}")
 

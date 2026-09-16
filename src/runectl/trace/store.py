@@ -9,6 +9,7 @@ exist or be replayed.
 
 from __future__ import annotations
 
+import os
 import time
 from pathlib import Path
 from typing import Any, Literal
@@ -153,7 +154,14 @@ class Store:
         return RunManifest.model_validate_json(self.manifest_path(run_id).read_text())
 
     def _write_manifest(self, manifest: RunManifest) -> None:
-        self.manifest_path(manifest.run_id).write_text(manifest.model_dump_json(indent=2))
+        # Atomic: write a sibling temp file, then rename over the target. A crash
+        # or a concurrent reader sees the old manifest or the new one, never a
+        # half-written one — a partial run.json otherwise empties `index rebuild`
+        # and crashes the TUI on startup (both only tolerated FileNotFoundError).
+        path = self.manifest_path(manifest.run_id)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(manifest.model_dump_json(indent=2))
+        os.replace(tmp, path)
 
     def list_run_ids(self) -> list[str]:
         runs_root = self._home / "runs"

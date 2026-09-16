@@ -106,6 +106,11 @@ def approve(
 ) -> None:
     """Finalize a pending candidate, recording that a human — not the judge — did it."""
     store, events = _read(run_id)
+    # Approving mid-run would append onto a trace the run is still writing (and
+    # possibly a torn tail); the run must have finished first.
+    if store.read_manifest(run_id).finished_at is None:
+        typer.echo(f"run {run_id} is still in progress — wait for it to finish before approving", err=True)
+        raise typer.Exit(code=6)
     held = pending_candidates(events)
     if not held:
         typer.echo(

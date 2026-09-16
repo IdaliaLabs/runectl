@@ -11,6 +11,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from runectl.trace.reader import TraceReader
 from runectl.trace.store import Store
 
@@ -57,7 +59,9 @@ class IndexDB:
             for run_id in store.list_run_ids():
                 try:
                     manifest = store.read_manifest(run_id)
-                except FileNotFoundError:
+                except (FileNotFoundError, ValidationError, ValueError):
+                    # A missing or corrupt run.json is one bad run, not a reason
+                    # to abandon the whole index.
                     continue
                 conn.execute(
                     "INSERT INTO runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",

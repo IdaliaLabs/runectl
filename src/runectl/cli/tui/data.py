@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pydantic import ValidationError
+
 from runectl.cli.flag_cmd import PendingCandidate, pending_candidates
 from runectl.trace.events import Event
 from runectl.trace.reader import TraceReader
@@ -62,7 +64,7 @@ def list_runs_fresh(store: Store, *, limit: int = 100) -> list[RunSummary]:
 def read_manifest(store: Store, run_id: str) -> RunManifest | None:
     try:
         return store.read_manifest(run_id)
-    except FileNotFoundError:
+    except (FileNotFoundError, ValidationError, ValueError):
         return None
 
 

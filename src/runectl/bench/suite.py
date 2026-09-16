@@ -198,8 +198,14 @@ def load_suite(root: Path, *, only: Sequence[str] = ()) -> list[BenchCase]:
             continue
         if not expected_path.exists():
             raise SuiteError(f"{directory.name} has a chal.toml but no expected.json to score against")
-        raw = tomllib.loads(challenge_path.read_text())
-        expected = json.loads(expected_path.read_text())
+        try:
+            raw = tomllib.loads(challenge_path.read_text())
+        except tomllib.TOMLDecodeError as exc:
+            raise SuiteError(f"{directory.name}/chal.toml is not valid TOML: {exc}") from exc
+        try:
+            expected = json.loads(expected_path.read_text())
+        except json.JSONDecodeError as exc:
+            raise SuiteError(f"{directory.name}/expected.json is not valid JSON: {exc}") from exc
         flag = expected.get("flag")
         if not isinstance(flag, str) or not flag:
             raise SuiteError(f"{directory.name}/expected.json has no flag to score against")

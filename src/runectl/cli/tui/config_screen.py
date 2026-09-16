@@ -112,16 +112,16 @@ class ConfigScreen(ModalScreen[None]):
         written = 0
         for provider in _PROVIDERS:
             model_value = self.query_one(f"#model-{provider}", Select).value
-            if model_value and model_value != default_model(provider):
+            if model_value is not Select.NULL and model_value != default_model(provider):
                 await run_once(["config", "set", f"{provider}.model", str(model_value)])
                 written += 1
             thinking_value = self.query_one(f"#thinking-{provider}", Select).value
-            if thinking_value and thinking_value != default_thinking(provider):
+            if thinking_value is not Select.NULL and thinking_value != default_thinking(provider):
                 await run_once(["config", "set", f"{provider}.thinking", str(thinking_value)])
                 written += 1
 
         approval_value = self.query_one("#run-approval", Select).value
-        if approval_value and approval_value != default_approval():
+        if approval_value is not Select.NULL and approval_value != default_approval():
             await run_once(["config", "set", "run.approval", str(approval_value)])
             written += 1
         # Written through the same `runectl config set` the CLI uses, so its

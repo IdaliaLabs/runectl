@@ -32,12 +32,17 @@ class TraceReader:
     def __iter__(self) -> Iterator[Event]:
         if not self._path.exists():
             return
-        with self._path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                stripped = line.strip()
-                if not stripped:
-                    continue
+        # Binary read, decode per line *inside* the try: a SIGKILL/ENOSPC tear
+        # inside a multi-byte character (traces are full of U+FFFD from
+        # errors="replace" tool output) raised UnicodeDecodeError from the `for`
+        # loop itself, outside any handler — the exact "parse error about the
+        # tail" this reader promises never to raise.
+        with self._path.open("rb") as fh:
+            for raw in fh:
                 try:
+                    stripped = raw.decode("utf-8").strip()
+                    if not stripped:
+                        continue
                     event = Event.model_validate_json(stripped)
                     # Restore any >8KB field the writer spilled to artifacts/
                     # (D3) before validating. Without this the payload check
@@ -51,7 +56,7 @@ class TraceReader:
                         update={"data": resolve_artifact_refs(event.data, self._artifacts_dir)}
                     )
                     event.payload()  # validate data against its registered model too
-                except (ValidationError, ValueError):
+                except (ValidationError, ValueError, UnicodeDecodeError):
                     return
                 yield event
 

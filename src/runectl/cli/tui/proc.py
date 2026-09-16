@@ -22,7 +22,7 @@ _RUNECTL_ARGV: tuple[str, ...] = (sys.executable, "-m", "runectl")
 
 
 async def run_once(
-    argv: list[str], *, launch_argv: tuple[str, ...] = _RUNECTL_ARGV
+    argv: list[str], *, launch_argv: tuple[str, ...] = _RUNECTL_ARGV, input_text: str | None = None
 ) -> tuple[int, str]:
     """Runs `runectl <argv>`. Returns (exit_code, combined stdout+stderr).
 
@@ -34,14 +34,15 @@ async def run_once(
     process = await asyncio.create_subprocess_exec(
         *launch_argv,
         *argv,
+        stdin=asyncio.subprocess.PIPE if input_text is not None else None,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
     )
-    output = b""
-    if process.stdout is not None:
-        output = await process.stdout.read()
+    # communicate() feeds stdin (e.g. an API key, kept off argv where `ps` would
+    # show it) and drains stdout in one shot.
+    stdout, _ = await process.communicate(input_text.encode() if input_text is not None else None)
     exit_code = await process.wait()
-    return exit_code, output.decode("utf-8", errors="replace").strip()
+    return exit_code, (stdout or b"").decode("utf-8", errors="replace").strip()
 
 
 def run_foreground(argv: list[str]) -> int:

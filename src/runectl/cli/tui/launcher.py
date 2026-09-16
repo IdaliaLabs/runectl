@@ -106,7 +106,7 @@ class LauncherScreen(ModalScreen[list[str] | None]):
         approval = self.query_one("#approval", Select).value
         max_cost = self.query_one("#max_cost", Input).value.strip()
 
-        if not model:
+        if model is Select.NULL or not model:
             return "a model is required"
 
         argv = ["run", "--model", str(model), "--output", "jsonl"]
@@ -115,16 +115,16 @@ class LauncherScreen(ModalScreen[list[str] | None]):
         else:
             name = self.query_one("#name", Input).value.strip()
             category = self.query_one("#category", Select).value
-            if not name or not category:
+            if not name or category is Select.NULL or not category:
                 return "either a challenge TOML, or both name and category, are required"
             description = self.query_one("#description", Input).value.strip()
             argv += ["--name", name, "--category", str(category)]
             if description:
                 argv += ["--description", description]
 
-        if thinking and thinking != "off":
+        if thinking is not Select.NULL and thinking:
             argv += ["--thinking", str(thinking)]
-        if approval and approval != "gated":
+        if approval is not Select.NULL and approval:
             argv += ["--approval", str(approval)]
         if max_cost:
             argv += ["--max-cost", max_cost]

@@ -36,7 +36,7 @@ import json
 import re
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 from runectl.config import runectl_config_dir
 from runectl.errors import UsageError
@@ -70,7 +70,12 @@ def load() -> dict[str, Any]:
     path = config_path()
     if not path.exists():
         return {}
-    data = tomllib.loads(path.read_text())
+    try:
+        data = tomllib.loads(path.read_text())
+    except tomllib.TOMLDecodeError as exc:
+        # A malformed config file otherwise tracebacks out of every command that
+        # reads config (run, bench, models list, config get/set).
+        raise UsageError(f"{path} is not valid TOML: {exc}") from exc
     for section, values in data.items():
         if not isinstance(values, dict):
             continue
@@ -89,8 +94,37 @@ def get(section: str, key: str) -> str | None:
     return str(raw) if raw is not None else None
 
 
+def _validate_config_key(section: str, key: str, value: str) -> None:
+    """The config surface is a closed set (D20 — preferences, never keys). Reject
+    an unknown section/key or an out-of-vocabulary value here, so `config set`
+    cannot silently poison every later run (`run.approval = yolo`) or write a key
+    that makes the file itself unparseable."""
+    providers = set(get_args(ProviderName))
+    if section == "run":
+        if key == "approval" and value not in APPROVAL_POLICIES:
+            raise UsageError(f"run.approval must be one of {', '.join(APPROVAL_POLICIES)}")
+        if key == "max_cost":
+            try:
+                if float(value) < 0:
+                    raise ValueError
+            except ValueError as exc:
+                raise UsageError("run.max_cost must be a non-negative number") from exc
+        if key not in ("approval", "max_cost"):
+            raise UsageError(f"unknown config key run.{key} (known: approval, max_cost)")
+    elif section in providers:
+        if key == "thinking" and value not in THINKING_LEVELS:
+            raise UsageError(f"{section}.thinking must be one of {', '.join(THINKING_LEVELS)}")
+        if key not in ("model", "thinking"):
+            raise UsageError(f"unknown config key {section}.{key} (known: model, thinking)")
+    else:
+        raise UsageError(
+            f"unknown config section [{section}] (known: run, {', '.join(sorted(providers))})"
+        )
+
+
 def set_value(section: str, key: str, value: str) -> None:
     _reject_key_shaped(section, key, value)
+    _validate_config_key(section, key, value)
     data = load()
     section_data = data.get(section)
     if section_data is None:

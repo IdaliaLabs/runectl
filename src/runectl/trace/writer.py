@@ -80,7 +80,16 @@ class TraceWriter:
         self._seq = start_seq
         self._on_emit = on_emit
         path.parent.mkdir(parents=True, exist_ok=True)
+        # If an existing trace's last line is torn (no trailing newline), appending
+        # would glue the next event onto the corrupt partial; close the line first.
+        needs_newline = False
+        if path.exists() and path.stat().st_size > 0:
+            with path.open("rb") as probe:
+                probe.seek(-1, os.SEEK_END)
+                needs_newline = probe.read(1) != b"\n"
         self._fh = path.open("a", encoding="utf-8")
+        if needs_newline:
+            self._fh.write("\n")
 
     @property
     def seq(self) -> int:

@@ -79,7 +79,7 @@ class KeysScreen(ModalScreen[None]):
                 return
 
     async def _set(self, provider: str, value: str) -> None:
-        exit_code, output = await run_once(["keys", "set", provider, value])
+        exit_code, output = await run_once(["keys", "set", provider], input_text=value)
         self.query_one("#keys-message", Static).update(output or ("stored" if exit_code == 0 else "failed"))
         if exit_code == 0:
             self.query_one(f"#input-{provider}", Input).value = ""

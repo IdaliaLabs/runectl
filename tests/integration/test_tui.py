@@ -360,3 +360,35 @@ async def test_model_dropdowns_lead_with_the_cheapest_of_each_provider() -> None
             assert model_id == cheapest_model_for(provider).id, provider
         # Price belongs in the label; picking a model is mostly a budget call.
         assert "$" in label and provider in label
+
+
+async def test_config_save_with_nothing_set_does_not_write_the_select_sentinel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: an unset Select is the truthy `Select.NULL` sentinel, and Save
+    used to write the literal "Select.NULL" into config.toml, bricking every
+    later run. With nothing configured, Save must write nothing."""
+    from textual.widgets import Button
+
+    from runectl.cli.tui.config_screen import ConfigScreen
+
+    cfg_home = tmp_path / "cfg"
+    monkeypatch.setenv("RUNECTL_CONFIG_HOME", str(cfg_home))
+    monkeypatch.setenv("RUNECTL_HOME", str(tmp_path / "home"))
+
+    app = RunectlTUI()
+    async with app.run_test(size=(120, 50)) as pilot:
+        await pilot.pause()
+        await app.push_screen(ConfigScreen())
+        await pilot.pause()
+        save = app.screen.query_one("#save", Button)
+        await pilot.click(save)
+        await pilot.pause()
+        await pilot.pause()
+
+    # The regression is a literal "Select.NULL" written into config.toml (and the
+    # unusable run.approval / <provider>.model it produced). With the guard, an
+    # all-default Save writes nothing.
+    config_file = cfg_home / "config.toml"
+    text = config_file.read_text() if config_file.exists() else ""
+    assert "Select.NULL" not in text

@@ -234,15 +234,33 @@ def challenge_from_file(path: Path) -> Challenge:
         raw = tomllib.loads(path.read_text())
     except tomllib.TOMLDecodeError as exc:
         raise UsageError(f"{path} is not valid TOML: {exc}") from exc
-    base = path.parent
-    files = tuple(
-        Path(f) if Path(f).is_absolute() else (base / f) for f in raw.get("files", [])
-    )
+    if not raw.get("name") or not raw.get("category"):
+        raise UsageError(f"{path} must set both `name` and `category`")
+    base = path.parent.resolve()
+    files: list[Path] = []
+    for f in raw.get("files", []):
+        # A challenge directory is a self-contained unit; a `files` entry that is
+        # absolute or climbs out of it (`../../etc/passwd`) is either a mistake or
+        # an attempt to pull host data into a bridge-networked container. Rejected.
+        if Path(f).is_absolute():
+            raise UsageError(
+                f"challenge file {f!r} is an absolute path — list files relative to the "
+                "challenge directory, or use --file for a one-off outside it"
+            )
+        resolved = (base / f).resolve()
+        if not str(resolved).startswith(str(base) + "/") and resolved != base:
+            raise UsageError(
+                f"challenge file {f!r} escapes the challenge directory {base} — "
+                "list files inside the challenge directory, or use --file for one-offs"
+            )
+        if not resolved.is_file():
+            raise UsageError(f"challenge file not found: {resolved}")
+        files.append(resolved)
     return Challenge(
         name=raw["name"],
         category=raw["category"],
         description=raw.get("description", ""),
-        files=files,
+        files=tuple(files),
         flag_format=raw.get("flag_format"),
     )
 
@@ -335,6 +353,10 @@ def execute_run(challenge: Challenge, request: RunRequest, *, store: Store | Non
             "challenge": challenge.model_dump(mode="json"),
             "approval_policy": request.approval,
             "thinking_requested": thinking,
+            # Recorded so `runectl replay` stops where the original run did rather
+            # than running past its budget/step limit into an unrecorded call.
+            "max_cost": request.max_cost,
+            "max_steps": request.max_steps,
         },
     )
 
@@ -514,11 +536,25 @@ def _resolve_challenge(
         return challenge_from_file(Path(challenge_path))
     if not name or not category:
         raise UsageError("either --challenge or both --name and --category are required")
-    desc = description or (Path(description_file).read_text() if description_file else "")
+    if description is not None:
+        desc = description
+    elif description_file:
+        desc_path = Path(description_file)
+        if not desc_path.is_file():
+            raise UsageError(f"no such --description-file: {description_file}")
+        desc = desc_path.read_text()
+    else:
+        desc = ""
+    resolved_files: list[Path] = []
+    for f in files:  # --file is trusted (the user typed it), but a typo should say so
+        fp = Path(f)
+        if not fp.is_file():
+            raise UsageError(f"no such --file: {f}")
+        resolved_files.append(fp)
     return Challenge(
         name=name,
         category=category,
         description=desc,
-        files=tuple(Path(f) for f in files),
+        files=tuple(resolved_files),
         flag_format=flag_format,
     )

@@ -119,7 +119,10 @@ def bench_run(
                 else resolved_max_cost
             ),
             record=record,
-            output="jsonl" if output == "json" else "human",
+            # Per-run events render human to stderr; only the bench report reaches
+            # stdout, so `--output json` is a single parseable object, not a JSON
+            # report trailing every run's NDJSON stream.
+            output="human",
             thinking=resolved_thinking,
         )
         try:
@@ -164,15 +167,21 @@ def bench_run(
     if stopped_early:
         payload["stopped_early"] = stopped_early
 
-    if report_path:
-        Path(report_path).write_text(json.dumps(payload, indent=2) + "\n")
-
     if output == "json":
         typer.echo(json.dumps(payload))
     else:
         typer.echo(render_report(report))
         if stopped_early:
             typer.echo(f"\n  {stopped_early}")
+
+    # Written after the report is printed: a bad --report path must not discard a
+    # suite that already spent real money to produce.
+    if report_path:
+        try:
+            Path(report_path).write_text(json.dumps(payload, indent=2) + "\n")
+        except OSError as exc:
+            typer.echo(f"could not write --report {report_path}: {exc}", err=True)
+            raise typer.Exit(code=6) from exc
 
     # A false flag is the one result that is worse than failing, so it is the
     # one that makes the command itself fail (D15).
