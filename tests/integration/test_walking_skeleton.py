@@ -31,7 +31,10 @@ from runectl.trace.store import Store
 
 FLAG = "flag{sk3l3t0n_w4lk}"
 ENCODED = "ZmxhZ3tzazNsM3Qwbl93NGxrfQ=="  # base64 of FLAG
-SEARCH_COMMAND = "grep -rnoIE 'flag\\{' /ctf/ 2>/dev/null | head -200"
+SEARCH_COMMAND = (
+    "grep -rnIE --exclude=.agent_live.log 'flag\\{' /ctf/ "
+    "2>/dev/null | head -200 | cut -c1-300"
+)
 _OBSERVATION_SEQ = re.compile(r"\[observation seq=(\d+)\]")
 
 

@@ -68,7 +68,7 @@ REDERIVE_TIMEOUT_S = 60
 # The distinctive part of a flag: whatever sits inside the outermost braces.
 # `csictf{h45t4d}` -> prefix `csictf`, payload `h45t4d`. Flags without braces
 # have no wrapper and are used whole.
-_FLAG_CORE = re.compile(r"^(?P<prefix>[^{]*)\{(?P<core>.+)\}[^}]*$", re.DOTALL)
+_FLAG_CORE = re.compile(r"^(?P<prefix>[^{]*)\{(?P<core>.+)\}\Z", re.DOTALL)
 
 # Below this length a payload is too generic to be evidence of authorship —
 # `flag{a}` would match nearly any command text. This threshold guards a
@@ -273,8 +273,11 @@ class FlagJudge:
         format_ok, format_detail = self._format_check(flag)
         checks.append(Check("flag_format", format_ok, format_detail))
 
-        rederived, rederive_detail, rederivation = self._rederive(flag, source)
-        checks.append(Check("rederivation", rederived, rederive_detail))
+        rederived = False
+        rederivation = None
+        if self._policy == "gated":
+            rederived, rederive_detail, rederivation = self._rederive(flag, source)
+            checks.append(Check("rederivation", rederived, rederive_detail))
 
         return self._apply_policy(
             source_seq=source.seq,
@@ -307,8 +310,21 @@ class FlagJudge:
         prefix = _prefix_of(flag)
         if not prefix:
             return False
-        attested = f"{self._description}\n{self._flag_format or ''}".lower()
-        return prefix.lower() in attested
+        # `f"{prefix}{{"` — the wrapper as it is actually written, e.g. `csictf{`.
+        # Case-sensitive and anchored on the brace so the generic word "flag" in a
+        # description does not attest an invented `flag{...}` wrapper (D15).
+        if f"{prefix}{{" in self._description:
+            return True
+        # A --flag-format that fully matches the flag attests the wrapper too — the
+        # user wrote the exact shape, braces included (as an escaped `\{` regex, so
+        # the literal-substring test above never sees it).
+        if self._flag_format:
+            try:
+                if re.fullmatch(self._flag_format, flag):
+                    return True
+            except re.error:
+                return False
+        return False
 
     def _evident_in(self, text: str, flag: str) -> bool:
         """Does this text carry the flag — whole, or as its earned payload?"""
@@ -324,12 +340,25 @@ class FlagJudge:
             return f"observed at seq {source.seq}"
         return f"payload observed at seq {source.seq}, inside a wrapper the challenge states"
 
+    def _authored_before(
+        self, flag: str, obs: ToolObservation, history: Sequence[ToolObservation]
+    ) -> bool:
+        """Did the agent write this flag into *any* command up to this observation?
+
+        Not just the observation's own command (D15): a guess written with
+        `write_file`/`echo` at an earlier step, then surfaced by a later
+        `cat`/`search_flag`, is the same self-authorship one hop removed.
+        """
+        return any(
+            _authored_in(flag, other.command) for other in history if other.seq <= obs.seq
+        )
+
     def _resolve_provenance(
         self, flag: str, history: Sequence[ToolObservation], provenance: str
     ) -> tuple[ToolObservation | None, str]:
         """The cited observation, or why no observation can support this flag."""
         matches = [obs for obs in history if self._observes(obs, flag)]
-        supported = [obs for obs in matches if not _authored_in(flag, obs.command)]
+        supported = [obs for obs in matches if not self._authored_before(flag, obs, history)]
 
         if not matches:
             if self._payload_is_provenance(flag):
@@ -380,7 +409,7 @@ class FlagJudge:
         seen_prints: set[str] = set()
         count = 0
         for obs in history:
-            if not self._observes(obs, flag) or _authored_in(flag, obs.command):
+            if not self._observes(obs, flag) or self._authored_before(flag, obs, history):
                 continue
             print_ = fingerprint(obs.text)
             if obs.command in seen_commands or print_ in seen_prints:
@@ -403,7 +432,7 @@ class FlagJudge:
             pattern = re.compile(self._flag_format)
         except re.error as exc:
             return False, f"--flag-format is not a valid regex: {exc}"
-        if pattern.search(flag):
+        if pattern.fullmatch(flag):
             return True, f"matches {self._flag_format}"
         return False, f"does not match {self._flag_format}"
 
@@ -469,6 +498,18 @@ class FlagJudge:
         rederivation: Rederivation | None = None,
     ) -> JudgeVerdict:
         if self._policy == "auto":
+            if not format_ok:
+                return JudgeVerdict(
+                    decision="pending",
+                    provenance_seq=source_seq,
+                    reason=(
+                        "--approval auto, but the flag does not match the required "
+                        "--flag-format; held for approval"
+                    ),
+                    corroboration=corroboration,
+                    checks=tuple(checks),
+                    rederivation=rederivation,
+                )
             return JudgeVerdict(
                 decision="finalized",
                 provenance_seq=source_seq,

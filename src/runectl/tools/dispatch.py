@@ -93,6 +93,13 @@ class ToolDispatcher:
         pattern = str(arguments.get("flag_pattern", "")).strip()
         if not pattern:
             return _blocked("search_flag: empty flag_pattern")
-        # -r recursive, -n line numbers (provenance), -o only-matching, -I skip binaries
-        command = f"grep -rnoIE {shlex.quote(pattern)} /ctf/ 2>/dev/null | head -200"
+        # -r recursive, -n line numbers (provenance), -I skip binaries. NOT -o:
+        # only-matching would return the pattern (e.g. `picoCTF{`), never the flag
+        # that follows it. The whole matching line is kept and bounded to 300 chars.
+        # `.agent_live.log` is excluded (D15): `exec` mirrors every command's output
+        # there, so grepping it turns the agent's own earlier echo into a "sighting".
+        command = (
+            f"grep -rnIE --exclude=.agent_live.log {shlex.quote(pattern)} /ctf/ "
+            "2>/dev/null | head -200 | cut -c1-300"
+        )
         return _from_exec(self._sandbox.exec(command, timeout_s=_DEFAULT_TIMEOUT_S), command)

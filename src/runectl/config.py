@@ -61,7 +61,10 @@ DEFAULT_RETRY_ATTEMPTS = 4
 # D2 — sandbox resource posture, carried from the old system as a baseline.
 SANDBOX_MEM_LIMIT = "2g"
 SANDBOX_CPUS = 2.0
-SANDBOX_LIVE_LOG_PATH = "/ctf/.agent_live.log"
+# Outside SANDBOX_WORKDIR on purpose (D15): `exec` tees every command's output
+# here, and `search_flag` greps SANDBOX_WORKDIR — a live log *inside* /ctf let
+# an earlier echoed guess resurface as fresh provenance. Still `tail -f`-able.
+SANDBOX_LIVE_LOG_PATH = "/tmp/.agent_live.log"
 SANDBOX_WORKDIR = "/ctf"
 
 # The arena is pinned to x86-64 regardless of the host's own architecture.

@@ -409,7 +409,11 @@ class Runner:
                     stderr=result.stderr,
                     # Kept so the judge can tell a discovery from the agent
                     # echoing its own guess back (D15 §1).
-                    command=json.dumps(primary.arguments, sort_keys=True, default=str),
+                    # ensure_ascii=False so a non-ASCII payload the agent typed into a
+                    # command stays literal for the judge's anti-echo substring check (D15).
+                    command=json.dumps(
+                        primary.arguments, sort_keys=True, default=str, ensure_ascii=False
+                    ),
                     tool=primary.name,
                     shell_command=result.shell_command,
                 )
@@ -461,7 +465,9 @@ class Runner:
 
     def _handle_submit_flag(self, step: int, call: ToolCallRequest, state: RunState) -> Decision:
         """Run the D15 pipeline over one candidate and apply what it returns."""
-        flag = str(call.arguments.get("flag", ""))
+        # Strip once here so trailing whitespace (a stray newline off a shell) is
+        # not carried into the trace or compared literally by the bench (D15).
+        flag = str(call.arguments.get("flag", "")).strip()
         how_found = str(call.arguments.get("how_found", ""))
         provenance = str(call.arguments.get("provenance", ""))
         fallback_seq = self._writer.seq + 1
