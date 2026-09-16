@@ -13,6 +13,7 @@ is costed like any other (D5, D12).
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -21,7 +22,10 @@ from runectl.categories.schema import Category
 from runectl.config import DEFAULT_MAX_HISTORY_MESSAGES, DEFAULT_TOOL_OUTPUT_LIMIT
 from runectl.providers.base import Message
 
-_SALIENT_PATTERN = re.compile(r"(?i)flag\{|error|fail|not found|permission denied|[A-Za-z0-9+/]{20,}={0,2}")
+_SALIENT_PATTERN = re.compile(
+    r"(?i)[A-Za-z0-9_]{2,}\{[^}]{4,}\}|flag\{|error|fail|not found|permission denied|"
+    r"[A-Za-z0-9+/]{20,}={0,2}"
+)
 
 BASE_RULES = """\
 You are a CTF solving agent working inside a sandbox at /ctf/.
@@ -54,7 +58,10 @@ def summarize_tool_output(
     """Extractive summarization (head+tail+salient) first; LLM only if still over."""
     if len(text) <= limit:
         return text
-    lines = text.splitlines()
+    # Bound each line: a single multi-megabyte line (a hex dump, base64 of a
+    # binary) would otherwise make the "head"/"tail" slices enormous and be sent
+    # verbatim to the summarizer model.
+    lines = [line[:2000] for line in text.splitlines()]
     salient = [line for line in lines if _SALIENT_PATTERN.search(line)]
     extracted = (
         f"[full output is {len(text)} chars; truncated here, complete copy is in the trace]\n"
@@ -65,7 +72,8 @@ def summarize_tool_output(
     if len(extracted) <= limit:
         return extracted
     if llm_summarize is not None:
-        return llm_summarize(extracted)[:limit]
+        # Cap what reaches the model regardless of how large `extracted` grew.
+        return llm_summarize(extracted[: limit * 4])[:limit]
     return extracted[:limit]
 
 
@@ -94,12 +102,32 @@ class ContextBuilder:
         )
 
     def _summarize_messages(self, messages: list[Message]) -> str:
-        rendered = "\n".join(f"[{m.role}] {m.content}" for m in messages)
+        rendered = "\n".join(_render_for_summary(m) for m in messages)
         if self.llm_summarize is not None:
-            return self.llm_summarize(rendered)
-        # No utility model wired (tests, replay): fall back to the deterministic
-        # extractive path rather than dropping the older context silently.
+            summary = self.llm_summarize(rendered)
+            if summary.strip():
+                return summary
+            # The utility model returned nothing (e.g. its own reasoning consumed
+            # the token budget). Fall through to the deterministic extractive path
+            # rather than dropping the older context (D12 promises never to drop).
+        # No utility model wired (tests, replay), or an empty summary above.
         return summarize_tool_output(rendered, limit=self.limit)
+
+
+def _render_for_summary(message: Message) -> str:
+    """One message rendered for the summarizer, including any tool call it made.
+
+    An assistant turn that called a tool usually has empty ``content``; without
+    the call's arguments the summarizer never learns which commands were tried,
+    which is exactly what the next steps need to not repeat them.
+    """
+    parts = [f"[{message.role}] {message.content}".rstrip()]
+    for call in message.tool_calls:
+        parts.append(
+            f"[{message.role} ran {call.name}] "
+            + json.dumps(call.arguments, sort_keys=True, ensure_ascii=False)
+        )
+    return "\n".join(parts)
 
 
 def compact_history(
@@ -108,29 +136,28 @@ def compact_history(
     max_messages: int,
     summarize: Callable[[list[Message]], str],
 ) -> list[Message]:
-    """Once history exceeds ``max_messages``, replace the older portion with one
-    summary message produced via the standard provider path (D5, D12).
+    """Simple compaction (D12, amended 2026-09-16): once history exceeds
+    ``max_messages``, fold everything after the pinned first message into a single
+    summary and replay nothing verbatim before it.
 
-    The compacted result is at most ``max_messages`` long *including* the summary
-    message, so a compacted history is never immediately over budget again — that
-    would re-summarize the summary on the very next step.
+    ``history[0]`` is the challenge message (name, category, description, flag
+    format, triage findings); it is pinned so those facts stay verbatim for the
+    whole run instead of decaying through a summary of a summary.
 
-    The split point is never allowed to land between an assistant's tool call and
-    its tool results: a retained ``tool`` message whose originating assistant turn
-    was compacted away is an orphan, and every provider rejects those. The
-    boundary walks forward past any leading tool messages, so the retained tail
-    always starts on a clean turn.
+    This is Anthropic's documented compaction shape, and it replaces an earlier
+    keep-tail scheme that trimmed to exactly the budget and so re-fired on every
+    step once tripped. Two properties matter: the result is two messages, far
+    under the budget, so it does not thrash; and no verbatim assistant turn is
+    replayed across the boundary, so a provider-native thinking block is never
+    sent against an edited prefix — the shape the preserved-thinking
+    history-editing check rejects.
     """
-    if len(history) <= max_messages:
+    if len(history) <= max_messages or len(history) <= 1:
         return history
-    split = len(history) - max(max_messages - 1, 1)
-    while split < len(history) and history[split].role == "tool":
-        split += 1
-    if split >= len(history):
-        return history
-    older, recent = history[:split], history[split:]
+    head, older = history[0], history[1:]
     summary_text = summarize(older)
     summary_message = Message(
-        role="user", content=f"[compacted summary of {len(older)} earlier messages]\n{summary_text}"
+        role="user",
+        content=f"[compacted summary of {len(older)} earlier messages]\n{summary_text}",
     )
-    return [summary_message, *recent]
+    return [head, summary_message]

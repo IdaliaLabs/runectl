@@ -85,6 +85,19 @@ def _command_text(arguments: dict[str, object]) -> str:
             return value
     return " ".join(str(v) for v in arguments.values())
 
+def _combined_output(result: object) -> str:
+    """What the model sees from a tool result: stdout, then stderr, then a
+    nonzero-exit note. `stdout or stderr` dropped a traceback whenever a command
+    also printed anything to stdout, and never showed the exit code at all."""
+    stdout = str(getattr(result, "stdout", "") or "")
+    stderr = str(getattr(result, "stderr", "") or "")
+    exit_code = getattr(result, "exit_code", None)
+    parts = [p for p in (stdout, stderr) if p]
+    if exit_code not in (None, 0):
+        parts.append(f"[exit code {exit_code}]")
+    return "\n".join(parts)
+
+
 Outcome = Literal["solved", "candidate", "exhausted", "error"]
 Decision = Literal["finalized", "pending", "rejected"]
 
@@ -438,6 +451,7 @@ class Runner:
                     duration_s=result.duration_s, truncated=result.truncated,
                 )
             )
+            combined_output = _combined_output(result)
             observation_seq = self._writer.seq
             state.tool_observations.append(
                 ToolObservation(
@@ -455,7 +469,7 @@ class Runner:
                     shell_command=result.shell_command,
                 )
             )
-            rendered = self._context.render_tool_output(result.stdout or result.stderr, step=step)
+            rendered = self._context.render_tool_output(combined_output, step=step)
             # D15 §1 requires the agent to cite where it saw a flag. It can only
             # do that if it can see the seq numbers, so every tool result carries
             # its own — this header is the provenance vocabulary.
@@ -471,7 +485,7 @@ class Runner:
             # D8 mechanisms 1-3: classify, fingerprint, score. "Progress" means
             # new information, not a zero exit code (D16).
             assessment = self._progress.record(
-                command_text, result.stdout or result.stderr, ok=result.ok, step=step
+                command_text, combined_output, ok=result.ok, step=step
             )
             self._writer.emit(
                 ProgressScored(

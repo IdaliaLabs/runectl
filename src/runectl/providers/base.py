@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict
 from runectl.config import DEFAULT_RETRY_ATTEMPTS
 from runectl.errors import ProviderError, UsageError
 from runectl.providers.cost import CostLedger
-from runectl.providers.registry import ModelInfo, ThinkingLevel
+from runectl.providers.registry import ModelInfo, ThinkingLevel, resolve_thinking_level
 from runectl.tools.schema import ToolSchema
 
 # Ceiling on a provider-stated retry delay, in seconds.
@@ -249,6 +249,13 @@ def make_utility_summarizer(
     utility calls, is provider-agnostic, retried, and costed."
     """
 
+    # D20 — a summarizer call is a utility call, not the user's requested run, so
+    # it must not think: on a model that thinks by default (the cheapest Google
+    # tier is one) the reasoning would consume the 800-token budget and the
+    # summary could come back empty. Clamp to the resolved "off" level here, the
+    # one place every utility call passes through.
+    thinking, _ = resolve_thinking_level(model, "off")
+
     def summarize(text: str) -> str:
         completion = complete_with_retry(
             provider,
@@ -258,6 +265,7 @@ def make_utility_summarizer(
             messages=[Message(role="user", content=text)],
             tools=(),
             max_tokens=800,
+            thinking=thinking,
         )
         return completion.text
 
