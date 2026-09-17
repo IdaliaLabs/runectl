@@ -26,11 +26,13 @@ from runectl.providers.registry import resolve
 
 
 def test_openai_cached_tokens_leave_input_tokens() -> None:
+    # Responses usage: input_tokens is the whole prompt; input_tokens_details
+    # carries cached_tokens (read) and cache_write_tokens.
     usage = openai_usage(
         SimpleNamespace(
-            prompt_tokens=1000,
-            completion_tokens=50,
-            prompt_tokens_details=SimpleNamespace(cached_tokens=800),
+            input_tokens=1000,
+            output_tokens=50,
+            input_tokens_details=SimpleNamespace(cached_tokens=800, cache_write_tokens=0),
         )
     )
     assert usage.input_tokens == 200  # not 1000
@@ -41,7 +43,7 @@ def test_openai_cached_tokens_leave_input_tokens() -> None:
 
 def test_openai_usage_without_cache_details_is_all_uncached() -> None:
     usage = openai_usage(
-        SimpleNamespace(prompt_tokens=300, completion_tokens=20, prompt_tokens_details=None)
+        SimpleNamespace(input_tokens=300, output_tokens=20, input_tokens_details=None)
     )
     assert (usage.input_tokens, usage.cache_read_tokens) == (300, 0)
 

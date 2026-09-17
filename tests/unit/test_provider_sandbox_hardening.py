@@ -21,7 +21,7 @@ from runectl.providers.anthropic import _to_anthropic_messages
 from runectl.providers.base import Message, ToolCallRequest, TransientProviderError, transient_or_billing
 from runectl.providers.google import _to_google_contents
 from runectl.providers.keys import resolve_key
-from runectl.providers.openai import _to_openai_messages
+from runectl.providers.openai import _to_responses_input
 from runectl.providers.registry import MODEL_REGISTRY
 from runectl.sandbox.arena_build import ArenaStatus, arena_fingerprint
 from runectl.user_config import _KEY_SHAPED
@@ -89,18 +89,20 @@ def test_anthropic_emits_an_assistant_turn_with_a_tool_call() -> None:
 
 
 def test_openai_skips_a_wholly_empty_assistant_turn() -> None:
-    out = _to_openai_messages("system prompt", [_USER_A, _EMPTY_ASSISTANT, _USER_B])
-    assert not any(m["role"] == "assistant" for m in out)
+    # Responses input: an empty assistant turn contributes no item at all.
+    out = _to_responses_input([_USER_A, _EMPTY_ASSISTANT, _USER_B])
+    assert not any(item.get("role") == "assistant" for item in out)
 
 
 def test_openai_emits_an_assistant_turn_with_content() -> None:
-    out = _to_openai_messages("system prompt", [_USER_A, _CONTENT_ASSISTANT, _USER_B])
-    assert any(m["role"] == "assistant" for m in out)
+    out = _to_responses_input([_USER_A, _CONTENT_ASSISTANT, _USER_B])
+    assert any(item.get("role") == "assistant" for item in out)
 
 
 def test_openai_emits_an_assistant_turn_with_a_tool_call() -> None:
-    out = _to_openai_messages("system prompt", [_USER_A, _TOOLCALL_ASSISTANT, _USER_B])
-    assert any(m["role"] == "assistant" for m in out)
+    out = _to_responses_input([_USER_A, _TOOLCALL_ASSISTANT, _USER_B])
+    # A tool call becomes a function_call item, not an assistant message.
+    assert any(item.get("type") == "function_call" for item in out)
 
 
 def test_google_skips_a_wholly_empty_assistant_turn() -> None:

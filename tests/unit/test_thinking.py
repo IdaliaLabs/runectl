@@ -259,28 +259,24 @@ def test_openai_off_does_not_send_none_to_a_model_that_rejects_it() -> None:
     from runectl.providers.openai import OpenAIProvider
     from runectl.providers.registry import MIN_REAL_THINKING_LEVEL
 
+    class _Stop(Exception):
+        pass
+
+    class _Responses:
+        def __init__(self, outer: _Recorder) -> None:
+            self._outer = outer
+
+        def create(self, **kwargs: object) -> object:
+            self._outer.kwargs = kwargs
+            raise _Stop
+
     class _Recorder:
         def __init__(self) -> None:
             self.kwargs: dict[str, object] = {}
 
-        class _Completions:
-            def __init__(self, outer: _Recorder) -> None:
-                self._outer = outer
-
-            def create(self, **kwargs: object) -> object:
-                self._outer.kwargs = kwargs
-                raise _Stop
-
         @property
-        def chat(self) -> _Recorder:
-            return self
-
-        @property
-        def completions(self) -> _Recorder._Completions:
-            return _Recorder._Completions(self)
-
-    class _Stop(Exception):
-        pass
+        def responses(self) -> _Responses:
+            return _Responses(self)
 
     def effort_for(*, off_supported: bool) -> object:
         recorder = _Recorder()
@@ -293,7 +289,8 @@ def test_openai_off_does_not_send_none_to_a_model_that_rejects_it() -> None:
         )
         with pytest.raises(_Stop):
             provider.complete(system="s", messages=[], tools=(), max_tokens=10, thinking="off")
-        return recorder.kwargs.get("reasoning_effort")
+        reasoning = recorder.kwargs.get("reasoning")
+        return reasoning.get("effort") if isinstance(reasoning, dict) else None
 
     # a model that takes "none" is still told "none" — the cheap path is intact
     assert effort_for(off_supported=True) == "none"

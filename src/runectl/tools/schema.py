@@ -137,6 +137,20 @@ def to_openai(tools: Sequence[ToolSchema] = TOOLS) -> list[dict[str, Any]]:
     ]
 
 
+def to_openai_responses(tools: Sequence[ToolSchema] = TOOLS) -> list[dict[str, Any]]:
+    """Function tools for the Responses API — flat, unlike Chat Completions' nested
+    `{"type":"function","function":{...}}`."""
+    return [
+        {
+            "type": "function",
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters,
+        }
+        for tool in tools
+    ]
+
+
 def to_anthropic(tools: Sequence[ToolSchema] = TOOLS) -> list[dict[str, Any]]:
     return [
         {"name": tool.name, "description": tool.description, "input_schema": tool.parameters}

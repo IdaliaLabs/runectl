@@ -91,10 +91,10 @@ _OPENAI_LIVE = {
     "gpt-5.4-mini": ("off", True, True),
     "gpt-5.4-nano": ("off", True, True),
     "gpt-5.5": ("off", True, True),
-    "gpt-5.6-luna": ("off", True, False),
-    "gpt-5.6-terra": ("off", True, False),
-    "gpt-5.6-sol": ("off", True, False),
-    "gpt-6-astra": ("off", True, False),
+    "gpt-5.6-luna": ("off", True, True),  # un-retired on v1/responses
+    "gpt-5.6-terra": ("off", True, True),  # un-retired on v1/responses
+    "gpt-5.6-sol": ("off", True, True),  # un-retired on v1/responses
+    "gpt-6-astra": ("off", True, True),  # un-retired on v1/responses
 }
 
 
@@ -124,7 +124,7 @@ def test_every_retired_row_says_why() -> None:
     tools/reasoning conflict on a model that answers fine otherwise. A single
     hardcoded reason in the CLI was wrong for the second kind."""
     retired = [m for m in MODEL_REGISTRY.values() if m.retired]
-    assert len(retired) >= 7
+    assert len(retired) >= 3
     for model in retired:
         assert model.retired_reason.strip(), model.id
     # and the flag is exactly the presence of a reason

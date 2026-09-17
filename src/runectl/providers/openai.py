@@ -1,25 +1,27 @@
-"""OpenAI adapter (D5).
+"""OpenAI adapter (D5), on the Responses API (`v1/responses`).
 
-Exercised against the live API on **2026-09-13** — every registry row called for
-real, plus a full 30-step challenge run. Until that day this file carried a note
-saying the opposite, and the note was the most important thing in it: four
-separate defects were sitting here that no amount of reading the SDK had found.
-See `docs/STATUS.md` for what live verification does and does not now cover.
+Moved off Chat Completions on 2026-09-16. Chat Completions refused function
+tools on four models (`gpt-6-astra`, the `gpt-5.6` family) at every reasoning
+setting, and never returned reasoning content, so `Completion.thinking_text` was
+always empty there (STATUS 2026-09-13). Responses lifts the tools restriction
+and returns reasoning as first-class output items, which round-trip on the next
+turn — the OpenAI shape of D20's "thinking state must round-trip per each
+provider's contract", the same rule Anthropic's thinking blocks and Google's
+`thought_signature` already follow.
 
-Extended thinking (D20, added 2026-09-09; corrected 2026-09-13): the SDK exposes
-a top-level `reasoning_effort` on `chat.completions.create`, but which values a
-given model accepts is **narrower than the SDK's type suggests and narrower
-again once tools are attached** — no model takes `max`, the `gpt-5` family
-refuses `none`, and several models refuse every real level when function tools
-are present. The registry's per-row levels are live-probed rather than derived
-from the docs; see its openai block. **This API surface never returns reasoning
-content** — `ChatCompletionMessage` has no
-`reasoning`/`thinking` field, unlike the Responses API's encrypted reasoning
-items. `Completion.thinking_text` is therefore always empty for this adapter
-even when a level was requested and honored server-side; a switch to the
-Responses API would be required to render OpenAI's reasoning, which is out of
-scope here (D5 didn't require it, and Chat Completions is what the rest of
-this adapter already uses).
+Statelessness (`store=false`): runectl owns the conversation, so every request
+replays the whole history — including the reasoning and function-call items from
+earlier turns, carried on the assistant `Message`'s `thinking_blocks`/`tool_calls`
+and emitted back ahead of the next user turn. `include=["reasoning.encrypted_content"]`
+asks the API for the reasoning blob needed to replay faithfully.
+
+Effort: `reasoning.effort` takes the shared level. "off" reaching this adapter
+means the registry says the model can be stopped (`thinking_off_supported`) — it
+is sent as `effort:"none"`; a model that thinks regardless never sees "off"
+(`resolve_thinking_level` clamped it up and recorded the clamp). No OpenAI model
+accepts `max`; the registry caps each row (live-probed, not read from docs).
+`reasoning.summary` is requested for readable thinking text and dropped on the
+one 400 that means the organization is unverified for summaries.
 """
 
 from __future__ import annotations
@@ -40,7 +42,7 @@ from runectl.providers.base import (
     transient_or_billing,
 )
 from runectl.providers.registry import MIN_REAL_THINKING_LEVEL, ThinkingLevel
-from runectl.tools.schema import ToolSchema, to_openai
+from runectl.tools.schema import ToolSchema, to_openai_responses
 
 _TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
     openai.RateLimitError,
@@ -50,63 +52,80 @@ _TRANSIENT_ERRORS: tuple[type[Exception], ...] = (
 )
 
 
-def _to_openai_messages(system: str, messages: Sequence[Message]) -> list[dict[str, Any]]:
-    out: list[dict[str, Any]] = [{"role": "system", "content": system}]
+# Fields a reasoning item carries on *output* that the API rejects on *input*.
+# Found live 2026-09-16: replaying `status` gave `Unknown parameter input[N].status`.
+_REASONING_OUTPUT_ONLY = frozenset({"status"})
+
+
+def _reasoning_for_input(block: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in block.items() if k not in _REASONING_OUTPUT_ONLY and v is not None}
+
+
+def _to_responses_input(messages: Sequence[Message]) -> list[dict[str, Any]]:
+    """Canonical messages as Responses `input` items (system goes to `instructions`).
+
+    An assistant turn replays its reasoning items first, then any text, then its
+    function calls — the order the API returned them and requires back. A wholly
+    empty assistant turn contributes nothing, which is the empty-turn skip other
+    adapters make explicit.
+    """
+    items: list[dict[str, Any]] = []
     for message in messages:
         if message.role == "system":
             continue
-        if message.role == "tool":
-            out.append(
-                {"role": "tool", "tool_call_id": message.tool_call_id, "content": message.content}
-            )
-        elif message.role == "assistant" and message.tool_calls:
-            out.append(
+        if message.role == "user":
+            items.append({"role": "user", "content": message.content})
+        elif message.role == "assistant":
+            items.extend(_reasoning_for_input(block) for block in message.thinking_blocks)
+            if message.content:
+                items.append({"role": "assistant", "content": message.content})
+            for call in message.tool_calls:
+                items.append(
+                    {
+                        "type": "function_call",
+                        "call_id": call.id,
+                        "name": call.name,
+                        "arguments": json.dumps(call.arguments),
+                    }
+                )
+        elif message.role == "tool":
+            items.append(
                 {
-                    "role": "assistant",
-                    "content": message.content or None,
-                    "tool_calls": [
-                        {
-                            "id": call.id,
-                            "type": "function",
-                            "function": {"name": call.name, "arguments": json.dumps(call.arguments)},
-                        }
-                        for call in message.tool_calls
-                    ],
+                    "type": "function_call_output",
+                    "call_id": message.tool_call_id,
+                    "output": message.content,
                 }
             )
-        elif message.role == "assistant" and not message.content and not message.tool_calls:
-            # Skip a wholly empty assistant turn: it 400s the same way it does on
-            # Anthropic, and the user nudge that follows is a valid turn alone.
-            continue
-        else:
-            out.append({"role": message.role, "content": message.content})
-    return out
+    return items
 
 
 def _usage(usage: Any) -> Usage:
-    """Split OpenAI's `prompt_tokens` into its cached and uncached halves (D18).
+    """Split Responses usage into cached / uncached / reasoning halves (D18).
 
-    Fixed 2026-09-11. `prompt_tokens` is the *total* prompt size, cached tokens
-    included, and this adapter used to assign it straight to `Usage.input_tokens`
-    — whose own docstring says it is uncached input only. Every cache hit was
-    therefore billed at the full input rate, overstating the cost of exactly the
-    runs prompt caching is supposed to make cheap. The cached count lives in
-    `usage.prompt_tokens_details.cached_tokens`.
-
-    OpenAI does not bill cache writes, so `cache_write_tokens` stays zero.
+    `input_tokens` is the whole prompt, cached included; `input_tokens_details`
+    carries `cached_tokens` (read) and `cache_write_tokens`. `output_tokens`
+    already includes reasoning tokens, so it is not adjusted.
     """
     if usage is None:
         return Usage(input_tokens=0, output_tokens=0)
-    details = getattr(usage, "prompt_tokens_details", None)
+    details = getattr(usage, "input_tokens_details", None)
     cached = getattr(details, "cached_tokens", 0) or 0
-    prompt_tokens = usage.prompt_tokens or 0
+    cache_write = getattr(details, "cache_write_tokens", 0) or 0
+    input_tokens = usage.input_tokens or 0
     return Usage(
-        # max(): defensive against a provider reporting more cached tokens than
-        # prompt tokens. A negative count would silently credit the ledger.
-        input_tokens=max(prompt_tokens - cached, 0),
-        output_tokens=usage.completion_tokens or 0,
+        # max(): defensive against more cached than total, which would credit the ledger.
+        input_tokens=max(input_tokens - cached, 0),
+        output_tokens=usage.output_tokens or 0,
         cache_read_tokens=cached,
+        cache_write_tokens=cache_write,
     )
+
+
+def _is_summary_unverified(exc: openai.APIError) -> bool:
+    """A 400 that means the org is not verified for reasoning summaries — the one
+    case where dropping `reasoning.summary` and retrying is the right move."""
+    text = str(exc).lower()
+    return "summary" in text and ("verif" in text or "not supported" in text or "unsupported" in text)
 
 
 class OpenAIProvider:
@@ -122,20 +141,18 @@ class OpenAIProvider:
         self._model_id = model_id
         # max_retries=0: runectl owns retry (D5); the SDK default of 2 would nest.
         self._client = client or openai.OpenAI(api_key=api_key, max_retries=0)
-        # D20 amendment 2026-09-11 — needed to tell two different "off"s apart:
-        # a reasoning model must be told `reasoning_effort: "none"` to stop
-        # thinking (its own default is `medium`), while a non-reasoning model
-        # rejects the parameter outright. Mirrors how `prompt_cache` is already
-        # passed down from the registry row by `run_cmd._build_provider`.
         self._supports_thinking = supports_thinking
-        # Whether this model accepts `reasoning_effort: "none"` at all. NOT the
-        # same fact as `supports_thinking`, and conflating them cost a live run
-        # on 2026-09-13: the original `gpt-5` family thinks but refuses `none`,
-        # so a summarizer call — which passes `thinking="off"` straight down
-        # without going through `resolve_thinking_level` — 400'd eighteen steps
-        # into an otherwise healthy run. The main loop was fine; the clamp only
-        # protects callers that ask it to.
+        # Whether this model accepts `effort:"none"` at all — NOT the same fact as
+        # supports_thinking (the gpt-5 family thinks but refuses "none").
         self._thinking_off_supported = thinking_off_supported
+
+    def _reasoning(self, thinking: ThinkingLevel) -> dict[str, Any] | None:
+        if thinking != "off":
+            return {"effort": thinking, "summary": "auto"}
+        if self._supports_thinking:
+            effort = "none" if self._thinking_off_supported else MIN_REAL_THINKING_LEVEL
+            return {"effort": effort, "summary": "auto"}
+        return None
 
     def complete(
         self,
@@ -146,58 +163,71 @@ class OpenAIProvider:
         max_tokens: int,
         thinking: ThinkingLevel = "off",
     ) -> Completion:
-        # D20 — "off" reaching here means the registry says this model can
-        # actually be stopped from thinking (`thinking_off_supported`); a model
-        # that thinks regardless never sees "off", because
-        # `resolve_thinking_level` has already clamped it up to "low" and
-        # recorded the clamp. On a reasoning model, stopping it means saying so:
-        # `reasoning_effort: "none"`, since omitting the parameter leaves the
-        # model's own default (medium) in force. A non-reasoning model rejects
-        # the parameter, so it gets nothing.
-        extra: dict[str, Any] = {}
-        if thinking != "off":
-            extra["reasoning_effort"] = thinking
-        elif self._supports_thinking:
-            # "off" on a reasoning model means saying so — omitting the
-            # parameter leaves the model's own default (medium) in force. But
-            # only if this model takes "none": the `gpt-5` family rejects it
-            # outright, and there the cheapest real level is the honest floor.
-            extra["reasoning_effort"] = (
-                "none" if self._thinking_off_supported else MIN_REAL_THINKING_LEVEL
-            )
+        reasoning = self._reasoning(thinking)
+        request: dict[str, Any] = {
+            "model": self._model_id,
+            "instructions": system,
+            "input": cast(Any, _to_responses_input(messages)),
+            "tools": cast(Any, to_openai_responses(tools)),
+            "max_output_tokens": max_tokens,
+            "store": False,
+        }
+        if reasoning is not None:
+            request["reasoning"] = reasoning
+            request["include"] = ["reasoning.encrypted_content"]
+
         try:
-            response = self._client.chat.completions.create(
-                model=self._model_id,
-                # Plain JSON-shaped dicts matching the documented wire format; the SDK's
-                # exact TypedDict unions are more precise than we need to express here.
-                messages=cast(Any, _to_openai_messages(system, messages)),
-                tools=cast(Any, to_openai(tools)),
-                max_completion_tokens=max_tokens,
-                **extra,
-            )
-        except _TRANSIENT_ERRORS as exc:
-            raise transient_or_billing("OpenAI", exc) from exc
-        except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
-            raise auth_error("OpenAI", exc) from exc
-        except openai.APIError as exc:
-            raise api_error("OpenAI", exc) from exc
+            response = self._client.responses.create(**request)
+        except openai.APIError as first_error:
+            # One retry, without the reasoning summary, when the org can't get them.
+            if reasoning is not None and _is_summary_unverified(first_error):
+                request["reasoning"] = {"effort": reasoning["effort"]}
+                try:
+                    response = self._client.responses.create(**request)
+                except _TRANSIENT_ERRORS as exc:
+                    raise transient_or_billing("OpenAI", exc) from exc
+                except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
+                    raise auth_error("OpenAI", exc) from exc
+                except openai.APIError as exc:
+                    raise api_error("OpenAI", exc) from exc
+            elif isinstance(first_error, _TRANSIENT_ERRORS):
+                raise transient_or_billing("OpenAI", first_error) from first_error
+            elif isinstance(first_error, openai.AuthenticationError | openai.PermissionDeniedError):
+                raise auth_error("OpenAI", first_error) from first_error
+            else:
+                raise api_error("OpenAI", first_error) from first_error
 
-        choice = response.choices[0]
+        text_parts: list[str] = []
+        thinking_parts: list[str] = []
+        thinking_blocks: list[dict[str, Any]] = []
         tool_calls: list[ToolCallRequest] = []
-        for call in choice.message.tool_calls or []:
-            function = getattr(call, "function", None)
-            if function is None:
-                continue
-            try:
-                arguments = json.loads(function.arguments) if function.arguments else {}
-            except json.JSONDecodeError:
-                arguments = {}
-            tool_calls.append(ToolCallRequest(id=call.id, name=function.name, arguments=arguments))
+        for item in response.output:
+            kind = getattr(item, "type", None)
+            if kind == "message":
+                for block in getattr(item, "content", None) or []:
+                    if getattr(block, "type", None) == "output_text":
+                        text_parts.append(block.text)
+            elif kind == "function_call":
+                try:
+                    arguments = json.loads(item.arguments) if item.arguments else {}
+                except json.JSONDecodeError:
+                    arguments = {}
+                tool_calls.append(
+                    ToolCallRequest(id=item.call_id, name=item.name, arguments=arguments)
+                )
+            elif kind == "reasoning":
+                # Round-tripped verbatim on the next turn (see _to_responses_input);
+                # the summary, when present, is the readable reasoning text.
+                thinking_blocks.append(item.model_dump())
+                for summary in getattr(item, "summary", None) or []:
+                    if getattr(summary, "text", None):
+                        thinking_parts.append(summary.text)
 
-        usage = response.usage
         return Completion(
-            text=choice.message.content or "",
+            text="".join(text_parts),
             tool_calls=tuple(tool_calls),
-            usage=_usage(usage),
-            stop_reason=choice.finish_reason or "unknown",
+            usage=_usage(response.usage),
+            stop_reason=response.status or "unknown",
+            thinking_text="\n".join(thinking_parts),
+            thinking_blocks=tuple(thinking_blocks),
         )

@@ -232,16 +232,16 @@ MODEL_REGISTRY: dict[str, ModelInfo] = {
     #
     #   * `gpt-6-astra` and the whole `gpt-5.6` family, at **every** setting —
     #     omitting `reasoning_effort` entirely still 400s, because their own
-    #     default effort is what collides. Every runectl step sends tools, so
-    #     these four are unreachable here at any configuration: retired.
+    #     default effort is what collides. That was on `v1/chat/completions`.
     #   * `gpt-5.4*` and `gpt-5.5`, at every setting *except* `none` (or the
     #     parameter omitted). They work fine as non-thinking models, so they
     #     stay, with `supports_thinking=False` — accurate for what this adapter
     #     can actually ask of them, not a claim about the model.
     #
     # The `gpt-5`, `gpt-5.1` and `gpt-5.2` rows have no such conflict and think
-    # normally with tools attached. Moving the adapter to `v1/responses` would
-    # lift the whole restriction and is the obvious future call (D5 note).
+    # normally with tools attached. Resolved 2026-09-16: the adapter moved to
+    # `v1/responses` (providers/openai.py, D5 amendment), which accepts function
+    # tools on all four formerly-retired rows — un-retired after a live probe.
     #
     # Context windows are the documented total window. OpenAI caps *input* below
     # that (272K on the `gpt-5` family); the field is display-only, so the
@@ -250,25 +250,25 @@ MODEL_REGISTRY: dict[str, ModelInfo] = {
         id="gpt-6-astra", provider="openai", context_window=1_050_000,
         supports_prompt_cache=True, price_in=10.0, price_out=50.0,
         supports_thinking=False, thinking_style="none", max_thinking_level="off",
-        retired_reason="rejects function tools on v1/chat/completions",
+        retired_reason="",  # un-retired 2026-09-16: works on v1/responses (live-verified)
     ),
     "gpt-5.6-sol": ModelInfo(
         id="gpt-5.6-sol", provider="openai", context_window=1_050_000,
         supports_prompt_cache=True, price_in=4.0, price_out=20.0,
         supports_thinking=False, thinking_style="none", max_thinking_level="off",
-        retired_reason="rejects function tools on v1/chat/completions",
+        retired_reason="",  # un-retired 2026-09-16: works on v1/responses (live-verified)
     ),
     "gpt-5.6-terra": ModelInfo(
         id="gpt-5.6-terra", provider="openai", context_window=1_050_000,
         supports_prompt_cache=True, price_in=2.0, price_out=12.0,
         supports_thinking=False, thinking_style="none", max_thinking_level="off",
-        retired_reason="rejects function tools on v1/chat/completions",
+        retired_reason="",  # un-retired 2026-09-16: works on v1/responses (live-verified)
     ),
     "gpt-5.6-luna": ModelInfo(
         id="gpt-5.6-luna", provider="openai", context_window=1_050_000,
         supports_prompt_cache=True, price_in=0.20, price_out=1.20,
         supports_thinking=False, thinking_style="none", max_thinking_level="off",
-        retired_reason="rejects function tools on v1/chat/completions",
+        retired_reason="",  # un-retired 2026-09-16: works on v1/responses (live-verified)
     ),
     "gpt-5.5": ModelInfo(
         id="gpt-5.5", provider="openai", context_window=272_000,
