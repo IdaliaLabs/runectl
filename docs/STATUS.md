@@ -53,6 +53,31 @@ at run time.
 
 ## Live verification
 
+### 2026-09-16 — audit sprint: OpenAI on Responses, OpenAI/Google runs
+
+An audit of the whole tree fixed defects across the false-flag subsystem (D15),
+run lifecycle (D3/D4), context compaction (D12), the providers and sandbox
+(D2/D5), the CLI contract, replay, and the progress machinery, and moved the
+OpenAI adapter to `v1/responses` (D5). Three things were verified against a live
+service rather than a test:
+
+- **The OpenAI Responses adapter works end to end.** A full 12-step `gpt-5-nano`
+  run of `easy-02` completed cleanly (exit 3, exhausted, $0.0030), reasoning items
+  round-tripping every step. A reasoning item's output-only `status` field is
+  rejected on input — found live, on the second turn, and stripped on replay. All
+  four formerly-retired rows (`gpt-6-astra`, the `gpt-5.6` family) accept function
+  tools on Responses and are un-retired.
+- **The Google transport hardening holds.** A 6-step `gemini-3.1-flash-lite` run
+  of `easy-02` completed (exit 3, $0.0152), `thought_signature` round-tripping.
+- **The sandbox posture is applied live.** Against the arena container: non-root
+  `ctf`, all capabilities dropped (`CapEff` zero), files copied in owned by `ctf`,
+  a 5 MB output capped to 1,000,000 bytes without hanging, and an echoed guess no
+  longer laundering through `search_flag`.
+
+Anthropic was not re-run: its stored key was clobbered during the sprint and awaits
+being re-added. Every published bench number remains Anthropic-only and predates
+these changes.
+
 ### 2026-09-13 — Google adapter, first live exercise
 
 A live Gemini key ran `bench/practice/easy-02` end to end: 39 steps, thinking captured per

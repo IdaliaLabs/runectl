@@ -1,15 +1,11 @@
 """Google (Gemini) adapter (D5).
 
-NOTE for reviewers: this adapter's shape was verified against the installed
-`google-genai` SDK (types, field names, `models.generate_content` signature,
-exception hierarchy) but was never exercised against the live API — no Google
-key was available in the build environment, and Gemini's function-calling
-message shape (role mapping for tool results in particular) is the least
-certain of the three adapters. See the M4 handoff report before trusting it
-for a real run.
+Exercised against the live API on 2026-09-13 (a full easy-02 run) and again on
+2026-09-16 after the transport hardening below: the function-calling message
+shape, the `thought_signature` round-trip, cost accounting and the artifact
+spill path all work against a live Gemini service (STATUS "Live verification").
 
-Extended thinking (D20, added 2026-09-09): **request-side only, unverified
-against a live service, same as the rest of this adapter.** `google-genai`'s
+Extended thinking (D20, added 2026-09-09): `google-genai`'s
 `ThinkingConfig.thinking_level` enum is `LOW`/`MEDIUM`/`HIGH` only (no
 xhigh/max — the registry's `max_thinking_level="high"` for both Gemini models
 reflects that; `resolve_thinking_level` clamps before this adapter ever sees a

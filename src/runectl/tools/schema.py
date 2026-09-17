@@ -120,8 +120,6 @@ TOOLS: tuple[ToolSchema, ...] = (
     ),
 )
 
-TOOLS_BY_NAME: dict[str, ToolSchema] = {tool.name: tool for tool in TOOLS}
-
 
 def to_openai(tools: Sequence[ToolSchema] = TOOLS) -> list[dict[str, Any]]:
     return [

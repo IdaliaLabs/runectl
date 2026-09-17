@@ -56,11 +56,6 @@ Decision = Literal["finalized", "pending", "rejected"]
 ApprovalPolicy = Literal["gated", "strict", "auto"]
 APPROVAL_POLICIES: tuple[ApprovalPolicy, ...] = ("gated", "strict", "auto")
 
-# Still counted and reported; no longer part of the auto-finalize bar (D11,
-# amended 2026-09-08). Kept because "how many independent sightings" is real
-# information for whoever reads a held candidate.
-MIN_CORROBORATION = 2
-
 # A re-derivation is a repeat of a command that already ran once inside this
 # run's step timeout, so it does not need a generous one of its own.
 REDERIVE_TIMEOUT_S = 60
@@ -147,9 +142,6 @@ class ToolObservation:
     def text(self) -> str:
         return f"{self.stdout}\n{self.stderr}"
 
-    def contains(self, flag: str) -> bool:
-        return flag in self.stdout or flag in self.stderr
-
 
 @dataclass(frozen=True)
 class Check:
@@ -198,11 +190,6 @@ class JudgeVerdict:
         return self.decision == "finalized"
 
 
-# Kept as the old name so the M4-era call sites and regression tests that encode
-# the laundering incident keep working against the same code path.
-JudgeDecision = JudgeVerdict
-
-
 class FlagJudge:
     """Runs the D15 pipeline for one run. Returns verdicts; mutates nothing (D6)."""
 
@@ -214,14 +201,12 @@ class FlagJudge:
         description: str = "",
         sandbox: _Executor | None = None,
         require_provenance: bool = True,
-        min_corroboration: int = MIN_CORROBORATION,
     ) -> None:
         self._policy = approval_policy
         self._flag_format = flag_format
         self._description = description
         self._sandbox = sandbox
         self._require_provenance = require_provenance
-        self._min_corroboration = min_corroboration
 
     def judge(
         self,

@@ -17,7 +17,8 @@ from pydantic import BaseModel, ConfigDict
 
 class EventPayload(BaseModel):
     """Base for every typed event payload — see ``_ALL_PAYLOADS`` below for the
-    current, authoritative count (docs/TRACE.md is the human-readable inventory;
+    current, authoritative count (the event-types table in docs/ARCHITECTURE.md is
+    the human-readable inventory;
     this docstring used to say "sixteen," which stopped being true as of M6's
     `flag.reviewed` and D19's `budget.exhausted`)."""
 

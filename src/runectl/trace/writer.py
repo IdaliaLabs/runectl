@@ -126,3 +126,4 @@ class TraceWriter:
 
     def __exit__(self, *exc_info: object) -> None:
         self.close()
+

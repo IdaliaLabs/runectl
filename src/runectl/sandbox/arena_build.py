@@ -232,15 +232,6 @@ def pull_image(reference: str, *, tag: str = ARENA_IMAGE) -> None:
         raise SandboxError(f"pulled {reference}, but tagging it as {tag} failed: {retag.stderr.strip()}")
 
 
-def status(*, tag: str = ARENA_IMAGE, client: docker.DockerClient | None = None) -> str | None:
-    """Return the image id if the arena image is built, else None.
-
-    Kept as the thin presence check `DockerSandbox` and older callers use;
-    `inspect` is the richer answer.
-    """
-    return inspect(tag=tag, client=client).image_id
-
-
 REMEDY_MESSAGE = (
     "The arena sandbox image is not built yet, so there is nothing to run challenges in.\n"
     "\n"

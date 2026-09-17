@@ -368,7 +368,8 @@ A derived SQLite index for cross-run questions. Two tables:
 
 ```sql
 runs(run_id PK, challenge_name, category, model, provider,
-     outcome, exit_code, cost_usd, steps_used, started_at, finished_at)
+     outcome, exit_code, cost_usd, steps_used, started_at, finished_at,
+     flag, progress_steps, blocked_steps, approved_at, thinking_level)
 events_summary(run_id, type, count, PRIMARY KEY (run_id, type))
 ```
 
@@ -640,6 +641,18 @@ its **capabilities** must come from a call. The two failure modes are not compar
 wrong capability fails loudly at the first request, while a wrong price never fails and
 silently corrupts every cost report downstream.
 
+**Amended 2026-09-16 — the OpenAI adapter moved to `v1/responses`.** Chat Completions
+refused function tools on `gpt-6-astra` and the `gpt-5.6` family at every reasoning
+setting, and returned no reasoning content, so four rows were unreachable and OpenAI
+reasoning text was never rendered. The Responses API removes both limits: the adapter
+sends the history as input items, function tools in the flat Responses shape, and
+`reasoning.effort` for the level, and reasoning items come back as first-class output that
+round-trips on the next turn (`store=false`, so the whole history is replayed). A live
+probe confirmed all four formerly-retired rows accept function tools on Responses; they are
+un-retired. Live verification also caught a reasoning item's output-only `status` field
+being rejected on input, now stripped on replay. Usage reads the Responses shape, including
+the `cache_write_tokens` Chat Completions did not report.
+
 ### D6 — Run state: one explicit object, no mixins
 
 Locked. The predecessor tool's six mixins sharing ~30 implicit `self` attributes was the
@@ -743,6 +756,20 @@ over) produces what enters context. Identical tool output deduplicates to a back
 by digest. History compaction runs on a token-budget trigger, through the standard
 provider path (D5).
 
+**Amended 2026-09-16 — history compaction is now simple compaction.** The prior scheme
+trimmed history to exactly `DEFAULT_MAX_HISTORY_MESSAGES`, and the loop appends two messages
+per step, so once tripped it re-fired every step: a summary of a summary, a utility call per
+step, and a message-list head that changed every step and so defeated prompt caching exactly
+when a run was longest. Compaction now folds everything after the pinned first message (the
+challenge: description, flag format, triage) into one summary and replays nothing verbatim
+before it — Anthropic's documented shape. The result is two messages, far under the budget,
+so it does not thrash; and because no verbatim assistant turn crosses the boundary, a
+provider-native thinking block is never replayed against an edited prefix, which the
+preserved-thinking history-editing check rejects. The summary now includes the tool-call
+arguments (an assistant tool turn has empty text), the utility summarizer clamps thinking off
+so a think-by-default model cannot spend the summary budget on reasoning, and an empty summary
+falls back to the deterministic extraction rather than dropping history.
+
 ### D13 — CLI-only, permanently: no server, no browser UI, ever — an in-terminal TUI is in bounds
 
 Locked. There is no GUI in this product's future — the CLI is the whole product,
@@ -826,6 +853,22 @@ stated reason. One bench case (`quick-math`) is excluded this way: its run perfo
 Hastad broadcast attack correctly and submits the recovered value one transformation
 short of the flag, so every mechanism here agrees with it, correctly — it's a capability
 failure wearing a false flag's clothes, not something this subsystem could ever catch.
+
+**Amended 2026-09-16 — three provenance bypasses closed.** The checks a model "cannot talk
+its way past" had three holes, each reproduced by execution. `exec` mirrored every command's
+output to `/ctf/.agent_live.log` and `search_flag` grepped all of `/ctf/`, so an earlier
+echoed guess or a rejected decoy re-surfaced as a fresh sighting that cleared provenance,
+anti-echo and re-derivation; the live log moved to `/tmp`, `search_flag` excludes it, and a
+flag authored into any command up to the cited observation — not only the cited one — counts
+as self-authorship. Wrapper attestation was a lowercased substring test, so the word "flag"
+in a description attested an invented `flag{...}` wrapper; it now requires the literal
+`PREFIX{` case-sensitively, or a `--flag-format` that full-matches the flag. The flag regex
+and the format check accepted trailing junk (`flag{x}.`, `flag{x}\n`), which the bench scores
+as a false flag; the payload is anchored on the true end of string, the format is full-matched,
+and the submitted flag is stripped once. Also: `search_flag` dropped `-o` (it had returned the
+pattern, never the flag), anti-echo records arguments non-ASCII-faithfully, and under
+`--approval auto` an explicit `--flag-format` the flag fails now holds the candidate rather
+than finalizing it.
 
 ### D16 — Budgets measure step *waste*, not step count
 

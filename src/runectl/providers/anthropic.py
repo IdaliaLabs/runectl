@@ -13,7 +13,7 @@ the level, on Opus 5 / Sonnet 5 / Haiku's peers in this tier. Two things a
 prior-generation implementation would get wrong:
 
 - ``budget_tokens`` is **not sent**. It is rejected with a 400 on both Opus 5
-  and Sonnet 5 — the two Anthropic models this registry marks
+  and Sonnet 5 among the Anthropic models this registry marks
   ``supports_thinking=True`` — and is only a Haiku-era concept, and Haiku is
   the utility model, which never thinks (`registry.py`).
 - ``display: "summarized"`` is **always set** when thinking is requested. The
